@@ -1,8 +1,8 @@
 # AIProject
 
-> 当前状态：**FINAL TECHNICAL + BUSINESS BASELINE**
+> 当前状态：**TECHNICAL SPIKES IN PROGRESS**
 >
-> 技术架构和核心学习业务均已完成对齐。当前尚未开始正式代码开发。
+> 技术架构和核心学习业务均已完成对齐。SPIKE-001 / SPIKE-002 已完成并提交；SPIKE-003 待启动。
 
 ## 1. 产品定位
 
@@ -176,7 +176,12 @@ D:\AIStudyData\
 ```text
 Hermes 只读理解文档
 → 用户最终 Review
-→ 用户建立 Git baseline / GitHub Private
-→ Technical Spikes
+→ 用户建立 Git baseline / GitHub Private     ✅
+→ Technical Spikes                            ← 当前阶段
+   SPIKE-001 (Spring Boot + Java 21 + Maven Wrapper)      ✅ Complete
+   SPIKE-002 (MySQL + MyBatis-Plus)                       ✅ Complete
+   SPIKE-003 (Flyway / Versioned SQL)                     NEXT
+   SPIKE-004+ ...
+→ Platform Skeleton
 → 正式 Vertical Slice 开发
 ```

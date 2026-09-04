@@ -1,37 +1,22 @@
 # 开发计划
 
-> 状态：**BUSINESS-ALIGNED / READY FOR BASELINE REVIEW**
+> 状态：**TECHNICAL SPIKES IN PROGRESS**
 >
-> 技术和核心业务已经确定。下一步不是继续扩文档，而是最终一致性 Review → 用户建立 Git baseline → 技术 Spike → Vertical Slice。
+> SPIKE-001 / SPIKE-002 已完成并提交。SPIKE-003 待启动。后续按原顺序执行。
 
 ## Phase 0：Baseline Final Review
 
-当前阶段。
+✅ COMPLETE (2026-09-04)
 
-目标：
-
-- 确认 technical + business docs 无冲突。
-- 用户检查后建立第一次 Git commit。
-- 推送 GitHub Private Repo。
-
-Hermes 当前只能读文档和汇报理解，未经用户明确授权不 commit/push。
-
-退出条件：用户确认文档封版。
+- Technical + Business docs 无冲突。
+- Hermes 只读理解文档，未经用户明确授权不 commit/push。
 
 ## Phase 1：Git Baseline
 
-用户人工执行：
+✅ COMPLETE (2026-09-04)
 
-```text
-git status
-git diff
-git add .
-git commit -m "chore: establish technical and business baseline"
-git branch -M main
-git push GitHub Private
-```
-
-在提交前再次验证 `.gitignore` 不包含秘密/真实数据。
+- Commit: `chore: establish project baseline` (`48cc876`)。
+- 推送至 GitHub Private Repository (`main`)。
 
 ## Phase 2：Technical Spikes
 
@@ -39,23 +24,44 @@ git push GitHub Private
 
 ### SPIKE-001 Spring Boot + Java 21 + Maven Wrapper
 
-验证：
+✅ COMPLETE (2026-09-04)
 
-- Spring Boot 3.5.x。
+已验证：
+
+- Spring Boot 3.5.0。
+- Java 21 (Temurin 21.0.11)。
 - 单 Maven Project。
-- Maven Wrapper 固定 3.9.x。
-- Windows `mvnw.cmd test/package` 成功。
+- Maven Wrapper 固定 3.9.6。
+- Windows `mvnw.cmd test` / `package` 成功。
+- Executable JAR + `/health` endpoint 验证。
 
 ### SPIKE-002 MySQL + MyBatis-Plus
 
-验证：
+✅ COMPLETE (2026-09-04)
 
-- Spring Boot 连接本地 MySQL。
-- 临时 schema CRUD/transaction。
-- 测试不连接真实业务库。
-- `spaceId` 组合索引基本写法。
+已验证：
+
+- Spring Boot 3.5.0 + MyBatis-Plus 3.5.11 (`mybatis-plus-spring-boot3-starter`) 兼容。
+- MySQL 8.4.10 (Docker)。
+- 真实 `BaseMapper<SpikeRecord>` CRUD round-trip (insert / select / delete)。
+- utf8mb4 / utf8mb4_unicode_ci 中文 round-trip + HEX 字节级断言。
+- Packaged JAR 在 `--spring.profiles.active=it` 下真实连接 MySQL。
+- `SpikeDatabaseStartupVerifier` (`@Profile("it")` ApplicationRunner) 打印 `SPIKE_DB_VERIFY_OK`。
+- 3 个 profile 隔离：default (无 DB) / test (排除 DataSource) / it (真实 MySQL)。
+- 验证表 `spike_record` 明显非正式业务表。
+
+**事实备注 — SPIKE-002 实际验证范围**：
+
+本次实际验证范围为 MyBatis-Plus / MySQL connectivity、CRUD、utf8mb4 中文 round-trip、packaged JAR 真实启动。
+
+**原计划中未覆盖的项目**：
+
+- Transaction：未在 SPIKE-002 单独验证。将在后续实际 Service / use-case 中验证。
+- `spaceId` 组合索引：未在 SPIKE-002 单独验证。LearningSpace / spaceId isolation / composite-index 将在 SPIKE-004 或 Platform Skeleton 阶段进行真实验证。
 
 ### SPIKE-003 Flyway / Versioned SQL
+
+NEXT
 
 验证：
 
@@ -65,6 +71,8 @@ git push GitHub Private
 - schema history。
 
 如果验证通过并准备创建真实持久数据库：新增 ADR，正式采用 Flyway。
+
+当前 Flyway 仍为 SPIKE Gate，未被 Accepted。
 
 ### SPIKE-004 Auth + Space Authorization
 
