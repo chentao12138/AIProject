@@ -1,0 +1,32 @@
+# SPIKE-003 'flyway-it' profile — isolated Flyway migration integration.
+#
+# Isolation from SPIKE-002:
+#   - SPIKE-002 uses DB_URL / DB_USERNAME / DB_PASSWORD against aistudy_spike.
+#   - SPIKE-003 uses FLYWAY_DB_URL / FLYWAY_DB_USERNAME / FLYWAY_DB_PASSWORD
+#     against a dedicated disposable schema: aistudy_flyway_test.
+#   - Never reuse DB_URL for Flyway. An early-run mistake reused DB_URL and
+#     Flyway clean() destroyed aistudy_spike.spike_record. This profile
+#     physically cannot now point at the SPIKE-002 database because it reads
+#     a different env-var family.
+#   - Do NOT activate SpikeMybatisConfig / SpikeDatabaseStartupVerifier;
+#     those beans are scoped to the SPIKE-002 'it' profile.
+#
+# Flyway auto-run on Spring startup is disabled: STEP-03 drives migration
+# explicitly via Flyway Java API (target=001, target=latest, idempotent no-op)
+# so the test controls the exact migration sequence. If Spring Boot ran
+# Flyway first, the "fresh V001-only" state required by the upgrade test
+# would never exist.
+
+spring:
+  datasource:
+    url: ${FLYWAY_DB_URL}
+    username: ${FLYWAY_DB_USERNAME}
+    password: ${FLYWAY_DB_PASSWORD}
+  # Disable Spring's SQL init so it cannot race with Flyway.
+  sql:
+    init:
+      mode: never
+  flyway:
+    # STEP-03 drives migrations manually; disable Spring Boot auto-migrate.
+    enabled: false
+    locations: classpath:db/migration

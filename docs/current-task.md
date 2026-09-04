@@ -26,32 +26,41 @@ SPIKE-002 已完成：
 - packaged JAR 在 `--spring.profiles.active=it` 下真实连接 MySQL。
 - `SpikeDatabaseStartupVerifier` 打印 `SPIKE_DB_VERIFY_OK`。
 
+SPIKE-003 已完成：
+
+- Flyway 版本化 migration 正式采用（新增 ADR-046，`Accepted`）。
+- V001/V002 空库初始化。
+- V001-only → V002 upgrade 保留旧数据 + V001 checksum 动态读取不变。
+- Schema history 结构正确（V001 rank=1, V002 rank=2, success=true）。
+- Repeated `migrate()` 在最新状态 `migrationsExecuted == 0`。
+- Self-contained integration test（3 tests）可重复执行。
+- Destructive clean 前 `SELECT DATABASE()` 精确匹配 guard。
+- SPIKE-002（`DB_URL`）与 SPIKE-003（`FLYWAY_DB_URL`）环境变量族物理隔离。
+- Full `mvnw.cmd clean test` 7/7 PASS。
+
+**已知风险（生产部署前必须重新验证）**：Flyway 11.7.2 官方最高测试 MySQL 8.1，当前环境为 MySQL 8.4.x。本 SPIKE 范围内实际执行成功但**不能**宣称"官方支持"。Flyway 13.4.0 兼容实验（SPIKE-003-COMPAT-01）在当前 Spring Boot 3.5.0 依赖栈下失败（Jackson 3 API 缺失），已恢复 BOM 管理的 11.7.2。
+
 ## 当前唯一任务
 
-**SPIKE-003：Flyway / Versioned SQL**
+**SPIKE-004：Auth + Space Authorization**
 
-只验证 migration 技术：
+按 `docs/development-plan.md` 顺序。SPIKE-003 通过后 Flyway 已成为正式依赖，但**本轮不得开始核心业务代码**。
 
-- `V001 / V002`。
-- 空库初始化。
-- upgrade。
-- schema history。
-
-**明确禁止：**
+**明确禁止（延续）：**
 
 - 不开始核心业务实体。
 - 不创建 LearningSpace / Source / KnowledgePoint 正式业务 schema。
-- 不写业务 Java 代码。
-- 不引入 Flyway 为正式依赖（Flyway 当前仍是 SPIKE-003 Gate）。
-- 不修改 ADR（Flyway 未被 Accepted，等 SPIKE-003 通过后由用户决定是否新增 ADR）。
+- 不写业务 Java 代码（Spike 验证代码除外）。
+- 不修改 ADR 或已 Accepted 的技术/业务决策。
+- 不 commit / push（用户手动执行）。
 
-SPIKE-003 通过后按 `docs/development-plan.md` 继续后续 Spike。
+SPIKE-004 通过后按 `docs/development-plan.md` 继续后续 Spike。
 
 ## 下一阶段顺序
 
 ```text
-SPIKE-003 Flyway / Versioned SQL          ← 当前
-SPIKE-004 Auth + Space Authorization
+SPIKE-003 Flyway / Versioned SQL          ← COMPLETE
+SPIKE-004 Auth + Space Authorization       ← 当前
 SPIKE-005 OpenAPI → TypeScript Client
 SPIKE-006 Electron Security + File Upload
 SPIKE-007 Admin Web

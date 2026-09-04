@@ -2,7 +2,7 @@
 
 > 状态：**TECHNICAL SPIKES IN PROGRESS**
 >
-> SPIKE-001 / SPIKE-002 已完成并提交。SPIKE-003 待启动。后续按原顺序执行。
+> SPIKE-001 / SPIKE-002 / SPIKE-003 已完成。SPIKE-004 待启动。后续按原顺序执行。
 
 ## Phase 0：Baseline Final Review
 
@@ -61,18 +61,39 @@
 
 ### SPIKE-003 Flyway / Versioned SQL
 
-NEXT
+✅ COMPLETE (2026-09-05)
 
-验证：
+已验证：
 
-- `V001/V002`。
-- 空库初始化。
-- upgrade。
-- schema history。
+- Spring Boot 3.5.0 BOM 管理的 Flyway 11.7.2（不显式 pin）。
+- V001/V002 空库初始化。
+- V001-only 数据库升级到 V002。
+- V001 升级前旧数据在 V002 应用后保留。
+- V001 checksum 在 V002 应用前后保持不变（动态读取，不硬编码）。
+- Schema history 结构正确（V001 rank=1, V002 rank=2, success=true）。
+- Repeated `migrate()` 在最新状态不重复执行 migration（`migrationsExecuted == 0`）。
+- Self-contained integration test（3 tests）在专用 schema `aistudy_flyway_test` 上可重复执行。
+- Destructive clean 前 schema exact-match guard（`SELECT DATABASE()` 精确等于 `aistudy_flyway_test`）。
+- SPIKE-002（`DB_URL`）与 SPIKE-003（`FLYWAY_DB_URL`）环境变量族物理隔离。
+- Full `mvnw.cmd clean test` 7/7 PASS。
 
-如果验证通过并准备创建真实持久数据库：新增 ADR，正式采用 Flyway。
+新增 ADR：ADR-046（`Accepted`），正式采用 Flyway 作为 migration executor。
 
-当前 Flyway 仍为 SPIKE Gate，未被 Accepted。
+**事实备注 — SPIKE-003 实际验证范围**：
+
+本次实际验证范围为 Flyway versioned migration 基础能力、schema history、checksum、data preservation、idempotent migrate、self-contained 测试、destructive clean guard、DB env 隔离。
+
+**已知兼容性风险（生产部署前必须重新验证）**：
+
+- Flyway 11.7.2 官方最高测试 MySQL 版本为 8.1，当前环境为 MySQL 8.4.x。Flyway 每次启动会输出 compatibility warning："MySQL 8.4 is newer than this version of Flyway and support has not been tested."
+- 本次 SPIKE 范围内实际执行成功，但**不能**因此宣称"Flyway 11.7.2 官方支持 MySQL 8.4"。
+- 生产部署前必须重新验证 Spring Boot / Flyway / MySQL 版本组合，并记录当时的 compatibility 状态。
+
+**Flyway 13.4.0 兼容实验（SPIKE-003-COMPAT-01）失败**：
+
+临时将 `flyway-core` + `flyway-mysql` pin 到 `13.4.0` 时，Java 测试代码零修改可编译，但运行时抛出 `NoClassDefFoundError: com/fasterxml/jackson/annotation/JsonSerializeAs`（Flyway 13.4.0 使用 Jackson 3，Spring Boot 3.5.0 依赖栈仍为 Jackson 2）。当前依赖栈下无法零修改升级到 Flyway 13.x；未来如需升级需同步升级 Jackson 到 3.x 或引入兼容桥接，属于跨版本栈升级，需独立 Spike。
+
+实验后 pom.xml 已恢复 BOM 管理，`mvnw.cmd clean test` 7/7 PASS。
 
 ### SPIKE-004 Auth + Space Authorization
 

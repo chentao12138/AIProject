@@ -20,13 +20,13 @@
 
 当前统计：
 
-- ADR 总数：**45**（ADR-001 ~ ADR-045）
-- Accepted：**26**
+- ADR 总数：**46**（ADR-001 ~ ADR-046）
+- Accepted：**27**
 - Superseded：**15**
 - Provisional：**4**
 
 Accepted：
-`ADR-005、010、013、022、023、024、025、026、027、028、029、030、031、032、033、035、036、037、038、039、040、041、042、043、044、045`
+`ADR-005、010、013、022、023、024、025、026、027、028、029、030、031、032、033、035、036、037、038、039、040、041、042、043、044、045、046`
 
 Superseded：
 `ADR-001、002、003、004、008、009、011、014、015、016、017、018、019、020、021`
@@ -856,7 +856,49 @@ Desktop file/folder selection
 
 ---
 
-# 6. 最终技术 + 业务基线摘要
+# 6. 技术 Spike 落地后的决策（ADR-046+）
+
+## ADR-046：使用 Flyway 作为正式版本化数据库迁移执行器
+
+- **背景**：ADR-025 已确立"数据库变更以版本化 SQL 为 Source of Truth"，并规定在第一个不可随意删除/已有真实数据的持久数据库投入使用之前必须正式选择并接入 migration executor，首选候选为 Flyway。SPIKE-003 对该候选进行了实际验证。
+- **决策**：正式采用 **Flyway** 作为 schema migration executor。
+- **规范**：
+  - Schema 变更使用 `Vxxx__description.sql`，路径固定在 `server/src/main/resources/db/migration/`。
+  - 已经应用到不可随意删除的持久数据库上的 migration 不回头修改；只允许追加新 `V` 版本。
+  - **不自行研发** migration engine（如 `schema_migrations + checksum + startup scanner + executor` 半套实现）。
+  - 生产环境的 schema change 必须通过 versioned migration 提交，不允许手工 ALTER / UPDATE 而不留下版本脚本。
+  - Application startup 可以由 Flyway 执行 pending migrations；具体部署策略（何时应用、由谁触发、如何在蓝绿/滚动发布时协调）由后续 ADR 明确。
+  - 普通升级不使用 `Uxxx`。`U` 前缀保留给 Flyway Undo 语义；只有在未来正式引入 Flyway Teams / undo strategy 时才启用，当前不采用。
+- **版本策略**：
+  - Flyway 版本**跟随 Spring Boot BOM** 管理，不在 `pom.xml` 显式 pin 到具体小版本。
+  - 升级 Flyway 大版本（例如从 11.x 到 12.x/13.x）必须作为独立技术 Spike 完成后再进入主干。
+- **兼容性风险**：
+  - 当前运行环境为 MySQL 8.4.x（SPIKE 阶段观测到 `8.4.10`）。
+  - 由 Spring Boot 3.5.0 BOM 解析的 Flyway **11.7.2** 在启动时会输出 compatibility warning："MySQL 8.4 is newer than this version of Flyway and support has not been tested. The latest supported version of MySQL is 8.1."
+  - 在本项目的 SPIKE-003 环境中，V001/V002 的实际执行、schema history、checksum、data preservation 全部真实通过；但**不能**因此宣称"Flyway 11.7.2 官方支持 MySQL 8.4"。只能记录为：本项目 SPIKE 范围内实际验证成功，但 Flyway 官方兼容性声明仍存在风险。
+  - 生产部署前**必须**重新验证 Spring Boot / Flyway / MySQL 版本组合，并记录当时的 compatibility 状态。
+- **实验记录（SPIKE-003-COMPAT-01）**：
+  - 曾尝试临时将 `flyway-core` + `flyway-mysql` 显式 pin 到 `13.4.0`（Maven Central 已发布）。
+  - Java 测试代码无需修改即可编译，但运行时抛出 `NoClassDefFoundError: com/fasterxml/jackson/annotation/JsonSerializeAs`，根因是 Flyway 13.4.0 已切换到 Jackson 3 API（`tools.jackson.databind`），而 Spring Boot 3.5.0 当前依赖栈仍提供 Jackson 2。
+  - 结论：当前 Spring Boot 3.5.0 项目依赖栈下，Flyway 13.4.0 零修改升级验证失败。这不是"Flyway 13 永远不兼容 Spring Boot"的一般性结论，而是本次验证范围内的具体失败。若未来引入 Flyway 13.x，需要同步升级 Jackson 到 3.x（或引入兼容桥接），这是跨版本栈升级，需要单独 Spike。
+  - 实验后 `pom.xml` 已恢复到由 Spring Boot BOM 管理的 Flyway 11.7.2，`mvnw.cmd clean test` 7/7 PASS。
+- **SPIKE-003 验证范围**：
+  - V001/V002 空库初始化。
+  - V001-only 数据库升级到 V002。
+  - V001 升级前旧数据在 V002 应用后保留。
+  - V001 checksum 在 V002 应用前后保持不变（动态读取，不硬编码）。
+  - Schema history 结构正确（V001 rank=1, V002 rank=2, success=true）。
+  - Repeated `migrate()` 在最新状态不重复执行 migration（`migrationsExecuted == 0`）。
+  - Self-contained integration test：每个测试自行构造起始状态，不依赖外部预置数据，可重复执行。
+  - Destructive clean 前有 schema exact-match guard（`SELECT DATABASE()` 必须精确等于 `aistudy_flyway_test`，否则抛 `IllegalStateException`）。
+  - SPIKE-002（`DB_URL`）与 SPIKE-003（`FLYWAY_DB_URL`）使用不同环境变量族，物理隔离。
+  - Full `mvnw.cmd clean test` 7/7 PASS（SPIKE-001 1 + SPIKE-002 2 + SPIKE-003 3 + SpikeHealth 1）。
+- **状态**：`Accepted`
+- **Supersede**：ADR-025 中"若决定接入 Flyway，新增 ADR 记录"的开放项由本 ADR 落地。ADR-025 关于版本化 SQL 的规范与规则继续有效。
+
+---
+
+# 7. 最终技术 + 业务基线摘要
 
 正式主干：
 
@@ -899,7 +941,7 @@ Source → Extracted Content → KnowledgePoint
 
 Admin Web 是内容治理后台；Desktop 是主要学习客户端和本地资料入口。
 
-# 7. 仍然开放但不阻塞业务封版的决策
+# 8. 仍然开放但不阻塞业务封版的决策
 
 以下内容不影响当前核心业务定义，继续保持 Provisional/Spike 后决定：
 
@@ -914,7 +956,7 @@ Admin Web 是内容治理后台；Desktop 是主要学习客户端和本地资�
 
 这些问题通过 Spike/真实使用数据决定，不再阻塞建立 Git Baseline 和开始技术验证。
 
-# 8. 后续 ADR 触发条件
+# 9. 后续 ADR 触发条件
 
 | 触发条件 | 需要的新决策 |
 |---|---|
@@ -930,7 +972,7 @@ Admin Web 是内容治理后台；Desktop 是主要学习客户端和本地资�
 | 需要微服务 | Service Boundary / Data Boundary |
 | API 破坏性升级 | API v2 |
 
-# 9. 当前工程禁止事项
+# 10. 当前工程禁止事项
 
 - 不绕过 Spring Boot 让客户端直连 MySQL。
 - 不跨 LearningSpace 查询/关联学习数据。
@@ -942,7 +984,7 @@ Admin Web 是内容治理后台；Desktop 是主要学习客户端和本地资�
 - 不提前微服务化/引入 Redis、MQ、Elasticsearch、Graph DB。
 - Hermes 未经用户明确授权不 commit/push。
 
-# 10. 文档维护规则
+# 11. 文档维护规则
 
 1. `decisions.md` 是 ADR 唯一 Source of Truth。
 2. `business-baseline.md` 是业务定义总入口。

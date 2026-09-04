@@ -132,6 +132,58 @@ MyBatis-Plus + MySQL 集成验证。已提交到 GitHub Private Repository。
 - Transaction：未在 SPIKE-002 单独验证。将在后续实际 Service / use-case 中验证。
 - LearningSpace / spaceId composite-index：未在 SPIKE-002 单独验证。将在 SPIKE-004 或 Platform Skeleton 阶段进行真实验证。
 
+## 2026-09-05 — SPIKE-003 Complete
+
+Flyway / Versioned SQL migration 验证完成，新增 ADR-046（`Accepted`）正式采用 Flyway。
+
+### Code-defined evidence
+
+- `server/pom.xml` 声明 `org.flywaydb:flyway-core` 与 `org.flywaydb:flyway-mysql`（版本跟随 Spring Boot 3.5.0 BOM 管理，不显式 pin）。
+- `application-flyway-it.yml` 独立 profile 使用 `FLYWAY_DB_URL / FLYWAY_DB_USERNAME / FLYWAY_DB_PASSWORD`（与 SPIKE-002 的 `DB_URL` 环境变量族完全隔离），并 `spring.flyway.enabled=false`（禁用 Spring Boot 自动 migrate，由测试代码显式驱动 Flyway Java API）。
+- `application-it.yml` 新增 `spring.flyway.enabled=false`，防止 Spring Boot 在 SPIKE-002 profile 下对 `aistudy_spike` 触发 Flyway 自动迁移。
+- `V001__create_flyway_spike_record.sql`：SPIKE-only 表 `flyway_spike_record`（`id BIGINT AUTO_INCREMENT PK, name VARCHAR(100), created_at DATETIME(6), utf8mb4`），标记 "SPIKE-003 ONLY / NOT A BUSINESS TABLE"。
+- `V002__add_note_to_flyway_spike_record.sql`：`ALTER TABLE flyway_spike_record ADD COLUMN note VARCHAR(255) NULL`。
+- `FlywayMigrationIntegrationTest`（3 tests，`@ActiveProfiles("flyway-it")`）：
+  - `freshDatabaseMigratesFromEmptyToLatest`：`clean()` → `migrate()` → 2 migrations applied → history V001+V002 各 success=true → table charset utf8mb4 → note column exists and nullable。
+  - `existingV001DatabaseUpgradesToV002AndPreservesData`：`clean()` → target `001` → migrate() → 1 migration → 无 note column → 插入 "V001升级前保留数据" → 从 `flyway_schema_history` **动态读取 V001 checksum** → target default-latest → migrate() → 仅 1 migration applied（V002）→ V001 checksum 与升级前动态值相等 → 旧数据仍存在 → 第二次 migrate() `migrationsExecuted == 0` → history 仍只有 V001+V002。
+  - `latestDatabaseRequiresNoMigrationOnSecondMigrate`：`clean()` → migrate() → 2 applied → 再次 migrate() → `migrationsExecuted == 0` → history 版本序列 `[001, 002]`。
+  - **不硬编码任何 checksum 值**，全部动态读取。
+- **Destructive guard**：`assertSchemaIsFlywayTest()` 在每次 `clean()` 前通过 `SELECT DATABASE()` 精确匹配 `aistudy_flyway_test`；不等则抛 `IllegalStateException("Refusing Flyway clean: expected schema 'aistudy_flyway_test' but got '<actual>'")`。这是后续所有 DB destructive test 的强制安全规则。
+- Flyway Java API 直接构造 `Flyway.configure().dataSource(...).locations("classpath:db/migration").cleanDisabled(false).load()`，`target(null)` = default latest；`target("001")` 停止在 V001。Flyway 11.7.2 不接受空字符串 target。
+- `@BeforeEach` 调用 `assertSchemaIsFlywayTest() + flyway().clean()`，每个 test 自行构造起始状态；测试不依赖执行顺序或外部预置数据。
+
+### Runtime-verified evidence
+
+- Full `.\mvnw.cmd clean test`（SPIKE-001 + SPIKE-002 + SPIKE-003 + SpikeHealth）：**Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, BUILD SUCCESS**。
+  - `AiStudyApplicationTests` 1 PASS。
+  - `FlywayMigrationIntegrationTest` 3 PASS（fresh / upgrade-preserve / idempotent）。
+  - `SpikeRecordMapperIntegrationTest` 2 PASS（中文 round-trip + HEX）。
+  - `SpikeHealthControllerTest` 1 PASS。
+- Flyway `flyway_migration_integration_test` RUN 1（step-08）：`Tests run: 3, Failures: 0, Errors: 0`；日志显示 `Successfully applied 1 migration ... now at version v001`、`Successfully applied 1 migration ... now at version v002`、`Successfully applied 2 migrations ... now at version v002`。
+- Flyway RUN 2 repeatability（step-09，同一命令再次执行）：`Tests run: 3, Failures: 0, Errors: 0`。
+- 运行后 `SELECT DATABASE() FROM aistudy_flyway_test` = `aistudy_flyway_test`；`SHOW TABLES FROM aistudy_spike` = `spike_record`（唯一，无 Flyway 副作用）。
+- Flyway 13.4.0 兼容实验（SPIKE-003-COMPAT-01）：`flyway-core-13.4.0.jar` 与 `flyway-mysql-13.4.0.jar` 成功从 Maven Central 下载（HTTP 200），Java 测试代码零修改即可编译，但运行时抛出 `NoClassDefFoundError: com/fasterxml/jackson/annotation/JsonSerializeAs`（Jackson 3 API 缺失）。结论：当前 Spring Boot 3.5.0 依赖栈下零修改升级到 Flyway 13.4.0 失败。实验后 pom.xml 已恢复 BOM 管理，`mvnw.cmd clean test` 再次 7/7 PASS。
+
+### Artifact / environment observations
+
+- Flyway 版本：**11.7.2**（由 Spring Boot 3.5.0 BOM 解析）。
+- MySQL 版本：**8.4.10**（Docker `mysql:8.4`，本地容器 `aistudy-mysql-spike`，运行期观测）。
+- **兼容性 warning**（Flyway 11.7.2 每次启动均输出，原样保留）：
+  ```
+  Flyway upgrade recommended: MySQL 8.4 is newer than this version of Flyway
+  and support has not been tested. The latest supported version of MySQL is 8.1.
+  ```
+  本次 SPIKE 范围内实际执行成功，但**不能**因此宣称"Flyway 11.7.2 官方支持 MySQL 8.4"。生产部署前必须重新验证 Spring Boot / Flyway / MySQL 版本组合。
+- **数据库污染事故与恢复**：早期 SPIKE-003 STEP-03 测试因复用 `DB_URL` 变量，导致 Flyway `clean()` 作用到 `aistudy_spike`，删除 SPIKE-002 的 `spike_record` 表并在其中留下 `flyway_schema_history` + `flyway_spike_record`。已通过 `deploy/local/mysql/init/01_spike_record.sql` 恢复 `spike_record`，并对 `aistudy_spike` 执行 `DROP TABLE IF EXISTS flyway_spike_record; DROP TABLE IF EXISTS flyway_schema_history;`（仅该 schema）。根因修复为 SPIKE-002 / SPIKE-003 使用不同 env-var 族 + Flyway clean 前 `SELECT DATABASE()` 精确匹配 guard。
+- 数据库 schema：`aistudy_spike`（SPIKE-002 用）+ `aistudy_flyway_test`（SPIKE-003 自动测试用，每次 clean 后重建）+ `aistudy_flyway_spike`（STEP-01/02 手工演示库，SPIKE 内保留但不再作为自动测试目标）。
+
+### SPIKE-003 未覆盖范围（诚实记录）
+
+- 生产环境部署策略（何时执行 pending migration、蓝绿/滚动发布协调）留待后续 ADR。
+- Flyway 大版本升级（12.x / 13.x）留待独立 Spike。
+- Undo migration（`Uxxx`）：当前不采用；`U` 前缀保留给未来 Flyway Teams / undo strategy。
+- Multi-schema / out-of-order migrations：当前不使用。
+- Flyway baseline（对已有历史数据库初始接入）：当前不使用，首次接入在空库上完成。
 
 ## 当前状态
 
@@ -141,15 +193,16 @@ Business Alignment     COMPLETE
 Git Baseline           COMPLETE
 SPIKE-001              COMPLETE
 SPIKE-002              COMPLETE
-SPIKE-003              NEXT
+SPIKE-003              COMPLETE
+SPIKE-004              NEXT
 Platform Skeleton      NOT STARTED
 Core Business          NOT STARTED
 ```
 
 ## 下一步
 
-1. SPIKE-003：Flyway / Versioned SQL。
-2. 后续 Spike 按 `docs/development-plan.md` 顺序执行。
+1. SPIKE-004：Auth + Space Authorization（按 `docs/development-plan.md` 顺序）。
+2. 后续 Spike 按原顺序执行。
 3. Platform Skeleton。
 4. Vertical Slice A：Source → Knowledge。
 5. 后续 Vertical Slice 和阶段。

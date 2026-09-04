@@ -2,7 +2,7 @@
 
 > 当前状态：**TECHNICAL SPIKES IN PROGRESS**
 >
-> 技术架构和核心学习业务均已完成对齐。SPIKE-001 / SPIKE-002 已完成并提交；SPIKE-003 待启动。
+> 技术架构和核心学习业务均已完成对齐。SPIKE-001 / SPIKE-002 / SPIKE-003 已完成；SPIKE-004 待启动。
 
 ## 1. 产品定位
 
@@ -180,7 +180,7 @@ Hermes 只读理解文档
 → Technical Spikes                            ← 当前阶段
    SPIKE-001 (Spring Boot + Java 21 + Maven Wrapper)      ✅ Complete
    SPIKE-002 (MySQL + MyBatis-Plus)                       ✅ Complete
-   SPIKE-003 (Flyway / Versioned SQL)                     NEXT
+   SPIKE-003 (Flyway / Versioned SQL)                     ✅ Complete
    SPIKE-004+ ...
 → Platform Skeleton
 → 正式 Vertical Slice 开发

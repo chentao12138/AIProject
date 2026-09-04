@@ -23,6 +23,12 @@ spring:
   sql:
     init:
       mode: never
+  # SPIKE-002 owns the schema via deploy/local/mysql/init/01_spike_record.sql.
+  # Do NOT let Flyway auto-run here; Flyway migrations under db/migration are
+  # scoped to SPIKE-003 (aistudy_flyway_test only). Disabling Flyway here
+  # prevents it from mis-firing against aistudy_spike.
+  flyway:
+    enabled: false
 
 logging:
   level:
