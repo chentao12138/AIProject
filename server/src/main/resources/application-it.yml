@@ -1,0 +1,31 @@
+# SPIKE-002 'it' profile — real MySQL integration configuration.
+#
+# This file is intentionally shipped in the MAIN resources directory so that
+# BOTH the integration test (@ActiveProfiles("it")) and the packaged jar
+# (--spring.profiles.active=it) resolve to the SAME configuration.
+#
+# Requires a running MySQL 8.x reachable at DB_URL.
+# Load deploy/local/mysql/.env (or equivalent) before running tests / starting the jar.
+# Do NOT put real credentials in this file — DB_URL / DB_USERNAME / DB_PASSWORD are
+# resolved from environment variables.
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      pool-name: AIStudyItHikari
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 10000
+  sql:
+    init:
+      mode: never
+
+logging:
+  level:
+    com.aistudy.server.spike.mysql: DEBUG
+    com.baomidou.mybatisplus: INFO
+    org.apache.ibatis: DEBUG

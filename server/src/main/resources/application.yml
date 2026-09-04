@@ -4,6 +4,25 @@ spring:
   main:
     banner-mode: "off"
 
+  # DataSource is NOT configured in the default profile.
+  # The real MySQL connection is defined in application-it.yml for SPIKE-002
+  # and will be finalized when SPIKE-003 introduces Flyway-based migrations.
+  #
+  # Local development flow (from Windows PowerShell, after export-ing env vars):
+  #   export DB_URL, DB_USERNAME, DB_PASSWORD   (see deploy/local/mysql/.env)
+  #   .\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=it
+
+  sql:
+    init:
+      mode: never
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    banner: false
+
 server:
   address: 127.0.0.1
   port: 8080
@@ -12,3 +31,4 @@ logging:
   level:
     root: INFO
     com.aistudy: INFO
+    com.baomidou.mybatisplus: INFO
