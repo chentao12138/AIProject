@@ -1,0 +1,256 @@
+# ============================================================
+# AIProject .gitignore
+# 版本：v1.1（FINAL-TECHNICAL-REVIEW-CORRECTION）
+# 技术栈：
+#   Backend → Spring Boot 3.5.x + Java 21 + Maven (Wrapper 3.9.x) + MyBatis-Plus + MySQL 8.x
+#   Desktop → Electron + React 18 + TypeScript + Vite
+#   Admin   → React + TypeScript + Vite
+#   Future  → Android（未锁定技术栈）
+#
+# 关键规则：
+#   1. Spring Boot 源码与 resources 目录必须进入 Git
+#   2. Maven Wrapper（mvnw / mvnw.cmd / .mvn/）必须进入 Git
+#   3. 前端 src/models / src/data 等源码目录必须进入 Git
+#   4. 运行时数据、上传文件、备份、日志不入库
+#   5. 真实业务数据目录（D:\AIStudyData）在仓库外，本文件不需要排除
+#   6. 环境变量与密钥不入库，只提交 .example 模板
+# ============================================================
+
+# ============================================================
+# Java / Maven（Spring Boot 后端）
+# ============================================================
+
+# 构建产物
+target/
+*.class
+*.war
+*.ear
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# Maven 本地仓库缓存（项目内不应出现，但防御）
+.m2/
+
+# 注意：Maven Wrapper 文件**必须进入 Git**，不忽略：
+#   mvnw
+#   mvnw.cmd
+#   .mvn/wrapper/
+
+# IDE（Java / IntelliJ IDEA）
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.factorypath
+nb-configuration.xml
+nbproject/
+nbactions.xml
+
+# Spring Boot 本地开发配置（.local 后缀不入库）
+application-local.yml
+application-local.properties
+application-dev.yml
+application-dev.properties
+*.local.yml
+*.local.properties
+*.local.*
+
+# ============================================================
+# Node / npm / pnpm（Desktop + Admin Web）
+# ============================================================
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.pnpm-store/
+package-lock.json.bak
+yarn.lock.bak
+.pnpm-debug.log*
+
+# Node 缓存
+.node-cache/
+.npm-cache/
+
+# Vite
+.vite/
+.vite-dep-optimize/
+
+# TypeScript
+.tsbuildinfo
+*.tsbuildinfo
+.tscache/
+
+# 注意：前端 src/ 下的 models/、data/ 等源码目录**必须进入 Git**，
+# 本文件不使用全局 `models/` 或 `data/` 忽略规则。
+
+# ============================================================
+# 构建产物（跨项目）
+# ============================================================
+
+dist/
+build/
+out/
+release/
+dist-electron/
+dist-web/
+*.js.map
+
+# ============================================================
+# Electron 打包产物
+# ============================================================
+
+release-builds/
+installer/
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.msi
+*.snap
+*.snapx
+electron-builder.yml.bak
+
+# ============================================================
+# 环境变量（仅提交 .example 模板）
+# ============================================================
+
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.*.local
+!.env.example
+!.env.example.*
+
+# ============================================================
+# 日志
+# ============================================================
+
+logs/
+log/
+server/log/
+admin-web/log/
+desktop/log/
+*.log
+*.log.gz
+*.log.zip
+
+# ============================================================
+# 测试产物
+# ============================================================
+
+coverage/
+.nyc_output/
+jest-coverage/
+*.lcov
+playwright-report/
+test-results/
+reports/
+screenshots/
+videos/
+
+# ============================================================
+# 运行时数据（项目内的临时/运行时目录）
+# 真实业务数据目录 D:\AIStudyData 在仓库外，本文件不处理
+# ============================================================
+
+/runtime-data/
+/uploads/
+/temp/
+/tmp/
+.cache/
+
+# SQLite/本地 DB（防御；v1 已放弃 SQLite，但保留规则防误用）
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 数据库 dump / 备份
+*.sql.gz
+*.sql.bak
+*.dump
+*.bak
+backups/
+
+# ============================================================
+# 密钥与证书
+# ============================================================
+
+*.pem
+*.key
+*.crt
+*.jks
+*.p12
+*.pfx
+secrets/
+credentials/
+*secret*.json
+*secret*.yml
+*secret*.properties
+
+# ============================================================
+# AI 缓存（本地模型等）
+# ============================================================
+
+.cache_ai/
+ollama-cache/
+llama.cpp/
+# 注意：不使用全局 `models/` 忽略，避免误伤前端 src/models/
+# 本地 AI 模型如需排除，请用具体路径如 `desktop/local-models/`
+
+# ============================================================
+# 文档草稿
+# ============================================================
+
+drafts/
+notes-local/
+
+# ============================================================
+# 操作系统
+# ============================================================
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ============================================================
+# 编辑器
+# ============================================================
+
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.vscode-test/
+.history/
+*.swp
+*.swo
+*~
+*.orig
+*.tmp
+*.sublime-project
+*.sublime-workspace
+.editorconfig.local
+
+# ============================================================
+# Docker 数据（项目内如启用 Docker Compose 数据卷）
+# ============================================================
+
+mysql-data/
+docker-data/
+volumes/
