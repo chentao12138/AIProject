@@ -185,6 +185,57 @@ Flyway / Versioned SQL migration 验证完成，新增 ADR-046（`Accepted`）�
 - Multi-schema / out-of-order migrations：当前不使用。
 - Flyway baseline（对已有历史数据库初始接入）：当前不使用，首次接入在空库上完成。
 
+## 2026-09-05 — SPIKE-004 Complete
+
+Auth + Space Authorization 技术验证完成。结论是 **Validation Complete**，不是生产认证/授权实现完成。
+
+### Code-defined evidence
+
+- `server/pom.xml` 新增 Spring Security、Nimbus JOSE/JWT 与 OAuth2 Resource Server 相关依赖，版本由 Spring Boot BOM 管理。
+- `SpikeSecurityConfig`：`/health` `permitAll()`，其它请求 `authenticated()`；启用 Resource Server JWT 与 Method Security；提供 BCrypt `PasswordEncoder`、HS256 `JwtEncoder` / `JwtDecoder`。
+- `SpikeJwtTokenService`：SPIKE-only Access Token，`iss=aistudy-spike`，`sub` 来自调用参数，TTL=5 minutes。
+- `SpikeProtectedController`：包含 authenticated、`denyAll()`、space-scoped authorization 三类验证 endpoint。
+- `SpikeSpaceAccess`：以 `Authentication.getName()` + request `spaceId` 调用 Repository；null / unauthenticated defensive checks 返回 false；Repository 异常不被吞掉。
+- `SpikeSpaceMembershipRepository`：参数化 SQL 查询 `spike_space_membership` 中 `(user_subject, space_id, status='ACTIVE')`。
+- V003 新增 SPIKE-only `spike_space_membership`：`id` PK、`user_subject`、`space_id`、`status`、`created_at`，并对 `(user_subject, space_id)` 加 UNIQUE；`utf8mb4 / utf8mb4_unicode_ci`。
+- `SpikeSecurityBoundaryTest` 使用 `@MockitoBean` 隔离 Repository，验证 401 / 403 / JWT / Method Security / space authorization 边界。
+- `SpikeSpaceMembershipIntegrationTest` 使用真实 MySQL 验证 ACTIVE / REVOKED / missing 三态 Repository 语义。
+- `SpikeSpaceAuthorizationEndToEndIntegrationTest` 使用真实 JWT + MockMvc + Method Security + Repository + JdbcTemplate + MySQL 验证 `200 / 403 / 403`。
+- `AiStudyApplicationTests`、`SpikeHealthControllerTest`、`SpikeJwtTokenServiceTest`、`SpikePasswordEncoderTest` 在 `test` profile 下通过 `@MockitoBean SpikeSpaceMembershipRepository` 保持无数据库测试隔离。
+
+### Runtime-verified evidence
+
+- MICRO-01：Spring Security baseline。
+- MICRO-03：BCrypt PasswordEncoder。
+- MICRO-04：JWT signing / decoding。
+- MICRO-05：Bearer Resource Server，valid token `200`，invalid / expired token `401`。
+- MICRO-06：Method Security + 初始 Space Authorization，认证后 deny → `403`。
+- MICRO-07：V003 + real MySQL membership Repository + DB-backed Space Authorization E2E。
+- MICRO-08：`test` profile context isolation 修复，不引入 fake DataSource / H2。
+- SPIKE-004 focused regression：**17/17 PASS**。
+- Full `.\mvnw.cmd clean test`：**Tests run: 24, Failures: 0, Errors: 0, Skipped: 0, BUILD SUCCESS**。
+
+### SPIKE-004 deferred / production boundary
+
+以下原计划目标未在本 SPIKE 实现，明确 **DEFERRED**：
+
+- Opaque Refresh Token + server-side hash。
+- Refresh rotation / revoke。
+- USER / ADMIN roles / authorities。
+
+同时尚未实现正式 User、Login endpoint、正式 LearningSpace membership schema、production signing-key management、client token storage、正式 authorization model。
+
+以下内容均为 **SPIKE-only**，后续生产实现必须重做，不能直接固化为正式方案：
+
+- `spike_space_membership`。
+- `SpikeSpaceAccess`。
+- `SpikeSpaceMembershipRepository`。
+- `iss=aistudy-spike`、5-minute TTL、Spring Context/JVM 生命周期随机 HS256 key。
+
+Repository / DB 异常当前会向上传播，不会静默授权；本 SPIKE 未定义或验证“DB failure → 403”的正式 contract。
+
+Flyway 11.7.2 + MySQL 8.4 的兼容性 warning 继续保留：SPIKE 运行成功不等于官方支持，生产部署前仍需重新验证版本组合。
+
 ## 当前状态
 
 ```text
@@ -194,14 +245,15 @@ Git Baseline           COMPLETE
 SPIKE-001              COMPLETE
 SPIKE-002              COMPLETE
 SPIKE-003              COMPLETE
-SPIKE-004              NEXT
+SPIKE-004              COMPLETE
+SPIKE-005              NEXT
 Platform Skeleton      NOT STARTED
 Core Business          NOT STARTED
 ```
 
 ## 下一步
 
-1. SPIKE-004：Auth + Space Authorization（按 `docs/development-plan.md` 顺序）。
+1. SPIKE-005：OpenAPI → TypeScript Client（按 `docs/development-plan.md` 顺序）。
 2. 后续 Spike 按原顺序执行。
 3. Platform Skeleton。
 4. Vertical Slice A：Source → Knowledge。

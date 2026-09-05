@@ -2,7 +2,7 @@
 
 > 状态：**TECHNICAL SPIKES IN PROGRESS**
 >
-> SPIKE-001 / SPIKE-002 / SPIKE-003 已完成。SPIKE-004 待启动。后续按原顺序执行。
+> SPIKE-001 / SPIKE-002 / SPIKE-003 / SPIKE-004 已完成。下一项为 SPIKE-005。后续按原顺序执行。
 
 ## Phase 0：Baseline Final Review
 
@@ -57,7 +57,7 @@
 **原计划中未覆盖的项目**：
 
 - Transaction：未在 SPIKE-002 单独验证。将在后续实际 Service / use-case 中验证。
-- `spaceId` 组合索引：未在 SPIKE-002 单独验证。LearningSpace / spaceId isolation / composite-index 将在 SPIKE-004 或 Platform Skeleton 阶段进行真实验证。
+- `spaceId` 组合索引：未在 SPIKE-002 单独验证。SPIKE-004 仅验证了 SPIKE-only membership authorization 链路；正式 LearningSpace / spaceId isolation / composite-index 留到 Platform Skeleton / 正式业务 schema 阶段验证。
 
 ### SPIKE-003 Flyway / Versioned SQL
 
@@ -97,13 +97,46 @@
 
 ### SPIKE-004 Auth + Space Authorization
 
-验证：
+✅ COMPLETE — Validation Complete (2026-09-05)
 
-- Spring Security。
-- JWT Access。
-- Opaque Refresh hash + rotation/revoke。
-- USER/ADMIN。
-- 用户 A 不能访问用户 B 的 LearningSpace。
+> 本 SPIKE 已完成技术可行性验证，但**不等于 Production Auth Implementation Complete**。SPIKE-only 代码与 schema 不得直接视为正式业务实现。
+
+**PROVEN IN SPIKE：**
+
+- Spring Security 基线：`/health` 匿名 `200`，其它请求要求认证。
+- BCrypt `PasswordEncoder` 可正确 encode / matches。
+- HS256 JWT Access Token 签发与解码；无效签名、过期 token 均返回 `401`。
+- Spring Security Resource Server Bearer JWT 认证链路。
+- `@EnableMethodSecurity` + `@PreAuthorize`；已认证但无授权返回 `403`。
+- JWT `sub` → `Authentication.getName()` + request `spaceId` → `SpikeSpaceAccess` → `SpikeSpaceMembershipRepository` → `JdbcTemplate` → 真实 MySQL。
+- SPIKE-only `spike_space_membership` 三态语义：`ACTIVE` → allow，`REVOKED` → deny，missing → deny。
+- 真实 JWT + HTTP + Method Security + Repository + MySQL 端到端：`200 / 403 / 403`。
+- Flyway V003 可创建 SPIKE-only membership table。
+- Focused regression：**17/17 PASS**。
+- Full `mvnw.cmd clean test`：**24/24 PASS**，Failures=0，Errors=0，Skipped=0。
+
+**DEFERRED TO PRODUCTION IMPLEMENTATION：**
+
+- Opaque Refresh Token、服务端 hash、rotation、revoke。
+- USER / ADMIN role model 与 authority mapping。
+- 正式 User / Login endpoint。
+- 正式 LearningSpace / membership schema、外键、角色与审计模型。
+- Production signing key management / rotation / `kid` / JWKS 策略。
+- Electron / Admin Web token storage。
+- 统一 401/403 API error contract、session / CSRF 策略。
+
+**SPIKE-only，不得当作生产方案：**
+
+- `spike_space_membership`。
+- `SpikeSpaceAccess`。
+- `SpikeSpaceMembershipRepository`。
+- `iss = "aistudy-spike"`。
+- 5-minute TTL。
+- Spring Context / JVM 生命周期内随机生成的 HS256 `SecretKey`。
+
+**异常语义边界：**
+
+`SpikeSpaceAccess` 不捕获 Repository / DB 异常；异常会向上传播，因此不会在数据库故障时静默授权。但本 SPIKE **没有**定义或验证“DB failure → 403”的正式授权失败契约。
 
 ### SPIKE-005 OpenAPI → TypeScript Client
 

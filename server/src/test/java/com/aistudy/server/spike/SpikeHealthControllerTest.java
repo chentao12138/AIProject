@@ -1,10 +1,12 @@
 package com.aistudy.server.spike;
 
+import com.aistudy.server.spike.auth.SpikeSpaceMembershipRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -19,6 +21,55 @@ class SpikeHealthControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    /**
+     * MICRO-08B: mock the SPIKE-only membership repository so this
+     * health-check HTTP test does not need a real
+     * {@code JdbcTemplate} or {@code DataSource} bean on the classpath.
+     *
+     * <h3>Why this mock is required</h3>
+     *
+     * The {@code test} profile (see {@code application-test.yml})
+     * deliberately excludes {@code DataSourceAutoConfiguration} so
+     * unit-oriented tests run without a database. Since MICRO-07E-A
+     * wired {@code SpikeSpaceAccess} to constructor-inject
+     * {@code SpikeSpaceMembershipRepository}, and that repository
+     * constructor-injects {@code JdbcTemplate}, the full application
+     * context fails to boot under this profile with:
+     * <pre>
+     *   No qualifying bean of type
+     *     'org.springframework.jdbc.core.JdbcTemplate'
+     * </pre>
+     *
+     * Replacing the repository bean with a Mockito mock via
+     * {@code @MockitoBean} prevents Spring from ever calling the
+     * real repository's constructor, so the missing
+     * {@code JdbcTemplate} dependency is never resolved.
+     *
+     * <h3>Why not stub the mock in this test</h3>
+     *
+     * {@code /health} is a health-check endpoint that has no
+     * business calling {@code SpikeSpaceAccess} or its repository —
+     * it is guarded by {@code permitAll} in
+     * {@code SpikeSecurityConfig} and returns a static
+     * {@code {"status":"UP","service":"AIStudyServer","phase":"SPIKE-001"}}
+     * body. Therefore we add no {@code when(...)}, {@code given(...)},
+     * or {@code verify(...)} calls. The mock exists purely to keep
+     * the Spring context bootable under the {@code test} profile.
+     *
+     * <h3>Why not change the profile</h3>
+     *
+     * This test was written before MICRO-07D-A added the repository
+     * and was already correct under the {@code test} profile.
+     * Switching it to a database-backed profile (e.g. {@code
+     * flyway-it}) would force this health smoke test to stand up a
+     * real MySQL, which is the wrong test for that. The
+     * repository-to-database path is owned by
+     * {@code SpikeSpaceMembershipIntegrationTest} and
+     * {@code SpikeSpaceAuthorizationEndToEndIntegrationTest}.
+     */
+    @MockitoBean
+    private SpikeSpaceMembershipRepository membershipRepository;
 
     @Test
     void healthReturnsUp() throws Exception {

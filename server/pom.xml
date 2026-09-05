@@ -53,6 +53,53 @@
             <artifactId>mysql-connector-j</artifactId>
         </dependency>
 
+        <!-- Spring Security (SPIKE-004 gate) -->
+        <!-- MICRO-01 only verifies the dependency can be wired into the
+             existing Spring Boot context without breaking /health. Real auth
+             (JWT, formLogin, httpBasic, CSRF, session policy, UserDetailsService,
+             PasswordEncoder) is deferred to later MICROs. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- Spring Security OAuth2 JOSE / JWT (SPIKE-004 MICRO-04A gate) -->
+        <!-- Provides Nimbus JOSE+JWT (JWS / JWE / JWT parsing and signing)
+             that later MICROs will use to build JwtEncoder / JwtDecoder /
+             secret-key loading / Bearer authentication. MICRO-04A only
+             introduces the library so that later MICROs can assume the
+             dependency is available; nothing in this MICRO implements JWT
+             encode/decode, Bearer Token handling, or any token issuing.
+
+             We deliberately do NOT add spring-boot-starter-oauth2-resource-server
+             here because that pulls in Bearer authentication, which is a
+             separate MICRO. We also do NOT add jjwt-* because the project
+             should have exactly ONE JWT library, not two. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+        </dependency>
+
+        <!-- Spring Boot OAuth2 Resource Server (SPIKE-004 MICRO-05A gate) -->
+        <!-- Pulls in the Bearer token plumbing (BearerTokenAuthenticationFilter,
+             JwtDecoder / JwtAuthenticationConverter /
+             JwtGrantedAuthoritiesConverter defaults) that later MICROs will
+             wire into SecurityFilterChain. MICRO-05A only introduces the
+             dependency so that later MICROs can assume Bearer authentication
+             classes are available; nothing in this MICRO configures
+             oauth2ResourceServer(), parses Authorization headers, or
+             introduces any AuthenticationProvider / UserDetailsService.
+
+             Version is managed by the Spring Boot 3.5.0 BOM. We deliberately
+             do NOT remove or re-order the existing spring-security-oauth2-jose
+             dependency here even though the resource-server starter may
+             transitively pull in overlapping OAuth2/JWT components; any
+             cleanup is deferred until after the Bearer SPIKE is complete. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+
         <!-- Flyway (version managed by Spring Boot; SPIKE-003 gate) -->
         <!-- Flyway 10.x splits DB-specific support into separate modules; MySQL
              requires flyway-mysql in addition to flyway-core. -->
