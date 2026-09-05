@@ -2,6 +2,8 @@ package com.aistudy.server;
 
 import com.aistudy.server.space.mapper.LearningSpaceMapper;
 import com.aistudy.server.source.mapper.SourceMapper;
+import com.aistudy.server.knowledge.category.mapper.KnowledgeCategoryMapper;
+import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
 import com.aistudy.server.spike.auth.SpikeSpaceMembershipRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -81,6 +83,21 @@ class AiStudyApplicationTests {
      */
     @MockitoBean
     private SourceMapper sourceMapper;
+
+    /**
+     * BUSINESS-003: mock the Knowledge mappers so this
+     * full-context test keeps running without MyBatis-Plus /
+     * DataSource under this profile. Not stubbed — this test
+     * never touches Knowledge persistence.
+     */
+    @MockitoBean
+    private KnowledgeCategoryMapper knowledgeCategoryMapper;
+
+    /**
+     * BUSINESS-003: mock the KnowledgePoint mapper (see above).
+     */
+    @MockitoBean
+    private KnowledgePointMapper knowledgePointMapper;
 
 
     @Test

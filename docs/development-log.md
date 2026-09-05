@@ -623,3 +623,438 @@ BUSINESS-003 KnowledgePoint NOT STARTED
 
 1. Git closeout（用户 git add / commit / push）。
 2. Git baseline clean 后开始 BUSINESS-003 KnowledgePoint Vertical Slice。
+
+## 2026-09-06 LONG-RUN-002 Start
+
+### WHAT
+
+开始 BUSINESS-003 Knowledge Catalog Vertical Slice（LONG-RUN-002）。
+
+### WHY
+
+延续 BUSINESS-001/002 的 owner-boundary vertical slice 模式；本轮建立知识分类 + 用户人工维护知识点 + 发布生命周期。
+
+### BASELINE
+
+- HEAD = `906d3b4 feat: implement learning spaces and sources`（用户已 commit LONG-RUN-001 全部内容）
+- working tree clean
+- 最新 migration：V005（V006/V007 为本轮新增编号）
+
+### 范围
+
+- KnowledgeCategory（id, space_id, parent_id, name, description, sort_order, created_at, updated_at）
+- KnowledgePoint（id, space_id, category_id, title, summary, content, origin_type, status, difficulty, created_by_user_id, created_at, updated_at, published_at, deleted_at）
+- originType = USER_CURATED（服务器设置；客户端禁止提交）
+- status：DRAFT → PUBLISHED（发布幂等）；不实现 ARCHIVED/REJECTED/PROCESSING/NEEDS_REVIEW
+- 禁止：KnowledgePointSource / SOURCE_DERIVED / AI_DERIVED / ADMIN_CURATED（依赖 ContentBlock / Admin API，未实现）
+
+### NEXT
+
+PHASE A：V006 + V007 migrations、entities、mappers；然后写 Persistence Checkpoint 文档。
+
+## 2026-09-06 BUSINESS-003 Persistence Checkpoint
+
+### WHAT
+
+V006 + V007 migrations、4 个 entity、2 个 mapper 完成。
+
+### WHY
+
+KnowledgeCategory / KnowledgePoint 持久化层；确立软删读规则 + category/point owner-scoped JOIN。
+
+### DB SCHEMA
+
+- V006 knowledge_category：id, space_id FK→learning_space, parent_id FK→knowledge_category(NULL=root), name VARCHAR(128) NOT NULL, description VARCHAR(512) NULL, sort_order INT DEFAULT 0, created_at, updated_at；idx (space_id, parent_id, sort_order, id)；无 CASCADE
+- V007 knowledge_point：id, space_id FK→learning_space, category_id FK→knowledge_category NULL, title VARCHAR(255) NOT NULL, summary VARCHAR(1000) NULL, content TEXT NOT NULL, origin_type VARCHAR(32) NOT NULL, status VARCHAR(32) NOT NULL, difficulty VARCHAR(32) NULL, created_by_user_id VARCHAR(128) NULL, created_at, updated_at, published_at NULL, deleted_at NULL；idx (space_id, status, category_id) + (space_id, created_at, id)
+- charset/collation utf8mb4_unicode_ci 一致
+
+### MAPPERS
+
+- KnowledgeCategoryMapper：selectByIdAndSpaceAndOwner（JOIN learning_space）、selectBySpaceAndOwner（sort_order ASC, id ASC）
+- KnowledgePointMapper：selectByIdSpaceOwner（JOIN + deleted_at IS NULL）、selectBySpaceOwner（newest first + deleted_at IS NULL）、publishByIdAndSpace（显式 UPDATE WHERE id+space_id+deleted_at IS NULL，status/published_at/updated_at 由 service 显式传参）
+
+### SPACE INVARIANT
+
+- FK 无法证明 kp.space_id == category.space_id → service 层 scoped SQL 验证（PHASE B 实现）
+- parentId 同 space 验证同样 scoped（PHASE B 实现）
+
+### SOFT-DELETE READ RULE
+
+- 所有业务读（get/list/publish target）必须 deleted_at IS NULL；本轮无删除 API
+
+### DECISIONS
+
+- USER_CURATED 暂不实现 provenance：无 SourceAsset/SourcePage/ContentBlock/IngestionJob，不伪造 KnowledgePointSource；ADMIN_CURATED 留给未来 Admin API
+- difficulty 无 docs 枚举 → free-form bounded string（VARCHAR(32)），可空
+- 不实现 ARCHIVED/REJECTED/PROCESSING/NEEDS_REVIEW
+- 无 category name unique（避免 MySQL NULL-parent 语义）
+
+### STATIC EVIDENCE
+
+- SQL 语法检查 + entity/mapper token 级检查（后续统一跑）
+
+### RUNTIME EVIDENCE MISSING
+
+- 全部（AI 不运行 Maven）
+
+### NEXT
+
+PHASE B — Services / API（category + knowledge-point + publish + USER_CURATED/DRAFT 固定）。
+
+## 2026-09-06 BUSINESS-003 API Checkpoint
+
+### WHAT
+
+Service + Controller + DTO 全部完成（category 3 endpoint + knowledge-point 4 endpoint）。
+
+### CATEGORY API
+
+- POST /api/v1/spaces/{spaceId}/knowledge-categories → 201（name @NotBlank/@Size128, description @Size512, parentId nullable, sortOrder nullable→默认0）
+- GET .../knowledge-categories → 200 typed List（sort_order ASC, id ASC）
+- GET .../knowledge-categories/{categoryId} → 200/404
+
+### KNOWLEDGE POINT API
+
+- POST /api/v1/spaces/{spaceId}/knowledge-points → 201
+- GET .../knowledge-points → 200 typed List（deleted_at IS NULL, newest first）
+- GET .../knowledge-points/{knowledgePointId} → 200/404
+- POST .../knowledge-points/{knowledgePointId}/publish → 200（无 body）
+
+### USER_CURATED / LIFECYCLE
+
+- 服务器固定：originType=USER_CURATED、status=DRAFT、createdByUserId=authentication.getName()、publishedAt/deletedAt=null
+- publish：DRAFT→PUBLISHED，publishedAt=now、updatedAt=now；幂等（已 PUBLISHED 再 publish → NO-OP 返回当前资源 200，不刷新时间戳、不 500）（PRE-RUNTIME-REVIEW-FIX 修正）
+- 客户端 DTO 无 originType/status/createdByUserId/publishedAt/deletedAt/spaceId/ownerSubject
+
+### TRANSACTION
+
+- create（space 校验 + category 校验 + insert）@Transactional
+- publish（scoped get + scoped UPDATE）@Transactional
+- UPDATE 显式 WHERE id + space_id + deleted_at IS NULL（禁止 unscoped updateById）
+
+### SECURITY / INVARIANTS
+
+- category create：parentId 同 space 验证（scoped selectByIdAndSpaceAndOwner）→ 404
+- point create：categoryId 同 space 验证（同上）→ 404
+- 所有读：JOIN learning_space owner_subject；404 anti-probing
+- CSRF：/api/v1/spaces/** 已覆盖嵌套路由，SecurityConfig 零改动
+
+### DECISIONS
+
+- difficulty free-form VARCHAR(32)（docs 无枚举），可空
+- publish 幂等语义选择“已 PUBLISHED 再 publish = NO-OP 返回当前资源 200，不刷新时间戳”（PRE-RUNTIME-REVIEW-FIX 修正；api-guidelines 无冲突规则）
+
+### NEXT
+
+PHASE C — Tests（integration + OpenAPI + Flyway V007 + 旧 context 兼容）
+
+## 2026-09-06 BUSINESS-003 Test Checkpoint
+
+### WHAT
+
+Integration tests + OpenAPI contract tests + Flyway V007 更新 + 旧 context 兼容全部完成。
+
+### INTEGRATION TESTS
+
+- KnowledgeCatalogVerticalSliceIntegrationTest（flyway-it 真实 MySQL，30 tests）：
+  - Category 12：root create 201、persisted、child create、parent-other-space 404、user2 create 404、owner list 只含自己、user2 list 404、owner get 200、user2 get 404、blank name 400、anonymous GET/POST 401
+  - Point 18：create 201（USER_CURATED/DRAFT/null publishedAt）、persisted、server-forced fields、同 space category ok、category-other-owned-space 404、category-other-user 404、list 只含 non-deleted、user2 list 404、owner get 200、user2 get 404、cross-space IDOR 404、blank title 400、blank content 400、publish 200+PUBLISHED+DB check、user2 publish 404+DB unchanged、wrong-space publish 404+DB unchanged、re-publish 幂等、anonymous publish 401
+- FK-aware cleanup：knowledge_point → knowledge_category → source → learning_space（scoped biz-e2e users）
+
+### OPENAPI TESTS
+
+- KnowledgeOpenApiContractTest（test profile，8 tests）：7 paths、KnowledgeCategoryResponse typed（8 props）、CreateKnowledgeCategoryRequest（无 ownerSubject/spaceId）、KnowledgePointResponse typed（12 props，无 createdByUserId/deletedAt）、CreateKnowledgePointRequest（无 spaceId/ownerSubject/createdByUserId/originType/status/publishedAt/deletedAt）、list array+$ref、create 201/publish 200 $ref+application/json、bearerAuth 4 endpoints
+
+### FLYWAY TESTS
+
+- FlywayMigrationIntegrationTest V005→V007：TEST A fresh=7/history 7/versions 001-007 + knowledge_category（8 列/索引/FK×2/charset）+ knowledge_point（14 列/索引×2/FK×2/charset）；TEST B upgrade=6/history 7 + 3 新表存在；TEST C first=7/second=0/history 7/versions 7
+
+### OLD CONTEXT COMPAT
+
+- 9 个 test/it profile 测试类 +@MockitoBean KnowledgeCategoryMapper + KnowledgePointMapper（AiStudyApplicationTests、SpikeHealthControllerTest、SpikeJwtTokenServiceTest、SpikePasswordEncoderTest、SpikeSecurityBoundaryTest、SpikeOpenApiContractTest、LearningSpaceOpenApiContractTest、SourceOpenApiContractTest、SpikeRecordMapperIntegrationTest）；不扩大 @MapperScan、不接 aistudy_spike
+
+### RUNTIME EVIDENCE MISSING
+
+- 全部（AI 不运行 Maven）
+
+### NEXT
+
+PHASE D — Shared Contract Preparation（不手改 generated）；PHASE E — Static Review + Closeout
+
+## 2026-09-06 LONG-RUN-002 Final Static Closeout
+
+### WHAT
+
+BUSINESS-003 Knowledge Catalog vertical slice 完整实现：KnowledgeCategory + USER_CURATED KnowledgePoint + DRAFT→PUBLISHED 生命周期 + OpenAPI Contract + 30 integration tests + 8 OpenAPI tests + Flyway V007。
+
+### WHY
+
+第三个正式 vertical slice，延续 owner-boundary 模式；确立知识分类树（parent same-space invariant）与知识点发布生命周期（幂等）。
+
+### SCHEMA
+
+- V006 knowledge_category：id, space_id FK→learning_space, parent_id FK→knowledge_category NULL, name VARCHAR(128) NOT NULL, description VARCHAR(512) NULL, sort_order INT DEFAULT 0, created_at, updated_at；idx (space_id, parent_id, sort_order, id)；FK×2 无 CASCADE
+- V007 knowledge_point：id, space_id FK→learning_space, category_id FK→knowledge_category NULL, title VARCHAR(255) NOT NULL, summary VARCHAR(1000) NULL, content TEXT NOT NULL, origin_type VARCHAR(32) NOT NULL, status VARCHAR(32) NOT NULL, difficulty VARCHAR(32) NULL, created_by_user_id VARCHAR(128) NULL, created_at, updated_at, published_at NULL, deleted_at NULL；idx (space_id, status, category_id) + (space_id, created_at, id)；FK×2 无 CASCADE
+
+### API
+
+- POST/GET /api/v1/spaces/{spaceId}/knowledge-categories、GET .../{categoryId}（201/200/404）
+- POST/GET .../knowledge-points、GET .../{knowledgePointId}、POST .../{knowledgePointId}/publish（201/200/404，publish 无 body）
+
+### LIFECYCLE
+
+- create：originType=USER_CURATED、status=DRAFT、publishedAt/deletedAt=null、createdByUserId=JWT sub（服务器设置）
+- publish：DRAFT→PUBLISHED，publishedAt=now、updatedAt=now；重复 publish 真幂等（NO-OP 返回当前资源 200，不刷新时间戳）（PRE-RUNTIME-REVIEW-FIX 修正）
+- 未实现：ARCHIVED/REJECTED/PROCESSING/NEEDS_REVIEW、SOURCE_DERIVED/AI_DERIVED/ADMIN_CURATED、KnowledgePointSource
+
+### AUTHORIZATION / SPACE INVARIANTS
+
+- 所有读：JOIN learning_space owner_subject；404 anti-probing
+- category parentId 同 space 验证（scoped SQL）→ 404
+- point categoryId 同 space 验证（scoped SQL）→ 404（同 user 跨 owned space 也 404）
+- publish：scoped get + 显式 UPDATE WHERE id+space_id+deleted_at IS NULL（无 unscoped updateById）
+- 所有 point 读：deleted_at IS NULL
+
+### TESTS
+
+- KnowledgeCatalogVerticalSliceIntegrationTest：30（12 category + 18 point；真实 MySQL flyway-it + schema guard + FK-aware cleanup）
+- KnowledgeOpenApiContractTest：8（paths/schemas/无 server-controlled 字段/array/list/$ref/bearerAuth）
+- FlywayMigrationIntegrationTest：V005→V007（fresh=7/upgrade=6/second=0 + 两表 columns/indexes/FKs/charset）
+- 9 个旧 test/it context +@MockitoBean 两个 Knowledge mapper
+
+### STATIC EVIDENCE
+
+- git diff --check clean；55 java 文件 token 级语法+注释 hazard 全扫 ALL SOUND
+- 危险项扫描全过：无 Map response、无 request DTO 含 ownerSubject/originType/status/publishedAt/deletedAt/createdByUserId、无 selectById 业务读、无 csrf.disable()、无全局 /api/v1/** permitAll、无 H2、无 Redis/MQ/ES、无 AI provider、无 fake provenance、无 KnowledgePointSource
+- CSRF：/api/v1/spaces/** 已覆盖 knowledge 嵌套路由，SecurityConfig 零改动（符合 B6）
+
+### RUNTIME EVIDENCE MISSING
+
+- BUSINESS-003 全部 runtime 证据缺失（AI 不运行 Maven）→ AWAITING USER RUNTIME VERIFICATION
+
+### DECISIONS
+
+- difficulty free-form VARCHAR(32)（docs 无枚举），可空
+- publish 幂等语义：已 PUBLISHED 再 publish = NO-OP 返回当前资源 200，不刷新时间戳（PRE-RUNTIME-REVIEW-FIX 修正）
+- sortOrder 客户端可提交（task B1 明确包含 sortOrder）
+- 无 category name unique（MySQL NULL-parent 语义）
+
+### DEFERRED
+
+- KnowledgePointSource / SOURCE_DERIVED / AI_DERIVED / ADMIN_CURATED（依赖 ContentBlock/ingestion + Admin API）
+- KnowledgePoint update/delete/archive、category rename/delete/move
+- 分页、ProblemDetail 错误码、正式 User/Login/Refresh/USER-ADMIN role
+- shared client knowledge wrappers（需 regenerate 后追加，见 current-task）
+- BUSINESS-004 Question（未开始；且 KnowledgePointSource 依赖 ContentBlock，需先定 BUSINESS-004 范围）
+
+### RISKS
+
+- Flyway 11.7.2 vs MySQL 8.4 WARN（既有）
+- V006/V007 FK 依赖 V004/V005 顺序（Flyway 版本序保证）
+- knowledge_category parent FK 自引用 + point category FK 级联清理顺序（tests 已按 FK 序清理）
+- generated api.d.ts 尚未包含 knowledge contract（用户 regenerate 前 client 不能加 wrapper）
+
+### NEXT
+
+1. 用户 focused tests + full clean test（见 current-task 命令）
+2. 用户 Maven PASS 后：启动 server → npm run api:generate → 视结果安排 knowledge wrapper（BUSINESS-003-FIX-CLIENT 或并入下一任务）
+3. Git closeout（用户 commit）
+4. BUSINESS-004 范围待定
+
+## 2026-09-06 BUSINESS-003-PRE-RUNTIME-REVIEW-FIX
+
+### WHAT
+
+外部 reviewer 真实源码审查发现 3 个问题，本轮全部修复（不扩大 BUSINESS-003 范围）。
+
+### FIX 1 — Flyway FK assertion 顺序错误
+
+- 问题：FK 断言假设 `ORDER BY CONSTRAINT_NAME` 返回顺序为 space→parent，但字符串升序实际是 parent→space（fk_knowledge_category_parent < fk_knowledge_category_space；point 同理）
+- 修复：FlywayMigrationIntegrationTest 两处 FK 断言改为按 CONSTRAINT_NAME 构造 Map 后逐个验证 4 个 FK 引用目标（learning_space(id) / knowledge_category(id)），不再依赖 information_schema 返回顺序
+- V006/V007 未修改
+
+### FIX 2 — list Mapper 并未真正 owner-scoped
+
+- 问题：KnowledgeCategoryMapper.selectBySpaceAndOwner 与 KnowledgePointMapper.selectBySpaceOwner 接收 ownerSubject 参数但 SQL 未使用（仅 space_id 过滤；owner 边界依赖 service 层父校验）
+- 修复（SQL 层 defense-in-depth）：
+  - category：`SELECT c.* FROM knowledge_category c JOIN learning_space ls ON ls.id = c.space_id WHERE c.space_id = #{spaceId} AND ls.owner_subject = #{ownerSubject} ORDER BY c.sort_order ASC, c.id ASC`
+  - point：`SELECT kp.* FROM knowledge_point kp JOIN learning_space ls ON ls.id = kp.space_id WHERE kp.space_id = #{spaceId} AND ls.owner_subject = #{ownerSubject} AND kp.deleted_at IS NULL ORDER BY kp.created_at DESC, kp.id DESC`
+- service 层父校验保留（防御纵深）；API / DTO / Controller / DB schema 未变
+
+### FIX 3 — publish 并非真正幂等
+
+- 问题：已 PUBLISHED 的 point 再次 publish 仍执行 UPDATE 并刷新 publishedAt/updatedAt，违反"如果已经 PUBLISHED：保持幂等，返回当前资源 200"语义
+- 修复：KnowledgePointService.publish 增加 guard —— `STATUS_PUBLISHED.equals(existing.getStatus())` 时直接返回 existing（NO-OP，不执行 UPDATE、不刷新时间戳）；仅 DRAFT→PUBLISHED 才写库
+- republishIsIdempotent 测试增强：第二次 publish 断言 publishedAt/updatedAt 与第一次完全一致，且 DB published_at 等于第一次的值
+
+### FILES
+
+- FlywayMigrationIntegrationTest.java（FK Map 断言）
+- KnowledgeCategoryMapper.java / KnowledgePointMapper.java（list SQL owner-scoped）
+- KnowledgePointService.java（publish 真幂等 + Javadoc 修正）
+- KnowledgeCatalogVerticalSliceIntegrationTest.java（republish 断言增强 + extractJsonString helper）
+
+### STATIC EVIDENCE
+
+- 5 个修改文件 token 级语法检查 ALL SOUND
+- list SQL ownerSubject 使用确认；publish guard 确认；FK Map 断言确认；@Test 数量保持 30
+
+### RUNTIME EVIDENCE MISSING
+
+- 全部（AI 不运行 Maven；用户 focused/full 验证待跑）
+
+### NEXT
+
+用户 focused + full clean test；Maven PASS 后 regenerate shared client。
+
+## 2026-09-06 BUSINESS-003-RUNTIME-FIX-01 (attempt #1 BUILD FAILURE 修复)
+
+### WHAT
+
+用户真实运行 focused BUSINESS-003 tests（attempt #1）：
+
+```
+Tests run: 41
+Failures: 1
+Errors: 16
+BUILD FAILURE
+```
+
+根因归并为两个独立 root cause，本轮全部修复（不扩大 BUSINESS-003 范围）。同时确认 PASS 项：KnowledgeOpenApiContractTest 8/8 PASS、FlywayMigrationIntegrationTest 3/3 PASS、V006/V007 migrations 真实运行成功。
+
+### ROOT CAUSE A — category self-FK cleanup
+
+- 真实异常：`DELETE FROM knowledge_category WHERE space_id IN (...)` 失败，`fk_knowledge_category_parent FOREIGN KEY (parent_id) REFERENCES knowledge_category(id)` 拒绝
+- 原因：knowledge_category 是 self-referencing hierarchy。原 cleanup 单条 DELETE 删除全部 category，MySQL 不保证 child-first 顺序，parent 被 child 引用时 FK 拒绝（16 errors 均源于此）
+- 修复（仅 test）：新增 `deleteKnowledgeCategoriesBottomUp()` —— do-while 循环反复删除无 child 引用的叶子行（`DELETE c FROM knowledge_category c LEFT JOIN knowledge_category child ON child.parent_id = c.id WHERE c.space_id IN (测试 owner 的 spaces) AND child.id IS NULL`）直到 deleted == 0
+- LEFT JOIN 不限制 child.space_id：异常数据中跨 space child 引用是真实 FK，cleanup 不假装不存在
+- 残留检查：删除结束后 `COUNT(*)` 测试 owner 的 category 残留 > 0 → throw IllegalStateException，拒绝继续删除 learning_space（不静默）
+- cleanup 最终顺序保持：knowledge_point → knowledge_category（bottom-up）→ source → learning_space
+- 未使用：SET FOREIGN_KEY_CHECKS=0 / DROP FK / CASCADE / TRUNCATE / Flyway.clean()；V006/V007 未修改
+
+### ROOT CAUSE B — DATETIME(6) precision mismatch
+
+- 真实 failure：`expected: 2026-09-06T01:16:07.6338487, actual: 2026-09-06T01:16:07.633849`
+- 原因：MySQL DATETIME(6) 只存 microsecond；第一次 publish response 用内存对象 `LocalDateTime.now()`（可能含 nanosecond .6338487），写库 round-trip 后变 .633849；第二次 publish 返回 DB 加载的 entity（仅 microsecond）→ equality 失败。**不是**第二次 publish 执行了 UPDATE
+- 修复（production）：`KnowledgePointService.publish` 首次生成时间改为 `LocalDateTime.now().truncatedTo(ChronoUnit.MICROS)`，同一个 now 用于 status/publishedAt/updatedAt/mapper 参数/首次 response —— response、UPDATE 参数、DB round-trip 三处完全一致
+- 未 round 到 millisecond、未改 DATETIME(6)、未让 test 忽略 timestamp、未用 tolerance、第二次 publish 仍 zero-UPDATE
+
+### FIX 保留语义（未改变）
+
+- existing == null → 404
+- existing.status == PUBLISHED → 直接 return existing（ZERO UPDATE，published_at/updated_at 不变）
+- 仅 DRAFT → PUBLISHED 执行第一次 UPDATE
+
+### TESTS
+
+- `republishIsIdempotent` 强化：第一次 publish 后断言 response publishedAt/updatedAt 与 DB 值 exact match（证明 microsecond 归一化）；第二次 publish 后断言 response 双时间戳与第一次完全相等（已有）+ DB 双时间戳 byte-identical（dbPublishedAt1==dbPublishedAt2、dbUpdatedAt1==dbUpdatedAt2，新增）；@Test 数量保持 30
+
+### FILES
+
+- 修改：KnowledgeCatalogVerticalSliceIntegrationTest.java（bottom-up helper + 残留检查 + republish 强化）
+- 修改：KnowledgePointService.java（ChronoUnit.MICROS 归一化 + Javadoc）
+- 修改：docs/current-task.md、docs/development-log.md
+- 未修改：V006/V007、schema、Controller、DTO、KnowledgeOpenApiContractTest、Flyway 断言、SecurityConfig、generated api.d.ts、packages/api-client、owner-scoped list SQL、PRE-RUNTIME-REVIEW-FIX 三项
+
+### STATIC EVIDENCE
+
+- @Test 计数保持 30（31 处 @Test 含 1 个 @TestInstance）
+- 无 FOREIGN_KEY_CHECKS / TRUNCATE / CASCADE / DROP FK / Flyway.clean() 引入
+- token 级注释 hazard 扫描无 */*、/*/ 模式
+- git diff --check clean
+
+### RUNTIME EVIDENCE
+
+- attempt #1（用户真实）：41/1/16 BUILD FAILURE（如上）
+- attempt #2：**MISSING** —— 等用户重跑 focused + full clean test
+
+### NEXT
+
+用户重跑 focused + full clean test；PASS 后 regenerate shared client（BUSINESS-003-FIX-CLIENT 或并入下一任务）。状态保持 AWAITING USER RUNTIME RE-VERIFICATION，不标 COMPLETE。
+
+## 2026-09-06 BUSINESS-003-SHARED-CLIENT-CLOSEOUT
+
+### WHAT
+
+用户完成真实 runtime verification（attempt #2），shared client knowledge wrapper 补齐。
+
+### RUNTIME EVIDENCE（用户真实运行）
+
+- Maven full clean test：**Tests run: 100, Failures: 0, Errors: 0, Skipped: 0, BUILD SUCCESS**（RUNTIME-FIX-01 两个 root cause 修复确认）
+- `npm run api:generate`：PASS（openapi-typescript 7.13.0）→ `src/generated/api.d.ts` + `openapi.json` 由 live `/v3/api-docs` 重新生成，已包含 7 条 knowledge paths + 4 个 knowledge schemas
+- `npm run typecheck`：PASS（knowledge wrapper 加入前的基线）
+
+### WRAPPER（本轮实现）
+
+- `packages/api-client/src/client.ts` 新增 7 个薄封装（与 LearningSpace/Source 同风格）：
+  - createKnowledgeCategory(spaceId, body) / listKnowledgeCategories(spaceId) / getKnowledgeCategory(spaceId, categoryId)
+  - createKnowledgePoint(spaceId, body) / listKnowledgePoints(spaceId) / getKnowledgePoint(spaceId, knowledgePointId)
+  - publishKnowledgePoint(spaceId, knowledgePointId)
+- request 类型别名 `CreateKnowledgeCategoryRequest` / `CreateKnowledgePointRequest` 从 `components['schemas'][...]` 提取，未手写 DTO
+- 全部 path literal 来自 generated paths（openapi-fetch 类型系统内），无 any / 无 @ts-ignore / 无 unknown as / 无手写假 route
+- TokenProvider / bearer injection 机制未动（无 localStorage/cookie/safeStorage/JWT model 讨论）
+- `src/index.ts` 保持现有导出模式不变（createApiClient / ApiClient / TokenProvider；request aliases 为 client.ts 内部实现细节，与 LearningSpace/Source 一致不导出）
+
+### FILES
+
+- 修改：packages/api-client/src/client.ts（+7 wrapper，+2 类型别名）
+- 用户 regenerate 产物（本轮未编辑）：src/generated/api.d.ts、src/generated/openapi.json
+- 修改：docs/current-task.md、docs/development-log.md、docs/development-plan.md
+- 未修改：任何 backend 业务代码、migration、SecurityConfig、KnowledgeOpenApiContractTest、Flyway 断言
+
+### STATIC EVIDENCE
+
+- client.ts / index.ts：无 `as any` / `: any` / `<any>` / `@ts-ignore` / `@ts-nocheck` / `unknown as`
+- 无手写 interface / type 对象定义（request 类型全部 `components['schemas'][...]`）
+- 13 个 client.GET/POST 调用全部 path literal（12 单行 + publish 跨行），knowledge paths 与 generated 完全对应
+- generated 文件为本轮前用户 api:generate 产物（mtime 01:25），无人工编辑
+- git diff --check clean
+
+### DECISIONS
+
+- wrapper 只补知识轮次缺失的 knowledge API；不重构 client、不引入新架构
+- 响应类型不手写别名：openapi-fetch 从 paths/operations 推导，与现有 wrapper 一致
+
+### DEFERRED / 剩余
+
+- 用户最终 `npm run typecheck`（wrapper 加入后）
+- 用户 Git closeout（commit docs×3、server knowledge 包、V006/V007、client.ts、generated 刷新件、旧 test 兼容）
+- BUSINESS-004 范围待定（不擅自开始）
+
+### NEXT
+
+用户命令：`cd D:\AIProject\packages\api-client` → `npm run typecheck` → Git closeout。BUSINESS-003 状态：RUNTIME VERIFIED / SHARED CLIENT WRAPPER IMPLEMENTED / AWAITING FINAL USER TYPECHECK + GIT CLOSEOUT（不标 COMPLETE）。
+
+## 2026-09-06 BUSINESS-003 Final Runtime Closeout
+
+### WHAT
+
+BUSINESS-003 Knowledge Catalog 全部 runtime evidence 齐备（用户真实运行），正式收口。
+
+### RUNTIME EVIDENCE（全部用户真实运行）
+
+- focused runtime 曾发现并修复（RUNTIME-FIX-01）：
+  - knowledge_category self-FK cleanup（bottom-up leaf-delete helper + 残留检查）
+  - DATETIME(6) / LocalDateTime precision mismatch（ChronoUnit.MICROS 归一化）
+- Java full clean test：**Tests run: 100, Failures: 0, Errors: 0, Skipped: 0, BUILD SUCCESS**
+- OpenAPI generation：`npm run api:generate` PASS
+- generated api.d.ts 由 live `/v3/api-docs` 刷新（openapi-typescript 7.13.0），含 knowledge paths/schemas
+- shared Knowledge client wrapper 已实现（client.ts 7 方法，类型来自 generated）
+- final `npm run typecheck`（wrapper 加入后）：**PASS，无报错**
+
+### 结论
+
+BUSINESS-003 = **COMPLETE**
+
+```text
+SPIKE-001~005                    COMPLETE
+BUSINESS-001 LearningSpace       COMPLETE (user runtime verified)
+BUSINESS-002 Source              COMPLETE (user runtime verified)
+Shared OpenAPI TS Client         COMPLETE (user runtime verified)
+BUSINESS-003 Knowledge Catalog   COMPLETE (user runtime verified)
+BUSINESS-004 Question            NOT STARTED
+```
+
+### NEXT
+
+用户 Git closeout（git add / commit / push）。BUSINESS-004 范围待定，不擅自开始。

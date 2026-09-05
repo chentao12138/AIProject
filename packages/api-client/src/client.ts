@@ -32,6 +32,12 @@ type CreateLearningSpaceRequest =
 type CreateSourceRequest =
   components['schemas']['CreateSourceRequest'];
 
+type CreateKnowledgeCategoryRequest =
+  components['schemas']['CreateKnowledgeCategoryRequest'];
+
+type CreateKnowledgePointRequest =
+  components['schemas']['CreateKnowledgePointRequest'];
+
 /**
  * Token provider abstraction. The shared client NEVER decides where
  * the access token lives (no localStorage, no cookie strategy):
@@ -113,6 +119,73 @@ export function createApiClient(baseUrl: string, tokenProvider: TokenProvider) {
         params: { path: { spaceId, sourceId } },
         headers: await bearerHeaders(tokenProvider),
       });
+    },
+
+    /** POST .../knowledge-categories — create a category in MY space */
+    async createKnowledgeCategory(
+      spaceId: number,
+      body: CreateKnowledgeCategoryRequest
+    ) {
+      return client.POST('/api/v1/spaces/{spaceId}/knowledge-categories', {
+        params: { path: { spaceId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET .../knowledge-categories — list categories of MY space (sort_order ASC) */
+    async listKnowledgeCategories(spaceId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/knowledge-categories', {
+        params: { path: { spaceId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET .../knowledge-categories/{categoryId} — one category */
+    async getKnowledgeCategory(spaceId: number, categoryId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/knowledge-categories/{categoryId}', {
+        params: { path: { spaceId, categoryId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** POST .../knowledge-points — create a USER_CURATED DRAFT point */
+    async createKnowledgePoint(
+      spaceId: number,
+      body: CreateKnowledgePointRequest
+    ) {
+      return client.POST('/api/v1/spaces/{spaceId}/knowledge-points', {
+        params: { path: { spaceId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET .../knowledge-points — list non-deleted points of MY space (newest first) */
+    async listKnowledgePoints(spaceId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/knowledge-points', {
+        params: { path: { spaceId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET .../knowledge-points/{knowledgePointId} — one point */
+    async getKnowledgePoint(spaceId: number, knowledgePointId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}', {
+        params: { path: { spaceId, knowledgePointId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** POST .../knowledge-points/{knowledgePointId}/publish — DRAFT → PUBLISHED (idempotent) */
+    async publishKnowledgePoint(spaceId: number, knowledgePointId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/publish',
+        {
+          params: { path: { spaceId, knowledgePointId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
     },
   };
 }

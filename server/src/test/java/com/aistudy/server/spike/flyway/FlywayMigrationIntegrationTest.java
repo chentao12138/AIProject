@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -20,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * SPIKE-003 STEP-03 + SPIKE-004 MICRO-07B-A + BUSINESS-001 + BUSINESS-002 —
- * Self-contained, repeatable Flyway integration test.
+ * SPIKE-003 STEP-03 + SPIKE-004 MICRO-07B-A + BUSINESS-001 + BUSINESS-002
+ * + BUSINESS-003 — Self-contained, repeatable Flyway integration test.
  *
  * The test drives Flyway explicitly through its Java API so that every
  * migration state is constructed inside the test itself:
@@ -29,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   2. target V001 -> migrate()
  *   3. seed "V001升级前保留数据"
  *   4. record V001 checksum from flyway_schema_history (dynamic, not hardcoded)
- *   5. target latest -> migrate() -> V002 + V003 + V004 + V005 applied
+ *   5. target latest -> migrate() -> V002..V007 applied
  *   6. verify V001 checksum unchanged
  *   7. verify old data preserved
  *   8. verify both SPIKE tables exist (flyway_spike_record AND
@@ -38,17 +39,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *      space_id / status / created_at all present, plus the
  *      uk_spike_space_membership_user_space unique index on
  *      (user_subject, space_id)
- *  10. verify production learning_space table (V004, BUSINESS-001):
- *      id / name / description / owner_subject / status / created_at /
- *      updated_at columns plus the idx_learning_space_owner_subject
- *      owner index
- *  11. verify production source table (V005, BUSINESS-002):
- *      id / space_id / title / source_type / status /
- *      created_by_user_id / created_at / updated_at columns, the
- *      idx_source_space_created index, and the fk_source_space
- *      foreign key to learning_space(id)
- *  12. migrate again -> migrationsExecuted == 0
- *  13. history still V001 + V002 + V003 + V004 + V005 only
+ *  10. verify production learning_space table (V004, BUSINESS-001)
+ *  11. verify production source table (V005, BUSINESS-002)
+ *  12. verify production knowledge_category table (V006, BUSINESS-003):
+ *      columns, idx_knowledge_category_space_parent_sort, FKs
+ *  13. verify production knowledge_point table (V007, BUSINESS-003):
+ *      columns, indexes, FKs, charset
+ *  14. migrate again -> migrationsExecuted == 0
+ *  15. history still V001..V007 only
  *
  * Schema isolation (CRITICAL):
  *   - The test MUST run against aistudy_flyway_test ONLY.
@@ -112,17 +110,17 @@ class FlywayMigrationIntegrationTest {
         assertEquals(0, histCount,
                 "flyway_schema_history must not exist after clean()");
 
-        // (1) Migrate to latest. V005 is now the latest version.
+        // (1) Migrate to latest. V007 is now the latest version.
         MigrateResult result = flyway().migrate();
         int applied = result.migrationsExecuted;
-        assertEquals(5, applied,
-                "Fresh migration must apply V001..V005 (actual: " + applied + ")");
+        assertEquals(7, applied,
+                "Fresh migration must apply V001..V007 (actual: " + applied + ")");
 
-        // (2) Verify flyway_schema_history has 5 rows: V001..V005.
+        // (2) Verify flyway_schema_history has 7 rows: V001..V007.
         Integer finalCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history",
                 Integer.class);
-        assertEquals(5, finalCount);
+        assertEquals(7, finalCount);
 
         List<Map<String, Object>> history = jdbc.queryForList(
                 "SELECT installed_rank, version, description, script, checksum, success FROM flyway_schema_history ORDER BY installed_rank");
@@ -131,16 +129,22 @@ class FlywayMigrationIntegrationTest {
         assertEquals("003", String.valueOf(history.get(2).get("version")));
         assertEquals("004", String.valueOf(history.get(3).get("version")));
         assertEquals("005", String.valueOf(history.get(4).get("version")));
+        assertEquals("006", String.valueOf(history.get(5).get("version")));
+        assertEquals("007", String.valueOf(history.get(6).get("version")));
         assertEquals(1, history.get(0).get("installed_rank"));
         assertEquals(2, history.get(1).get("installed_rank"));
         assertEquals(3, history.get(2).get("installed_rank"));
         assertEquals(4, history.get(3).get("installed_rank"));
         assertEquals(5, history.get(4).get("installed_rank"));
+        assertEquals(6, history.get(5).get("installed_rank"));
+        assertEquals(7, history.get(6).get("installed_rank"));
         assertEquals(Boolean.TRUE, history.get(0).get("success"));
         assertEquals(Boolean.TRUE, history.get(1).get("success"));
         assertEquals(Boolean.TRUE, history.get(2).get("success"));
         assertEquals(Boolean.TRUE, history.get(3).get("success"));
         assertEquals(Boolean.TRUE, history.get(4).get("success"));
+        assertEquals(Boolean.TRUE, history.get(5).get("success"));
+        assertEquals(Boolean.TRUE, history.get(6).get("success"));
 
         // (3) Verify SPIKE-only flyway_spike_record table exists with both
         // V001 and V002 columns (unchanged from SPIKE-003 assertions).
@@ -322,6 +326,177 @@ class FlywayMigrationIntegrationTest {
                         + "WHERE T.TABLE_SCHEMA = DATABASE() AND T.TABLE_NAME = 'source'");
         assertEquals("utf8mb4", srcCharset.get("CHARACTER_SET_NAME"));
         assertEquals("utf8mb4_unicode_ci", srcCharset.get("COLLATION_NAME"));
+
+        // (14) Verify the V006 knowledge_category table (BUSINESS-003).
+        Integer categoryTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_category'",
+                Integer.class);
+        assertEquals(1, categoryTableCount,
+                "V006 must create the knowledge_category table");
+
+        List<String> expectedCategoryColumns = new ArrayList<>();
+        expectedCategoryColumns.add("id");
+        expectedCategoryColumns.add("space_id");
+        expectedCategoryColumns.add("parent_id");
+        expectedCategoryColumns.add("name");
+        expectedCategoryColumns.add("description");
+        expectedCategoryColumns.add("sort_order");
+        expectedCategoryColumns.add("created_at");
+        expectedCategoryColumns.add("updated_at");
+        List<String> actualCategoryColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_category' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        assertEquals(expectedCategoryColumns, actualCategoryColumns,
+                "knowledge_category must have exactly the expected columns in order");
+
+        // (15) Verify knowledge_category index (space_id, parent_id, sort_order, id).
+        List<String> categoryIndexColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_category' "
+                        + "AND INDEX_NAME = 'idx_knowledge_category_space_parent_sort' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        List<String> expectedCategoryIndex = new ArrayList<>();
+        expectedCategoryIndex.add("space_id");
+        expectedCategoryIndex.add("parent_id");
+        expectedCategoryIndex.add("sort_order");
+        expectedCategoryIndex.add("id");
+        assertEquals(expectedCategoryIndex, categoryIndexColumns,
+                "idx_knowledge_category_space_parent_sort must cover (space_id, parent_id, sort_order, id)");
+
+        // (16) Verify knowledge_category FKs: space_id -> learning_space, parent_id -> knowledge_category.
+        // Build a Map keyed by CONSTRAINT_NAME so the assertions do
+        // NOT depend on information_schema return order.
+        List<Map<String, Object>> categoryFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME "
+                        + "FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'knowledge_category' "
+                        + "  AND CONSTRAINT_NAME IN ('fk_knowledge_category_space', 'fk_knowledge_category_parent')");
+        assertEquals(2, categoryFkRows.size(),
+                "knowledge_category must have exactly 2 FKs (actual: " + categoryFkRows.size() + ")");
+
+        Map<String, Map<String, Object>> categoryFkByName = new HashMap<>();
+        for (Map<String, Object> row : categoryFkRows) {
+            categoryFkByName.put(String.valueOf(row.get("CONSTRAINT_NAME")), row);
+        }
+        assertEquals("learning_space",
+                categoryFkByName.get("fk_knowledge_category_space").get("REFERENCED_TABLE_NAME"),
+                "fk_knowledge_category_space must reference learning_space");
+        assertEquals("id",
+                categoryFkByName.get("fk_knowledge_category_space").get("REFERENCED_COLUMN_NAME"),
+                "fk_knowledge_category_space must reference learning_space(id)");
+        assertEquals("knowledge_category",
+                categoryFkByName.get("fk_knowledge_category_parent").get("REFERENCED_TABLE_NAME"),
+                "fk_knowledge_category_parent must reference knowledge_category");
+        assertEquals("id",
+                categoryFkByName.get("fk_knowledge_category_parent").get("REFERENCED_COLUMN_NAME"),
+                "fk_knowledge_category_parent must reference knowledge_category(id)");
+
+        // (17) Verify the V007 knowledge_point table (BUSINESS-003).
+        Integer pointTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point'",
+                Integer.class);
+        assertEquals(1, pointTableCount,
+                "V007 must create the knowledge_point table");
+
+        List<String> expectedPointColumns = new ArrayList<>();
+        expectedPointColumns.add("id");
+        expectedPointColumns.add("space_id");
+        expectedPointColumns.add("category_id");
+        expectedPointColumns.add("title");
+        expectedPointColumns.add("summary");
+        expectedPointColumns.add("content");
+        expectedPointColumns.add("origin_type");
+        expectedPointColumns.add("status");
+        expectedPointColumns.add("difficulty");
+        expectedPointColumns.add("created_by_user_id");
+        expectedPointColumns.add("created_at");
+        expectedPointColumns.add("updated_at");
+        expectedPointColumns.add("published_at");
+        expectedPointColumns.add("deleted_at");
+        List<String> actualPointColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        assertEquals(expectedPointColumns, actualPointColumns,
+                "knowledge_point must have exactly the expected columns in order");
+
+        // (18) Verify knowledge_point indexes.
+        List<String> pointStatusCategoryIndex = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point' "
+                        + "AND INDEX_NAME = 'idx_knowledge_point_space_status_category' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        List<String> expectedStatusCategoryIndex = new ArrayList<>();
+        expectedStatusCategoryIndex.add("space_id");
+        expectedStatusCategoryIndex.add("status");
+        expectedStatusCategoryIndex.add("category_id");
+        assertEquals(expectedStatusCategoryIndex, pointStatusCategoryIndex,
+                "idx_knowledge_point_space_status_category must cover (space_id, status, category_id)");
+
+        List<String> pointCreatedIndex = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point' "
+                        + "AND INDEX_NAME = 'idx_knowledge_point_space_created' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        List<String> expectedCreatedIndex = new ArrayList<>();
+        expectedCreatedIndex.add("space_id");
+        expectedCreatedIndex.add("created_at");
+        expectedCreatedIndex.add("id");
+        assertEquals(expectedCreatedIndex, pointCreatedIndex,
+                "idx_knowledge_point_space_created must cover (space_id, created_at, id)");
+
+        // (19) Verify knowledge_point FKs: space_id -> learning_space, category_id -> knowledge_category.
+        // Build a Map keyed by CONSTRAINT_NAME so the assertions do
+        // NOT depend on information_schema return order.
+        List<Map<String, Object>> pointFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME "
+                        + "FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'knowledge_point' "
+                        + "  AND CONSTRAINT_NAME IN ('fk_knowledge_point_space', 'fk_knowledge_point_category')");
+        assertEquals(2, pointFkRows.size(),
+                "knowledge_point must have exactly 2 FKs (actual: " + pointFkRows.size() + ")");
+
+        Map<String, Map<String, Object>> pointFkByName = new HashMap<>();
+        for (Map<String, Object> row : pointFkRows) {
+            pointFkByName.put(String.valueOf(row.get("CONSTRAINT_NAME")), row);
+        }
+        assertEquals("learning_space",
+                pointFkByName.get("fk_knowledge_point_space").get("REFERENCED_TABLE_NAME"),
+                "fk_knowledge_point_space must reference learning_space");
+        assertEquals("id",
+                pointFkByName.get("fk_knowledge_point_space").get("REFERENCED_COLUMN_NAME"),
+                "fk_knowledge_point_space must reference learning_space(id)");
+        assertEquals("knowledge_category",
+                pointFkByName.get("fk_knowledge_point_category").get("REFERENCED_TABLE_NAME"),
+                "fk_knowledge_point_category must reference knowledge_category");
+        assertEquals("id",
+                pointFkByName.get("fk_knowledge_point_category").get("REFERENCED_COLUMN_NAME"),
+                "fk_knowledge_point_category must reference knowledge_category(id)");
+
+        // (20) Verify knowledge tables charset/collation (utf8mb4 / utf8mb4_unicode_ci).
+        for (String tableName : new String[]{"knowledge_category", "knowledge_point"}) {
+            Map<String, Object> charset = jdbc.queryForMap(
+                    "SELECT CCSA.CHARACTER_SET_NAME, CCSA.COLLATION_NAME "
+                            + "FROM information_schema.TABLES T "
+                            + "JOIN information_schema.COLLATION_CHARACTER_SET_APPLICABILITY CCSA "
+                            + "  ON T.TABLE_COLLATION = CCSA.COLLATION_NAME "
+                            + "WHERE T.TABLE_SCHEMA = DATABASE() AND T.TABLE_NAME = ?",
+                    tableName);
+            assertEquals("utf8mb4", charset.get("CHARACTER_SET_NAME"),
+                    tableName + " charset must be utf8mb4");
+            assertEquals("utf8mb4_unicode_ci", charset.get("COLLATION_NAME"),
+                    tableName + " collation must be utf8mb4_unicode_ci");
+        }
     }
 
     // ==================== TEST B ====================
@@ -374,26 +549,30 @@ class FlywayMigrationIntegrationTest {
         assertNotNull(beforeChecksum,
                 "V001 checksum must be present in flyway_schema_history before upgrade");
 
-        // (7) Migrate to latest. V002, V003, V004, and V005 should all apply.
+        // (7) Migrate to latest. V002..V007 should all apply.
         MigrateResult result2 = flyway().migrate();
         int appliedV2 = result2.migrationsExecuted;
-        assertEquals(4, appliedV2,
-                "target=latest on V001-only db must apply V002, V003, V004, and V005 (actual: " + appliedV2 + ")");
+        assertEquals(6, appliedV2,
+                "target=latest on V001-only db must apply V002..V007 (actual: " + appliedV2 + ")");
 
-        // (8) Verify history has 5 rows: V001..V005.
+        // (8) Verify history has 7 rows: V001..V007.
         List<Map<String, Object>> h2 = jdbc.queryForList(
                 "SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY installed_rank");
-        assertEquals(5, h2.size());
+        assertEquals(7, h2.size());
         assertEquals("001", String.valueOf(h2.get(0).get("version")));
         assertEquals("002", String.valueOf(h2.get(1).get("version")));
         assertEquals("003", String.valueOf(h2.get(2).get("version")));
         assertEquals("004", String.valueOf(h2.get(3).get("version")));
         assertEquals("005", String.valueOf(h2.get(4).get("version")));
+        assertEquals("006", String.valueOf(h2.get(5).get("version")));
+        assertEquals("007", String.valueOf(h2.get(6).get("version")));
         assertEquals(Boolean.TRUE, h2.get(0).get("success"));
         assertEquals(Boolean.TRUE, h2.get(1).get("success"));
         assertEquals(Boolean.TRUE, h2.get(2).get("success"));
         assertEquals(Boolean.TRUE, h2.get(3).get("success"));
         assertEquals(Boolean.TRUE, h2.get(4).get("success"));
+        assertEquals(Boolean.TRUE, h2.get(5).get("success"));
+        assertEquals(Boolean.TRUE, h2.get(6).get("success"));
 
         // (9) V001 checksum UNCHANGED.
         Integer afterChecksum = jdbc.queryForObject(
@@ -432,30 +611,46 @@ class FlywayMigrationIntegrationTest {
         assertEquals(1, sourceAfterUpgrade,
                 "source must exist after upgrade to latest");
 
+        // (11d) knowledge_category now exists (V006 effect, BUSINESS-003).
+        Integer categoryAfterUpgrade = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_category'",
+                Integer.class);
+        assertEquals(1, categoryAfterUpgrade,
+                "knowledge_category must exist after upgrade to latest");
+
+        // (11e) knowledge_point now exists (V007 effect, BUSINESS-003).
+        Integer pointAfterUpgrade = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point'",
+                Integer.class);
+        assertEquals(1, pointAfterUpgrade,
+                "knowledge_point must exist after upgrade to latest");
+
         // (12) Old data still exists with V002's note column NULL.
         Map<String, Object> old = jdbc.queryForMap(
                 "SELECT id, name, note FROM flyway_spike_record WHERE id = ?", preId);
         assertEquals("V001升级前保留数据", old.get("name"));
 
-        // (13) V002 + V003 + V004 + V005 idempotent on second migrate.
+        // (13) V002..V007 idempotent on second migrate.
         MigrateResult result3 = flyway().migrate();
         assertEquals(0, result3.migrationsExecuted,
                 "second migrate on already-latest schema must be a no-op");
 
-        // (14) History still 5 rows.
+        // (14) History still 7 rows.
         Integer finalCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history", Integer.class);
-        assertEquals(5, finalCount);
+        assertEquals(7, finalCount);
     }
 
     // ==================== TEST C ====================
 
     @Test
     void latestDatabaseRequiresNoMigrationOnSecondMigrate() {
-        // (1) Migrate to latest. V005 is the new latest version.
+        // (1) Migrate to latest. V007 is the new latest version.
         MigrateResult first = flyway().migrate();
-        assertEquals(5, first.migrationsExecuted,
-                "first migrate must apply V001..V005 (actual: " + first.migrationsExecuted + ")");
+        assertEquals(7, first.migrationsExecuted,
+                "first migrate must apply V001..V007 (actual: " + first.migrationsExecuted + ")");
 
         // (2) Confirm the SPIKE-only flyway_spike_record table has the
         // V002 note column.
@@ -489,15 +684,31 @@ class FlywayMigrationIntegrationTest {
         assertEquals(1, sourceExists,
                 "source must exist after fresh migrate to latest");
 
+        // (2e) Also confirm the V006 knowledge_category table exists.
+        Integer categoryExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_category'",
+                Integer.class);
+        assertEquals(1, categoryExists,
+                "knowledge_category must exist after fresh migrate to latest");
+
+        // (2f) Also confirm the V007 knowledge_point table exists.
+        Integer pointExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point'",
+                Integer.class);
+        assertEquals(1, pointExists,
+                "knowledge_point must exist after fresh migrate to latest");
+
         // (3) Migrate AGAIN. Must be a no-op.
         MigrateResult second = flyway().migrate();
         assertEquals(0, second.migrationsExecuted,
                 "second migrate must execute 0 migrations (actual: " + second.migrationsExecuted + ")");
 
-        // (4) History still exactly 5 rows.
+        // (4) History still exactly 7 rows.
         Integer historyCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history", Integer.class);
-        assertEquals(5, historyCount);
+        assertEquals(7, historyCount);
 
         // (5) Versions unchanged.
         List<String> versions = jdbc.queryForList(
@@ -508,6 +719,8 @@ class FlywayMigrationIntegrationTest {
         expected.add("003");
         expected.add("004");
         expected.add("005");
+        expected.add("006");
+        expected.add("007");
         assertEquals(expected, versions);
     }
 

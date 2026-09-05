@@ -296,7 +296,18 @@ admin-web/
 - `npm run api:generate` PASS + `npm run typecheck` PASS（用户确认）。
 - 详情见 development-log.md。
 
-**下一任务：BUSINESS-003 KnowledgePoint Vertical Slice — NOT STARTED**（Git closeout 后开始）。
+### BUSINESS-003 Knowledge Catalog Vertical Slice — ✅ COMPLETE（User Runtime Verified）
+
+- KnowledgeCategory（POST/GET 列表/GET 详情）+ USER_CURATED KnowledgePoint（POST/GET 列表/GET 详情/POST publish）。
+- V006 knowledge_category + V007 knowledge_point（FK 链 learning_space → category → point；owner boundary 全 SQL）。
+- DRAFT → PUBLISHED 生命周期（真幂等，NO-OP 不刷新时间戳）；parent/category 同 space invariant；soft-delete 读规则（deleted_at IS NULL）。
+- tests：KnowledgeCatalogVerticalSliceIntegrationTest 30 + KnowledgeOpenApiContractTest 8 + Flyway V007。
+- 真实 runtime：attempt #1 41/1/16 BUILD FAILURE（self-FK cleanup + DATETIME(6) precision 两个 root cause）→ RUNTIME-FIX-01 修复 → attempt #2 **100/0/0/0 BUILD SUCCESS**（用户确认）。
+- Shared contract：`npm run api:generate` PASS（openapi-typescript 7.13.0，generated 含 knowledge paths）+ final `npm run typecheck` PASS（wrapper 后，无报错）。
+- Shared client：knowledge wrapper 7 方法已实现（client.ts，类型来自 generated）。
+- 剩余：用户 Git closeout。详情见 development-log.md。
+
+**BUSINESS-004：NOT STARTED**（next task to be decided after BUSINESS-003 closeout；KnowledgePointSource 依赖 ContentBlock，当前 content ingestion 未实现，不擅自开始）。
 
 ## Phase 4：Vertical Slice A — Source → Knowledge
 
