@@ -103,6 +103,22 @@ import java.security.NoSuchAlgorithmException;
  * A future MICRO will swap the placeholder {@code @PreAuthorize("denyAll()")}
  * on {@link SpikeProtectedController#methodDeniedEndpoint()} for real
  * Space / membership / role authorization rules.
+ *
+ * SPIKE-005 MICRO-01B additionally permits anonymous access to the OpenAPI
+ * contract endpoint. The springdoc auto-configuration exposes
+ * {@code /v3/api-docs} as the JSON contract, but under the previous
+ * {@code anyRequest().authenticated()} rule that endpoint returned 401,
+ * making the contract unreachable for anonymous callers (which is what
+ * a code generator would use). MICRO-01B adds exactly two request
+ * matchers to the filter chain:
+ *   - {@code /v3/api-docs}
+ *   - {@code /v3/api-docs/**}
+ * Both are {@code permitAll()}; every other request still requires
+ * authentication. No other endpoint is touched, no bearer security
+ * scheme is added here, and no OpenAPI bean / title / version is defined
+ * in this class. A later MICRO will decide how the Bearer requirement
+ * is reflected in the contract (via {@code springdoc} {@code
+ * securitySchemes} configuration).
  */
 @EnableMethodSecurity
 @Configuration
@@ -112,6 +128,16 @@ public class SpikeSecurityConfig {
     public SecurityFilterChain spikeSecurityFilterChain(HttpSecurity http) throws Exception {
         http.authorizeHttpRequests(auth -> auth
                         .requestMatchers("/health").permitAll()
+                        // SPIKE-005 MICRO-01B: anonymous access to the
+                        // OpenAPI contract endpoint. springdoc exposes
+                        // /v3/api-docs as the JSON contract; generators
+                        // and anonymous callers need it without auth.
+                        // The wildcard covers nested paths under /v3/api-docs
+                        // so a future /v3/api-docs/swagger-config or
+                        // similar endpoint is also anonymous (if springdoc
+                        // ever exposes one under this prefix). No other
+                        // endpoint is added here.
+                        .requestMatchers("/v3/api-docs", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new Anonymous401EntryPoint()));

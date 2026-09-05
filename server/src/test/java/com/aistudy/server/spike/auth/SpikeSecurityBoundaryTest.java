@@ -29,62 +29,75 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * SPIKE-004 MICRO-02 + MICRO-05B-A + MICRO-05C-A + MICRO-05D-A + MICRO-06A
- * + MICRO-06B-A + MICRO-06C-A — API authentication boundary test.
+ * + MICRO-06B-A + MICRO-06C-A + SPIKE-005 MICRO-01B — API authentication
+ * boundary test.
  *
- * Nine strict assertions:
+ * Ten strict assertions:
  *   1. GET /health                          → HTTP 200 + status=UP (anonymous).
- *   2. GET /api/v1/spike/protected          → HTTP 401 (anonymous, no auth).
- *   3. GET /api/v1/spike/protected
- *        with Authorization: Bearer &lt;valid HS256 JWT&gt;
- *                                     → HTTP 200 + status=AUTHENTICATED.
+ *   2. GET /v3/api-docs                     → HTTP 200 + $.openapi + $.paths
+ *                                                 present (anonymous,
+ *                                                 SPIKE-005 MICRO-01B).
+ *   3. GET /api/v1/spike/protected          → HTTP 401 (anonymous, no auth).
  *   4. GET /api/v1/spike/protected
- *        with Authorization: Bearer &lt;valid HS256 JWT with a
+ *        with Authorization: Bearer *** HS256 JWT&gt;
+ *                                     → HTTP 200 + status=AUTHENTICATED.
+ *   5. GET /api/v1/spike/protected
+ *        with Authorization: Bearer *** HS256 JWT with a
  *        tampered signature segment&gt;
  *                                     → HTTP 401.
- *   5. GET /api/v1/spike/protected
- *        with Authorization: Bearer &lt;valid HS256 JWT with an
+ *   6. GET /api/v1/spike/protected
+ *        with Authorization: Bearer *** HS256 JWT with an
  *        expired exp claim&gt;
  *                                     → HTTP 401.
- *   6. GET /api/v1/spike/method-denied
- *        with Authorization: Bearer &lt;valid HS256 JWT&gt;
+ *   7. GET /api/v1/spike/method-denied
+ *        with Authorization: Bearer *** HS256 JWT&gt;
  *                                     → HTTP 403.
- *   7. GET /api/v1/spike/spaces/space-A
- *        with Authorization: Bearer &lt;valid HS256 JWT for spike-user-1&gt;
+ *   8. GET /api/v1/spike/spaces/space-A
+ *        with Authorization: Bearer *** HS256 JWT for spike-user-1&gt;
  *                                     → HTTP 200 + status=AUTHORIZED.
- *   8. GET /api/v1/spike/spaces/space-B
- *        with Authorization: Bearer &lt;the same valid HS256 JWT for spike-user-1&gt;
+ *   9. GET /api/v1/spike/spaces/space-B
+ *        with Authorization: Bearer *** same valid HS256 JWT for spike-user-1&gt;
  *                                     → HTTP 403.
- *   9. GET /api/v1/spike/spaces/space-A
- *        with Authorization: Bearer &lt;valid HS256 JWT for spike-user-2&gt;
+ *  10. GET /api/v1/spike/spaces/space-A
+ *        with Authorization: Bearer *** HS256 JWT for spike-user-2&gt;
  *                                     → HTTP 403.
  *
- * Assertions 1 and 2 are MICRO-02: the auth boundary must be deterministic
+ * Assertions 1 and 3 are MICRO-02: the auth boundary must be deterministic
  * before we layer real authentication on top.
  *
- * Assertion 3 is MICRO-05B-A: after the Resource Server is wired in, a
+ * Assertion 2 is SPIKE-005 MICRO-01B: the OpenAPI contract endpoint exposed
+ * by springdoc ({@code /v3/api-docs}) must be reachable by an anonymous
+ * caller and must return a valid OpenAPI JSON document (at minimum a
+ * {@code openapi} version string and a {@code paths} map). This is the gate
+ * for a later MICRO that will generate a TypeScript client from that JSON.
+ * Only the JSON shape is asserted here — the full contract content (operation
+ * ids, schemas, securitySchemes, bearer auth) is left to a later MICRO that
+ * adds those annotations and configuration.
+ *
+ * Assertion 4 is MICRO-05B-A: after the Resource Server is wired in, a
  * valid Bearer JWT must be accepted as an {@code authenticated()} caller
  * without any User / Role / session / custom filter logic.
  *
- * Assertion 4 is MICRO-05C-A: after the Resource Server is wired in, a
+ * Assertion 5 is MICRO-05C-A: after the Resource Server is wired in, a
  * Bearer JWT whose signature segment has been modified (header and payload
  * unchanged) must be rejected with exactly 401. This isolates the failure
  * root cause to signature verification — not malformed payload, not claim
  * parsing, not issuer / subject / exp failure.
  *
- * Assertion 5 is MICRO-05D-A: after the Resource Server is wired in, a
+ * Assertion 6 is MICRO-05D-A: after the Resource Server is wired in, a
  * Bearer JWT whose signature is cryptographically valid but whose {@code exp}
  * claim is in the past must be rejected with exactly 401. This isolates
  * the failure root cause to expiration — not signature, not structure, not
  * issuer / subject.
  *
- * Assertion 6 is MICRO-06A: a request carrying a valid HS256 JWT to a
+ * Assertion 7 is MICRO-06A: a request carrying a valid HS256 JWT to a
  * {@code @PreAuthorize("denyAll()")} endpoint must be rejected with exactly
  * 403, not 401. The 401 vs 403 distinction proves that:
  *   - the JWT authentication succeeded (otherwise it would be 401), AND
  *   - the method-level authorization denied the request.
  * This is the gate that a future Space / membership MICRO will build on.
  *
- * Assertions 7 and 8 are MICRO-06B-A: after a real (but hard-coded)
+ * Assertions 8 and 9 are MICRO-06B-A: after a real (but hard-coded)
  * server-side Space Access decision function is wired into
  * {@code @PreAuthorize}, the same authenticated caller gets 200 for one
  * space and 403 for another. The 200/403 pair — driven by the same valid
@@ -92,28 +105,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * request-supplied {@code spaceId}, not by JWT claims, and that the same
  * successful authentication can produce either an allow or a deny.
  *
- * Assertion 9 is MICRO-06C-A: a DIFFERENT authenticated user (spike-user-2)
+ * Assertion 10 is MICRO-06C-A: a DIFFERENT authenticated user (spike-user-2)
  * requesting the SAME space-A that spike-user-1 can access must be rejected
- * with 403. Together with tests 7 and 8, this proves that the Space
+ * with 403. Together with tests 8 and 9, this proves that the Space
  * Authorization decision depends on BOTH the authentication identity AND the
  * request-supplied spaceId — not on the spaceId alone. That is the gate
  * for a future MICRO that will back {@link SpikeSpaceAccess} with a real
  * User ↔ LearningSpace membership table.
  *
- * The protected-endpoint 401 assertions (tests 2, 4, and 5) are intentionally
+ * The protected-endpoint 401 assertions (tests 3, 5, and 6) are intentionally
  * not "not 200": they are exactly 401 Unauthorized. The method-denied 403
- * assertion (test 6), the unauthorized-space 403 assertion (test 8), and the
- * wrong-user-authorized-space 403 assertion (test 9) are intentionally not
+ * assertion (test 7), the unauthorized-space 403 assertion (test 9), and the
+ * wrong-user-authorized-space 403 assertion (test 10) are intentionally not
  * "not 200": they are exactly 403 Forbidden. All are contracts, not
  * approximations.
  *
- * The valid-Bearer assertion (test 3) uses a token freshly issued by
+ * The valid-Bearer assertion (test 4) uses a token freshly issued by
  * {@link SpikeJwtTokenService} through the SAME Spring context, so the
  * Resource Server has to decode and verify it via the shared
  * {@link org.springframework.security.oauth2.jwt.JwtDecoder} bean. We do
  * NOT mock a JwtAuthenticationToken or any Authentication object.
  *
- * The expired-Bearer assertion (test 5) uses the shared {@link JwtEncoder}
+ * The expired-Bearer assertion (test 6) uses the shared {@link JwtEncoder}
  * bean from the same Spring context to mint a token whose HMAC-SHA256
  * signature is cryptographically correct but whose {@code exp} is set to a
  * time strictly in the past. That way the decoder cannot reject the token
@@ -208,6 +221,36 @@ class SpikeSecurityBoundaryTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith("application/json"))
                 .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    /**
+     * SPIKE-005 MICRO-01B: an anonymous GET to {@code /v3/api-docs} — the
+     * default springdoc JSON contract endpoint — must return HTTP 200 and
+     * must contain at least the {@code openapi} version string and the
+     * {@code paths} map.
+     *
+     * This is the smallest meaningful assertion that "the OpenAPI contract
+     * endpoint is reachable anonymously and speaks valid OpenAPI". We do
+     * NOT hard-code the full contract body: any future change that adds
+     * more endpoints, schemas, or securitySchemes (a later MICRO) will
+     * continue to pass this test as long as the JSON remains a valid
+     * OpenAPI document at minimum. Asserting on the concrete set of paths
+     * today would force this MICRO to own the endpoint enumeration, which
+     * it does not.
+     *
+     * The assertion also proves that MICRO-01B's filter-chain change
+     * actually took effect: without the
+     * {@code requestMatchers("/v3/api-docs", "/v3/api-docs/**").permitAll()}
+     * rule, the current {@code anyRequest().authenticated()} would reject
+     * this anonymous call with 401 before springdoc's handler ran.
+     */
+    @Test
+    void anonymousCanAccessOpenApiDocs() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("application/json"))
+                .andExpect(jsonPath("$.openapi").isNotEmpty())
+                .andExpect(jsonPath("$.paths").isMap());
     }
 
     @Test

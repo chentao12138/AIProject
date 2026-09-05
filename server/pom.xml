@@ -100,6 +100,32 @@
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
+        <!-- springdoc-openapi (SPIKE-005 MICRO-01A gate) -->
+        <!-- springdoc 2.8.x is the line compatible with Spring Boot 3.5.x per
+             the springdoc compatibility matrix. Version is NOT managed by
+             the Spring Boot BOM (springdoc is a third-party project), so the
+             version is declared explicitly here and must not be dropped.
+
+             We use springdoc-openapi-starter-webmvc-api (not -ui) because this
+             SPIKE only requires the /v3/api-docs JSON endpoint; Swagger UI is
+             not needed yet and would add an extra public surface.
+
+             This MICRO only introduces the library. Nothing here configures
+             an OpenAPI bean, a securityScheme, or any @Operation / @ApiResponse
+             / @Schema annotations. Later MICROs will add those only if the
+             SPIKE requires them.
+
+             The starter also registers springdoc auto-configuration, which
+             means Spring Security will still return 401 for /v3/api-docs under
+             the current SpikeSecurityConfig (anyRequest authenticated). That
+             is expected and is deferred to a later MICRO that decides how
+             /v3/api-docs should be exposed. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
+            <version>2.8.16</version>
+        </dependency>
+
         <!-- Flyway (version managed by Spring Boot; SPIKE-003 gate) -->
         <!-- Flyway 10.x splits DB-specific support into separate modules; MySQL
              requires flyway-mysql in addition to flyway-core. -->
