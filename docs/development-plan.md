@@ -1,8 +1,8 @@
 # 开发计划
 
-> 状态：**TECHNICAL SPIKES IN PROGRESS**
+> 状态：**PLATFORM SKELETON STARTING**
 >
-> SPIKE-001 / SPIKE-002 / SPIKE-003 / SPIKE-004 已完成。下一项为 SPIKE-005。后续按原顺序执行。
+> SPIKE-001 ~ SPIKE-005 已完成当前所需技术验证。SPIKE-006 ~ SPIKE-014 不再作为业务开发前置门槛，改为在相关能力真正进入实现时按需验证。下一阶段开始正式 Platform Skeleton，并从 LearningSpace vertical slice 开始。
 
 ## Phase 0：Baseline Final Review
 
@@ -140,12 +140,30 @@
 
 ### SPIKE-005 OpenAPI → TypeScript Client
 
-验证：
+✅ VALIDATION COMPLETE — Scope Adjusted (2026-09-05)
 
-- `/v3/api-docs`。
-- Desktop/Admin 消费同一生成 client/types。
+**已验证：**
 
-### SPIKE-006 Electron Security + File Upload
+- `springdoc-openapi` 接入并与当前 Spring Boot 3.5.0 / Java 21 工程编译、运行兼容。
+- `GET /v3/api-docs` 真实返回 HTTP `200`、`Content-Type: application/json`、OpenAPI `3.1.0`。
+- Contract 包含现有 `/health` 与 `/api/v1/spike/**` paths。
+- OpenAPI `bearerAuth`：`type=http`、`scheme=bearer`、`bearerFormat=JWT`；受保护 endpoint 声明 bearerAuth，`/health` 不声明 bearerAuth。
+- SPIKE response 已从通用 `Map` 改为 typed Java record；OpenAPI 生成明确 schema：`SpikeHealthResponse`、`SpikeStatusResponse`、`SpikeSpaceAuthorizationResponse`。
+- response media type 明确为 `application/json`。
+- Focused regression：17/17 PASS。
+- Full `mvnw.cmd clean test`：**31/31 PASS**，Failures=0，Errors=0，Skipped=0。
+
+**DEFERRED：**
+
+- TypeScript client/types 实际生成。
+- Desktop / Admin 共享 `api-client` package。
+- generator 选型与 generated-code check-in 策略。
+
+Scope 调整原因：不再继续使用 `Spike*` endpoint 为前端生成链路增加额外前置验证；上述 TypeScript 生成与共享 package 将在第一个真实业务 API（LearningSpace）出现后直接基于真实 Contract 落地。此调整必须保留为明确 Deferred，不能视为已验证完成。
+
+**后续 Spike 策略调整：** SPIKE-006 ~ SPIKE-014 保留为技术检查清单，但不再串行阻塞 Platform Skeleton / 核心业务启动；仅在对应能力进入真实实现、且存在明确技术不确定性时执行。
+
+### SPIKE-006 Electron Security + File Upload — DEFERRED / JUST-IN-TIME
 
 验证：
 
@@ -155,7 +173,7 @@
 - Desktop 将本地文件 bytes 上传到 Spring Boot。
 - safeStorage demo。
 
-### SPIKE-007 Admin Web
+### SPIKE-007 Admin Web — DEFERRED / JUST-IN-TIME
 
 验证：
 
@@ -164,7 +182,7 @@
 - Admin auth。
 - 调用同一 OpenAPI client。
 
-### SPIKE-008 StorageService
+### SPIKE-008 StorageService — DEFERRED / JUST-IN-TIME
 
 验证：
 
@@ -174,7 +192,7 @@
 - sha256。
 - 可配置切换 Linux root。
 
-### SPIKE-009 Source Ingestion / ZIP Safety
+### SPIKE-009 Source Ingestion / ZIP Safety — DEFERRED / JUST-IN-TIME
 
 使用真实 `数据库系统工程师教程.zip`。
 
@@ -186,7 +204,7 @@
 - 图片识别。
 - SourceDocument/Asset/Page 技术链路。
 
-### SPIKE-010 OCR / Extraction
+### SPIKE-010 OCR / Extraction — DEFERRED / JUST-IN-TIME
 
 使用目录和第一章图片验证：
 
@@ -196,7 +214,7 @@
 - OCR 与 AI Vision 的职责边界。
 - 记录候选技术方案和误差。
 
-### SPIKE-011 Page Ordering
+### SPIKE-011 Page Ordering — DEFERRED / JUST-IN-TIME
 
 针对 hash 文件名图片验证：
 
@@ -208,7 +226,7 @@
 
 目标不是证明“全自动 100% 排序”，而是证明自动建议 + 人工快速修正可用。
 
-### SPIKE-012 AI Grounding / Citation
+### SPIKE-012 AI Grounding / Citation — DEFERRED / JUST-IN-TIME
 
 验证：
 
@@ -221,13 +239,13 @@ spaceId
 
 使用 SenseNova 或当前可用 Provider，但业务接口不得绑定 Provider。
 
-### SPIKE-013 MySQL Chinese Search
+### SPIKE-013 MySQL Chinese Search — DEFERRED / JUST-IN-TIME
 
 用真实 OCR/KnowledgePoint 中文文本验证 LIKE/FULLTEXT/ngram。
 
 如果 P0 暂时不需要统一搜索，可在 Vertical Slice 后执行，但必须在 Search P1 前完成。
 
-### SPIKE-014 Build
+### SPIKE-014 Build — DEFERRED / JUST-IN-TIME
 
 验证：
 

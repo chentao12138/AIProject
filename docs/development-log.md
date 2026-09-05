@@ -236,6 +236,46 @@ Repository / DB 异常当前会向上传播，不会静默授权；本 SPIKE 未
 
 Flyway 11.7.2 + MySQL 8.4 的兼容性 warning 继续保留：SPIKE 运行成功不等于官方支持，生产部署前仍需重新验证版本组合。
 
+## 2026-09-05 — SPIKE-005 Complete (Scope Adjusted)
+
+OpenAPI Contract 技术验证完成。原计划中的 TypeScript client/types 生成没有伪装为已完成，而是明确 Deferred 到第一个真实 LearningSpace API 后落地。
+
+### Code-defined evidence
+
+- `server/pom.xml` 引入 `springdoc-openapi-starter-webmvc-api`。
+- `SpikeSecurityConfig` 对 `/v3/api-docs` / `/v3/api-docs/**` 匿名放行，其它认证边界保持不变。
+- `SpikeOpenApiConfig` 定义 `bearerAuth`：HTTP / bearer / JWT；未设置全局 SecurityRequirement。
+- `SpikeProtectedController` 保持受保护 endpoint 的 Bearer security metadata。
+- SPIKE response 从通用 `Map` 改为 typed Java record：`SpikeHealthResponse`、`SpikeStatusResponse`、`SpikeSpaceAuthorizationResponse`。
+- Controller 明确 `produces = application/json`，使 OpenAPI response content 不再为 `*/*`。
+- `SpikeOpenApiContractTest` 验证 OpenAPI endpoint、Bearer scheme、安全边界、typed schema 与 response media type。
+
+### Runtime-verified evidence
+
+- `GET http://localhost:8080/v3/api-docs`：HTTP `200`。
+- `Content-Type: application/json`。
+- OpenAPI version：`3.1.0`。
+- Contract 包含 `/health`、`/api/v1/spike/protected`、`/api/v1/spike/method-denied`、`/api/v1/spike/spaces/{spaceId}`。
+- `components.securitySchemes.bearerAuth`：`type=http`、`scheme=bearer`、`bearerFormat=JWT`。
+- `/api/v1/spike/protected` 声明 `bearerAuth`；`/health` security 为 `null`。
+- typed response schema 已真实生成，不再是 `additionalProperties` 通用 map。
+- Focused regression：**17/17 PASS**。
+- Full `./mvnw.cmd clean test`：**Tests run: 31, Failures: 0, Errors: 0, Skipped: 0, BUILD SUCCESS**。
+
+### Scope adjustment / deferred
+
+以下 SPIKE-005 原计划目标尚未执行，明确 **DEFERRED**：
+
+- TypeScript client/types 实际生成。
+- Desktop / Admin 共享 `api-client` package。
+- generator 选型与 generated-code check-in 策略。
+
+调整原因：继续在 `Spike*` endpoint 上验证前端生成链路的收益已经低于成本。后续将在第一个真实 LearningSpace API 出现后，直接基于真实业务 OpenAPI Contract 落地共享 TypeScript client/types。
+
+### Development process adjustment
+
+SPIKE-006 ~ SPIKE-014 保留为风险检查清单，但不再作为 Platform Skeleton / 核心业务开发的串行前置门槛。后续仅在对应能力进入真实实现、且存在明确阻塞性技术不确定性时执行 just-in-time Spike。
+
 ## 当前状态
 
 ```text
@@ -246,15 +286,16 @@ SPIKE-001              COMPLETE
 SPIKE-002              COMPLETE
 SPIKE-003              COMPLETE
 SPIKE-004              COMPLETE
-SPIKE-005              NEXT
-Platform Skeleton      NOT STARTED
-Core Business          NOT STARTED
+SPIKE-005              COMPLETE (scope adjusted)
+SPIKE-006~014          DEFERRED / JUST-IN-TIME
+Platform Skeleton      STARTING
+Core Business          STARTING WITH LearningSpace
 ```
 
 ## 下一步
 
-1. SPIKE-005：OpenAPI → TypeScript Client（按 `docs/development-plan.md` 顺序）。
-2. 后续 Spike 按原顺序执行。
-3. Platform Skeleton。
-4. Vertical Slice A：Source → Knowledge。
-5. 后续 Vertical Slice 和阶段。
+1. 收口并提交 / push SPIKE-005。
+2. 正式开始 `TASK-001 LearningSpace Vertical Slice`。
+3. 让真实 LearningSpace API 进入 OpenAPI Contract。
+4. 基于真实 Contract 落地共享 TypeScript client/types。
+5. 后续按业务链推进 Source → KnowledgePoint → Question / Practice → Review / Mastery / StudyPlan → Exam。

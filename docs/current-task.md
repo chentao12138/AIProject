@@ -1,113 +1,72 @@
 # Current Task
 
-> 状态：**TECHNICAL SPIKES IN PROGRESS**
+> 状态：**PLATFORM SKELETON / CORE DEVELOPMENT STARTING**
 
-## 已完成
+## 已完成技术基线
 
-Git Baseline 已建立并推送至 GitHub Private Repository。
+- Git Baseline 已建立并推送至 GitHub Private Repository。
+- SPIKE-001 Spring Boot + Java 21 + Maven Wrapper：COMPLETE。
+- SPIKE-002 MySQL + MyBatis-Plus：COMPLETE。
+- SPIKE-003 Flyway / Versioned SQL：COMPLETE。
+- SPIKE-004 Auth + Space Authorization：Validation Complete；正式 Refresh Token、USER/ADMIN、production key management 等仍 Deferred。
+- SPIKE-005 OpenAPI Contract：Validation Complete（Scope Adjusted）。
 
-SPIKE-001 已完成：
+SPIKE-005 已真实验证：
 
-- Spring Boot 3.5.x。
-- Java 21 (Temurin)。
-- Maven Wrapper 3.9.6，保留 Windows 全局 Maven 3.6.2。
-- 单 Maven Project Modular Monolith。
-- `mvnw.cmd test` / `mvnw.cmd package` 成功。
-- 生成 executable JAR (`target/server-0.1.0-SPIKE.jar`)。
-- `/health` endpoint 验证 HTTP 200。
+- `GET /v3/api-docs` → HTTP `200` / `application/json` / OpenAPI `3.1.0`。
+- `bearerAuth` = HTTP Bearer JWT；受保护 endpoint 带安全声明，`/health` 不带。
+- typed Java response → 明确 OpenAPI schema。
+- response media type = `application/json`。
+- Focused regression 17/17 PASS。
+- Full `mvnw.cmd clean test`：**31/31 PASS**，Failures=0，Errors=0，Skipped=0。
 
-SPIKE-002 已完成：
+SPIKE-005 明确 Deferred：
 
-- MyBatis-Plus 3.5.11。
-- MySQL 8.4 (Docker)。
-- 真实 `BaseMapper<SpikeRecord>` CRUD (insert / select / delete round-trip)。
-- utf8mb4 / utf8mb4_unicode_ci 中文 round-trip 通过。
-- 真实 integration test (`@ActiveProfiles("it")`)。
-- packaged JAR 在 `--spring.profiles.active=it` 下真实连接 MySQL。
-- `SpikeDatabaseStartupVerifier` 打印 `SPIKE_DB_VERIFY_OK`。
+- TypeScript client/types 实际生成。
+- Desktop/Admin 共享 `api-client` package。
+- generator 选型与 generated-code check-in 策略。
 
-SPIKE-003 已完成：
-
-- Flyway 版本化 migration 正式采用（新增 ADR-046，`Accepted`）。
-- V001/V002 空库初始化。
-- V001-only → V002 upgrade 保留旧数据 + V001 checksum 动态读取不变。
-- Schema history 结构正确（V001 rank=1, V002 rank=2, success=true）。
-- Repeated `migrate()` 在最新状态 `migrationsExecuted == 0`。
-- Self-contained integration test（3 tests）可重复执行。
-- Destructive clean 前 `SELECT DATABASE()` 精确匹配 guard。
-- SPIKE-002（`DB_URL`）与 SPIKE-003（`FLYWAY_DB_URL`）环境变量族物理隔离。
-- Full `mvnw.cmd clean test` 7/7 PASS。
-
-**已知风险（生产部署前必须重新验证）**：Flyway 11.7.2 官方最高测试 MySQL 8.1，当前环境为 MySQL 8.4.x。本 SPIKE 范围内实际执行成功但**不能**宣称"官方支持"。Flyway 13.4.0 兼容实验（SPIKE-003-COMPAT-01）在当前 Spring Boot 3.5.0 依赖栈下失败（Jackson 3 API 缺失），已恢复 BOM 管理的 11.7.2。
-
-SPIKE-004 已完成（Validation Complete）：
-
-- Spring Security + Resource Server JWT 认证链路已验证。
-- BCrypt PasswordEncoder 已验证。
-- HS256 Access Token 签发 / 解码、无效签名 / 过期 token → `401` 已验证。
-- Method Security + `@PreAuthorize` 已验证；认证后无授权 → `403`。
-- JWT `sub` / `Authentication.getName()` + request `spaceId` → `SpikeSpaceAccess` → `SpikeSpaceMembershipRepository` → JdbcTemplate → 真实 MySQL 已贯通。
-- SPIKE-only membership 三态：ACTIVE → allow，REVOKED → deny，missing → deny。
-- 真实 JWT + HTTP + Method Security + Repository + MySQL E2E：`200 / 403 / 403`。
-- SPIKE-004 focused regression 17/17 PASS。
-- Full `mvnw.cmd clean test` 24/24 PASS，Failures=0，Errors=0，Skipped=0。
-
-**明确 Deferred**：Opaque Refresh Token / hash、rotation / revoke、USER / ADMIN roles。
-
-**仍非生产实现**：无正式 User、Login endpoint、LearningSpace / membership schema、production signing-key management、client token storage、正式 authorization model。`spike_space_membership`、`SpikeSpaceAccess`、`SpikeSpaceMembershipRepository`、`iss=aistudy-spike`、5-minute TTL、JVM 生命周期随机 HS256 key 均为 SPIKE-only。
+这些内容将在第一个真实 LearningSpace API 出现后基于真实业务 Contract 落地，不再使用 `Spike*` endpoint 继续延长前置验证。
 
 ## 当前唯一任务
 
-**SPIKE-005：OpenAPI → TypeScript Client**
+**TASK-001：LearningSpace Vertical Slice**
 
-按 `docs/development-plan.md` 顺序。SPIKE-004 已完成认证 / Space Authorization 技术验证；本轮只验证 API contract 与 Desktop/Admin 复用同一生成 client/types，**不得开始核心业务代码**。
+从现在开始进入正式业务开发，不再新增无明确阻塞理由的前置 SPIKE。
 
-验证目标：
+最小目标：
 
-- `/v3/api-docs`。
-- Desktop / Admin 消费同一生成 client/types。
+- 创建正式 LearningSpace 数据模型与 Flyway migration。
+- 实现正式 persistence / service / REST API。
+- 最小 API：
+  - `POST /api/v1/spaces`
+  - `GET /api/v1/spaces`
+  - `GET /api/v1/spaces/{spaceId}`
+- 所有查询和写入必须基于当前用户身份做服务端隔离。
+- 使用 integration test 证明：用户只能看到/访问自己的 LearningSpace。
+- 让真实 LearningSpace API 出现在 `/v3/api-docs`。
+- 在真实 Contract 出现后再落地 TypeScript shared client/types。
 
-**明确禁止（延续）：**
+## 开发规则
 
-- 不开始核心业务实体。
-- 不创建 LearningSpace / Source / KnowledgePoint 正式业务 schema。
-- 不写正式业务 Java 代码（Spike 验证代码除外）。
-- 不把 SPIKE-004 的 `spike_space_membership` / `SpikeSpaceAccess` / `SpikeSpaceMembershipRepository` 直接转为 production 实现。
-- 不修改 ADR 或已 Accepted 的技术/业务决策，除非后续单独明确安排。
-- 不 commit / push（用户手动执行）。
+- 当前已经进入正式业务实现；`Spike*` 表、类和临时鉴权实现不能直接当作 production model。
+- LearningSpace schema / API / authorization 必须按正式模型设计。
+- DB 结构变化必须使用新的 Flyway migration，不修改既有 migration。
+- 不为了 TASK-001 引入 Redis / MQ / 微服务 / 新搜索引擎。
+- 只有遇到明确技术不确定性且会阻塞当前业务任务时，才允许做短时、可丢弃的 just-in-time Spike。
+- Git commit / push 仍由用户手动执行。
 
-SPIKE-005 完成后继续按 `docs/development-plan.md` 执行后续 Spike。
-
-## 下一阶段顺序
+## 后续方向
 
 ```text
-SPIKE-003 Flyway / Versioned SQL          ← COMPLETE
-SPIKE-004 Auth + Space Authorization       ← COMPLETE
-SPIKE-005 OpenAPI → TypeScript Client        ← 当前
-SPIKE-006 Electron Security + File Upload
-SPIKE-007 Admin Web
-SPIKE-008 StorageService
-SPIKE-009 Source Ingestion / ZIP Safety
-SPIKE-010 OCR / Extraction
-SPIKE-011 Page Ordering
-SPIKE-012 AI Grounding / Citation
-SPIKE-013 MySQL Chinese Search
-SPIKE-014 Build
-→ Platform Skeleton
-→ Vertical Slice A (Source → Knowledge)
-→ Vertical Slice B (Question → Practice → Wrong)
-→ Review + Mastery + StudyPlan
+TASK-001 LearningSpace
+→ Source
+→ KnowledgePoint
+→ Question / Practice / Wrong
+→ Review / Mastery / StudyPlan
 → Exam
-→ AI Tutor + Admin Governance
+→ AI Tutor / Admin Governance
 → Statistics / Search / Polish
-→ Server Deployment
-→ Android
 ```
 
-## 当前禁止
-
-- 不开始核心业务实体 / 正式业务 schema。
-- 不 commit / push（用户手动执行）。
-- 不修改 ADR 或已 Accepted 的技术/业务决策。
-- 不重新设计产品 / 业务 / 架构。
-- 不引入 Redis / MQ / 微服务 / 新搜索引擎。
+SPIKE-006 ~ SPIKE-014 不删除，但改为按对应功能进入实现时按需执行，不再串行阻塞业务开发。
