@@ -269,12 +269,34 @@ admin-web/
 - common error/ProblemDetail
 - requestId/logging
 - auth/user/role
-- LearningSpace
-- OpenAPI generation
+- LearningSpace ✅（BUSINESS-001 Complete，见下）
+- OpenAPI generation ✅（SPIKE-005 技术验证 + 真实业务 Contract 已进入 /v3/api-docs）
 - StorageService
 - DB migration baseline
 
 验收：能登录、创建两个 LearningSpace，并证明服务端隔离。
+
+### BUSINESS-001 LearningSpace Vertical Slice — ✅ COMPLETE（User Runtime Verified）
+
+- `POST /api/v1/spaces` / `GET /api/v1/spaces` / `GET /api/v1/spaces/{spaceId}`。
+- V004 `learning_space` 表；owner boundary 落实在 SQL（`id + owner_subject`）。
+- Focused 16/16 PASS；Full clean test user-reported BUILD SUCCESS（FIX-02 后）。
+- 详情见 development-log.md。
+
+### BUSINESS-002 Source Vertical Slice — ✅ COMPLETE（User Runtime Verified）
+
+- `POST /api/v1/spaces/{spaceId}/sources` / `GET .../sources` / `GET .../sources/{sourceId}`。
+- V005 `source` 表（FK → learning_space）；JOIN 防 IDOR；CSRF path-scoped。
+- Focused Maven verification PASS + full clean Maven verification PASS（用户确认）。
+- 详情见 development-log.md。
+
+### Shared API Client Foundation — ✅ COMPLETE（User Runtime Verified）
+
+- `packages/api-client`：openapi-typescript + openapi-fetch + TokenProvider 注入。
+- `npm run api:generate` PASS + `npm run typecheck` PASS（用户确认）。
+- 详情见 development-log.md。
+
+**下一任务：BUSINESS-003 KnowledgePoint Vertical Slice — NOT STARTED**（Git closeout 后开始）。
 
 ## Phase 4：Vertical Slice A — Source → Knowledge
 
@@ -282,6 +304,7 @@ admin-web/
 
 顺序：
 
+0. ✅ Source metadata vertical slice（BUSINESS-002：LearningSpace → Source metadata，无 upload/ingest）
 1. SourceDocument / SourceAsset。
 2. upload。
 3. IngestionJob。

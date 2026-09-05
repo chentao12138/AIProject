@@ -119,6 +119,32 @@ import java.security.NoSuchAlgorithmException;
  * in this class. A later MICRO will decide how the Bearer requirement
  * is reflected in the contract (via {@code springdoc} {@code
  * securitySchemes} configuration).
+ *
+ * BUSINESS-001-FIX-01 / BUSINESS-002 adds PATH-SCOPED CSRF exceptions
+ * for the Bearer-only business APIs:
+ *   - {@code /api/v1/spaces}
+ *   - {@code /api/v1/spaces/**}
+ *   - {@code /api/v1/spaces/&#42;/sources}
+ *   - {@code /api/v1/spaces/&#42;/sources/&#42;&#42;}
+ * The LearningSpace and Source APIs authenticate exclusively via
+ * {@code Authorization: Bearer <JWT>} (no cookies, no sessions), so the
+ * CSRF filter — whose purpose is defending cookie-based session
+ * authentication — must not run before the authentication boundary for
+ * these paths. Without this exception, an anonymous
+ * {@code POST /api/v1/spaces} is rejected with 403 by the CSRF filter
+ * instead of the contractually correct 401 from
+ * {@link Anonymous401EntryPoint}, because the CSRF filter sits earlier
+ * in the chain than the authentication entry point for unprotected
+ * POST requests.
+ *
+ * This is deliberately NOT a global {@code csrf.disable()} and NOT a
+ * blanket ignore of {@code /api/v1/**}: future cookie-dependent
+ * endpoints (Refresh / Logout per ADR-026) must handle CSRF / Origin /
+ * SameSite individually for their own paths. Every other request still
+ * goes through the default CSRF protection. The rest of the chain —
+ * {@code /health} permitAll, {@code /v3/api-docs} permitAll,
+ * {@code anyRequest().authenticated()}, OAuth2 Resource Server JWT,
+ * and the 401 {@link AuthenticationEntryPoint} — is unchanged.
  */
 @EnableMethodSecurity
 @Configuration
@@ -139,6 +165,19 @@ public class SpikeSecurityConfig {
                         // endpoint is added here.
                         .requestMatchers("/v3/api-docs", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated())
+                // BUSINESS-001-FIX-01 / BUSINESS-002: the LearningSpace and
+                // Source APIs are Bearer-only (no cookies), so CSRF must not
+                // short-circuit these paths before authentication.
+                // Path-scoped, NOT global — future cookie-based endpoints
+                // handle CSRF/Origin/SameSite per their own paths (ADR-026).
+                // Note: "/api/v1/spaces/**" already covers the nested Source
+                // paths; the Source patterns below are declared explicitly so
+                // the protected Bearer API surface is self-documenting.
+                .csrf(csrf -> csrf.ignoringRequestMatchers(
+                        "/api/v1/spaces",
+                        "/api/v1/spaces/**",
+                        "/api/v1/spaces/*/sources",
+                        "/api/v1/spaces/*/sources/**"))
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new Anonymous401EntryPoint()));
         return http.build();

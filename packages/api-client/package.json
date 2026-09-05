@@ -1,0 +1,24 @@
+{
+  "name": "@aistudy/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared OpenAPI-driven TypeScript client for the AIStudy server (Desktop + Admin Web share this contract)",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "api:generate": "node scripts/generate-api.mjs",
+    "typecheck": "tsc --noEmit",
+    "typecheck:generated": "tsc --noEmit --skipLibCheck false"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.13.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.4.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,5 +1,7 @@
 package com.aistudy.server;
 
+import com.aistudy.server.space.mapper.LearningSpaceMapper;
+import com.aistudy.server.source.mapper.SourceMapper;
 import com.aistudy.server.spike.auth.SpikeSpaceMembershipRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -54,6 +56,32 @@ class AiStudyApplicationTests {
      */
     @MockitoBean
     private SpikeSpaceMembershipRepository membershipRepository;
+
+    /**
+     * BUSINESS-001: mock the production LearningSpace mapper so this
+     * context-boot smoke test does not need MyBatis-Plus /
+     * DataSource under the {@code test} profile (where
+     * {@code MybatisPlusAutoConfiguration} is excluded, so the
+     * {@code @Mapper} interface would not be registered and
+     * {@code LearningSpaceService} could not be constructed).
+     *
+     * <p>Not stubbed — {@code contextLoads()} never touches space
+     * persistence. The real mapper is exercised by
+     * {@code LearningSpaceVerticalSliceIntegrationTest} under the
+     * {@code flyway-it} profile.
+     */
+    @MockitoBean
+    private LearningSpaceMapper learningSpaceMapper;
+    /**
+     * BUSINESS-002: mock the production Source mapper so this
+     * full-context test keeps running without MyBatis-Plus /
+     * DataSource under this profile. Not stubbed — this test never
+     * touches Source persistence. The real SourceMapper is exercised
+     * by SourceVerticalSliceIntegrationTest (flyway-it profile).
+     */
+    @MockitoBean
+    private SourceMapper sourceMapper;
+
 
     @Test
     void contextLoads() {

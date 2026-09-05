@@ -1,5 +1,7 @@
 package com.aistudy.server.spike.auth;
 
+import com.aistudy.server.space.mapper.LearningSpaceMapper;
+import com.aistudy.server.source.mapper.SourceMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -82,6 +84,25 @@ class SpikePasswordEncoderTest {
      */
     @MockitoBean
     private SpikeSpaceMembershipRepository membershipRepository;
+
+    /**
+     * BUSINESS-001: mock the production LearningSpace mapper so this
+     * BCrypt-focused test keeps running without MyBatis-Plus /
+     * DataSource under the {@code test} profile. Not stubbed — this
+     * class never touches space persistence.
+     */
+    @MockitoBean
+    private LearningSpaceMapper learningSpaceMapper;
+    /**
+     * BUSINESS-002: mock the production Source mapper so this
+     * full-context test keeps running without MyBatis-Plus /
+     * DataSource under this profile. Not stubbed — this test never
+     * touches Source persistence. The real SourceMapper is exercised
+     * by SourceVerticalSliceIntegrationTest (flyway-it profile).
+     */
+    @MockitoBean
+    private SourceMapper sourceMapper;
+
 
     @Test
     void encoderRoundTripsCorrectPasswordAndRejectsWrongPassword() {

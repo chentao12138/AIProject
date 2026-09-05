@@ -1,5 +1,7 @@
 package com.aistudy.server.spike.openapi;
 
+import com.aistudy.server.space.mapper.LearningSpaceMapper;
+import com.aistudy.server.source.mapper.SourceMapper;
 import com.aistudy.server.spike.auth.SpikeSpaceMembershipRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -94,6 +96,28 @@ class SpikeOpenApiContractTest {
      */
     @MockitoBean
     private SpikeSpaceMembershipRepository membershipRepository;
+
+    /**
+     * BUSINESS-001: mock the production LearningSpace mapper so this
+     * OpenAPI contract test keeps running without MyBatis-Plus /
+     * DataSource under the {@code test} profile. Not stubbed —
+     * springdoc's contract generation does not call the mapper.
+     * The real mapper's schema contribution to /v3/api-docs is
+     * verified by {@code LearningSpaceOpenApiContractTest} (also
+     * test profile, same mock policy).
+     */
+    @MockitoBean
+    private LearningSpaceMapper learningSpaceMapper;
+    /**
+     * BUSINESS-002: mock the production Source mapper so this
+     * full-context test keeps running without MyBatis-Plus /
+     * DataSource under this profile. Not stubbed — this test never
+     * touches Source persistence. The real SourceMapper is exercised
+     * by SourceVerticalSliceIntegrationTest (flyway-it profile).
+     */
+    @MockitoBean
+    private SourceMapper sourceMapper;
+
 
     /**
      * MICRO-02A assertion 1: the {@code bearerAuth} security scheme

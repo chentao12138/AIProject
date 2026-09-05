@@ -299,3 +299,327 @@ Core Business          STARTING WITH LearningSpace
 3. 让真实 LearningSpace API 进入 OpenAPI Contract。
 4. 基于真实 Contract 落地共享 TypeScript client/types。
 5. 后续按业务链推进 Source → KnowledgePoint → Question / Practice → Review / Mastery / StudyPlan → Exam。
+
+## 2026-09-05 BUSINESS-001 Closeout (LONG-RUN-001 Phase A)
+
+### WHAT
+
+BUSINESS-001 LearningSpace vertical slice 正式收口。生产实现 + tests + 两轮修复（FIX-01/FIX-02）全部落地。
+
+实现内容：
+- `POST /api/v1/spaces` → 201（创建，owner 来自 JWT sub）
+- `GET /api/v1/spaces` → 200 typed List（owner-scoped SQL）
+- `GET /api/v1/spaces/{spaceId}` → 200 / 404（不存在与非本人统一 404，防资源探测）
+- V004 `learning_space` 表（BIGINT AUTO_INCREMENT / utf8mb4_unicode_ci / owner 索引）
+- `com.aistudy.server.space` 包：entity / mapper / service / controller / dto（modular monolith 一致）
+
+### WHY
+
+第一个正式业务 vertical slice，确立 owner boundary 模式：JWT sub → owner_subject → SQL 层 WHERE owner 条件。所有后续业务（Source、KnowledgePoint…）复用该模式。
+
+### FILES
+
+- 新增：`V004__create_learning_space.sql`、`space/{entity,mapper,service,controller,dto}/*`（6 production + 2 test）
+- 修改（test 兼容）：AiStudyApplicationTests / SpikeHealthControllerTest / SpikeJwtTokenServiceTest / SpikePasswordEncoderTest / SpikeSecurityBoundaryTest / SpikeOpenApiContractTest 各 +`@MockitoBean LearningSpaceMapper`；FlywayMigrationIntegrationTest 更新 V003→V004 断言
+- 修改（FIX-01）：SpikeSecurityConfig +path-scoped CSRF ignore（`/api/v1/spaces`、`/api/v1/spaces/**`）；LearningSpaceOpenApiContractTest 修正 GET list schema 断言（type=array + items.$ref）
+- 修改（FIX-02）：SpikeRecordMapperIntegrationTest +`@MockitoBean LearningSpaceMapper`（不扩大 `@MapperScan`，it profile 不接正式 mapper）
+
+### CONTRACT
+
+- DB：learning_space(id, name, description, owner_subject, status, created_at, updated_at)；无 User FK；无 spike_space_membership 复用
+- API：/api/v1/spaces 三 endpoint，全部 bearerAuth + application/json
+- SECURITY：CSRF 仅忽略 Bearer API 路径（非全局 disable）；/health、/v3/api-docs permitAll 不变；anyRequest().authenticated() 不变
+- OpenAPI：typed schema（LearningSpaceResponse / CreateLearningSpaceRequest）
+
+### TESTS
+
+- LearningSpaceVerticalSliceIntegrationTest：8 tests（真实 MySQL，schema guard + Flyway migrate + scoped cleanup）
+- LearningSpaceOpenApiContractTest：5 tests（test profile + mocks）
+- 静态检查通过；Maven 未由 AI 运行
+
+### RUNTIME EVIDENCE（用户提供）
+
+- Focused：16 tests / 0 failures / 0 errors / BUILD SUCCESS（FIX-01 后）
+- Full clean test：user reported BUILD SUCCESS after FIX-02。（未记录具体 test 总数 — 不编造数字）
+
+### DECISIONS
+
+- 404 统一表达“不存在/非本人”（api-guidelines §13）；不区分 403
+- owner_subject 字符串 = JWT sub；不建正式 User 表 / FK
+- Response 不含 ownerSubject
+- 列表返回 typed List（分页 defer，不为此开基础设施）
+
+### DEFERRED
+
+- LearningSpace rename/delete/archive/share/membership
+- 分页、ProblemDetail 错误码（SPACE_NOT_FOUND）、正式 User/Login/Refresh
+
+### RISKS
+
+- 无新风险。既有：HS256 JVM 随机 key 仍为 SPIKE 级（production key management defer）
+
+### NEXT
+
+BUSINESS-002 Source Vertical Slice（LONG-RUN-001 Phase B）
+
+## 2026-09-05 BUSINESS-002 Source Persistence + API (LONG-RUN-001 Phase B)
+
+### WHAT
+
+实现 Source（SourceDocument metadata）vertical slice：
+
+- V005 `source` 表（FK → learning_space.id）
+- `com.aistudy.server.source`：entity / mapper / service / controller / dto
+- `POST /api/v1/spaces/{spaceId}/sources`（201）
+- `GET /api/v1/spaces/{spaceId}/sources`（200 typed List）
+- `GET /api/v1/spaces/{spaceId}/sources/{sourceId}`（200 / 404）
+- CSRF ignore 显式加入 Source 路径（/api/v1/spaces/*/sources、/**）
+- FlywayMigrationIntegrationTest 更新到 V005
+- 旧 test-profile/it-profile @SpringBootTest 补 `@MockitoBean SourceMapper`
+
+### WHY
+
+第二个正式 vertical slice，确立"子资源归属父空间"的授权模式：Source 不存 owner_subject，ownership 由 FK 链推导；读路径用 JOIN 把 owner 条件落进 SQL。
+
+### FILES
+
+- 新增：V005__create_source.sql、source/{entity, mapper, service, controller, dto}/*（5 production + 2 test：SourceVerticalSliceIntegrationTest、SourceOpenApiContractTest）
+- 修改：SpikeSecurityConfig（CSRF matcher +2 条显式 Source 路径）；FlywayMigrationIntegrationTest（V004→V005）；8 个旧测试类 +@MockitoBean SourceMapper
+
+### CONTRACT
+
+- DB：source(id, space_id FK→learning_space.id, title, source_type, status DEFAULT 'REGISTERED', created_by_user_id, created_at, updated_at)；idx (space_id, created_at, id)
+- API：三 endpoint，bearerAuth + application/json
+- SECURITY：create/list 先 parent owner-scoped 校验（复用 LearningSpaceService.getMine）；get 用 JOIN（s.id + s.space_id + ls.owner_subject）三条件合一 → 统一 404
+- 明确不含：owner_subject 冗余列、文件元数据列（original_filename/mime_type/size_bytes/storage_key 属 SourceAsset per data-model §5.2，本轮无 upload 无实际用途 → 不建 placeholder）
+
+### TESTS
+
+- SourceVerticalSliceIntegrationTest：12 tests（真实 MySQL；含跨 space IDOR 测试：owner + spaceB + sourceId(spaceA) → 404）
+- SourceOpenApiContractTest：6 tests（test profile + mocks）
+- FlywayMigrationIntegrationTest：3 tests 更新（fresh=5 / upgrade=4 / second=0 + source 表/列/索引/FK/charset 断言）
+- 均为静态检查；Maven 未由 AI 运行
+
+### DECISIONS
+
+- source_type 用 data-model.md §5.1 定义值（DESKTOP_UPLOAD / DESKTOP_FOLDER_IMPORT / ADMIN_UPLOAD / ADMIN_MANUAL），@Pattern 校验
+- status 用 'REGISTERED'（无 processing pipeline，不引入 PROCESSING/FAILED）
+- 字段名用 docs 的 title（不是 name）
+- FK 采用（docs 无禁用规则；RESTRICT 默认，无 ON DELETE CASCADE）
+- 列表 typed List，分页 defer
+
+### DEFERRED
+
+- upload/multipart/IngestionJob/SourcePage/OCR/AI/KnowledgePoint
+- SourceAsset 表、storageKey 元数据
+- createdByUserId 不回显到 API response
+
+### RISKS
+
+- V005 FK 依赖 V004 顺序（Flyway 版本序保证）；flyway-it 重复 migrate 幂等
+- SourceVerticalSliceIntegrationTest cleanup 顺序：先删 source 再删 learning_space（FK RESTRICT），已按此实现
+
+### NEXT
+
+Source OpenAPI contract tests 已包含；下一 checkpoint 在 Phase C（shared types）后写；最终 LONG-RUN-001 收口记录。
+
+## 2026-09-05 Shared OpenAPI Types Foundation (LONG-RUN-001 Phase C)
+
+### WHAT
+
+建立 `packages/api-client` 共享包 foundation：
+
+- package.json（private @aistudy/api-client；openapi-fetch 0.13.x + openapi-typescript 7.x + typescript 5.x）
+- tsconfig.json（strict, ESNext, Bundler resolution）
+- scripts/generate-api.mjs：`npm run api:generate` — 从 OPENAPI_URL（默认 http://localhost:8080/v3/api-docs）拉取真实 OpenAPI JSON → openapi-typescript → src/generated/api.d.ts；服务器不可达时非零退出，绝不伪造成功
+- src/client.ts：openapi-fetch createClient<paths> 最薄 wrapper（createLearningSpace / listLearningSpaces / getLearningSpace / createSource / listSources / getSource）；TokenProvider 注入 getAccessToken()，不碰 localStorage/cookie
+- src/index.ts barrel export
+
+### WHY
+
+SPIKE-005 明确 Deferred 的 TypeScript client 现在基于真实业务 Contract（LearningSpace + Source）落地。Desktop / Admin Web 将来共享同一 generated contract（api-guidelines.md §18）。
+
+### FILES
+
+packages/api-client/{package.json, package-lock.json, tsconfig.json, scripts/generate-api.mjs, src/client.ts, src/index.ts}
+
+### CONTRACT
+
+- 类型必须来自 /v3/api-docs 生成，禁止手写业务类型冒充
+- auth 注入点：调用方提供 TokenProvider（Desktop=safeStorage 未来，Admin=自有 transport）
+
+### TESTS / STATIC
+
+- `npm install` 真实执行成功：added 37 packages（真实网络证据）
+- generate-api.mjs `node --check` 通过；tsc 5.9.3 已安装
+- `src/generated/api.d.ts` 未生成（服务器未运行）—— 明确 Deferred runtime evidence，不伪造
+
+### DECISIONS
+
+- generator 选型：openapi-typescript + openapi-fetch（SPIKE-005 未定 ADR，任务推荐方向；不引入 openapi-generator 大型 Java SDK）
+- package manager：npm（technology-selection.md 未强制 pnpm/yarn；Windows Node 生命周期规则适用于 Desktop/Admin 构建期）
+
+### DEFERRED
+
+- src/generated/api.d.ts 实际生成（需用户启动 server + npm run api:generate）
+- typecheck 通过（依赖生成文件存在）
+- Desktop / Admin 工程接入该 package
+- generated-code check-in 策略
+
+### RISKS
+
+- client.ts 引用 ./generated/api.js — 生成前 tsc 会报 cannot find module，这是预期状态（文档已注明生成顺序）
+- openapi-typescript 7.x CLI bin 路径假设（node_modules/openapi-typescript/bin/cli.js）需在用户环境验证
+
+### NEXT
+
+Phase D：整体静态回归 + LONG-RUN-001 最终收口文档。
+
+## 2026-09-05 LONG-RUN-001 Final Closeout
+
+### 1. BUSINESS-001 Closeout
+
+- WHAT：LearningSpace vertical slice 收口（实现 + FIX-01 + FIX-02 + 用户 runtime 验证）
+- WHY：第一个正式业务 slice，确立 owner-boundary 模式
+- FILES：space/{entity,mapper,service,controller,dto}、V004、SpikeSecurityConfig（CSRF ignore）、7 个旧测试兼容
+- DB：learning_space(id, name, description, owner_subject, status, created_at, updated_at) + idx_learning_space_owner_subject
+- API：POST/GET /api/v1/spaces、GET /api/v1/spaces/{spaceId}；typed DTO；bearerAuth；application/json
+- SECURITY：SQL owner boundary（id+owner_subject）；非 owner → 404；无 User FK
+- TESTS：VerticalSlice 8 + OpenApiContract 5 + Flyway 3（V004）
+- STATIC EVIDENCE：git diff --check clean；token 级语法检查通过
+- RUNTIME EVIDENCE：用户 focused 16/16 PASS；clean test user-reported BUILD SUCCESS（FIX-02 后）
+- DEFERRED：rename/delete/archive/share/membership、分页、ProblemDetail、正式 User/Login
+- RISKS：HS256 JVM key 仍 SPIKE 级；Flyway 11.7.2 vs MySQL 8.4 WARN
+
+### 2. BUSINESS-002 Source Implementation
+
+- WHAT：Source（SourceDocument metadata）vertical slice
+- WHY：第二个正式 slice，确立"子资源归属父空间 + JOIN 防 IDOR"模式
+- FILES：source/{entity,mapper,service,controller,dto}、V005、SpikeSecurityConfig（CSRF +2 显式 Source 路径）、FlywayMigrationIntegrationTest（V004→V005）、8 个旧测试 +@MockitoBean SourceMapper
+- DB：source(id, space_id FK→learning_space.id, title, source_type, status DEFAULT 'REGISTERED', created_by_user_id, created_at, updated_at) + idx (space_id, created_at, id)；无 owner_subject 冗余列；无文件元数据占位列（属 SourceAsset）
+- API：POST/GET /api/v1/spaces/{spaceId}/sources、GET .../{sourceId}；typed DTO
+- SECURITY：create/list 先 parent owner-scoped 校验（复用 LearningSpaceService.getMine）；get 单条 JOIN（s.id+s.space_id+ls.owner_subject）→ 统一 404；跨 space IDOR 测试覆盖
+- TRANSACTION：create @Transactional（parent 校验 + insert 原子）
+- TESTS：SourceVerticalSlice 12（真实 MySQL，含 cross-space IDOR、anonymous GET/POST 401、blank title/invalid sourceType 400）+ SourceOpenApiContract 6 + Flyway 3
+- STATIC EVIDENCE：git diff --check clean；41 个 java 文件 token 级语法检查全部通过；无 Map response、无 request DTO ownerSubject、无 csrf.disable()、无全局 /api/v1/** permitAll、无 H2
+- RUNTIME EVIDENCE MISSING：BUSINESS-002 代码尚无用户 Maven 运行证据（AI 未运行 Maven）
+- DEFERRED：upload/multipart/IngestionJob/SourcePage/OCR/AI/KnowledgePoint；SourceAsset 表；storageKey
+- RISKS：V005 FK 依赖 V004 顺序；Source test cleanup 必须先删 source 再删 learning_space（FK RESTRICT，已实现）
+
+### 3. Shared OpenAPI Types Foundation
+
+- WHAT：packages/api-client（openapi-typescript + openapi-fetch + TokenProvider 注入）
+- WHY：SPIKE-005 Deferred 项基于真实业务 Contract 落地
+- FILES：packages/api-client/{package.json, package-lock.json, tsconfig.json, scripts/generate-api.mjs, src/client.ts, src/index.ts}
+- TESTS：npm install 真实成功（37 packages）；generate-api.mjs node --check 通过；typecheck 依赖生成文件
+- STATIC EVIDENCE：package.json/tsconfig lint OK
+- RUNTIME EVIDENCE MISSING：src/generated/api.d.ts 未生成（server 未运行，不伪造）；typecheck 未跑（依赖生成）
+- DEFERRED：generated 文件、typecheck、Desktop/Admin 接入、check-in 策略
+- RISKS：client.ts 引 ./generated/api.js — 生成前 tsc cannot find module（预期，文档注明）
+
+### 4. Overall
+
+- git diff --check：clean
+- git status：全部未暂存（用户手动 commit）
+- 用户验证命令见 current-task.md Next Actions
+- 未运行 Maven / npm run api:generate / git 写操作
+
+## 当前状态
+
+```text
+SPIKE-001~005              COMPLETE
+BUSINESS-001 LearningSpace IMPLEMENTED + USER RUNTIME VERIFIED
+BUSINESS-002 Source        IMPLEMENTED — AWAITING USER RUNTIME VERIFICATION
+Shared API Client          FOUNDATION IMPLEMENTED — AWAITING RUNTIME VERIFICATION
+BUSINESS-003 KnowledgePoint NOT STARTED
+```
+
+## 下一步
+
+1. 用户运行 focused BUSINESS-002 tests + full clean test。
+2. 用户启动 server 后运行 packages/api-client 的 npm run api:generate + typecheck。
+3. 用户反馈结果后修复（如有）。
+4. BUSINESS-003 KnowledgePoint。
+
+## 2026-09-05 LONG-RUN-001-FIX-TS-01 Shared Client TypeScript Contract Alignment
+
+### WHAT
+
+修复 shared client typecheck 唯一失败（src/client.ts:56）。
+
+### WHY / 根因
+
+用户真实运行：
+- `npm run api:generate` → PASS（openapi-typescript 7.13.0，真实生成 src/generated/api.d.ts + openapi.json）
+- `npm run typecheck` → 1 error：wrapper 手写 `description?: string | null`，而真实 generated type 是 `CreateLearningSpaceRequest.description?: string`（optional，无 null）→ body 不可赋给 openapi-fetch requestBody。
+
+### FILES
+
+- 修改：packages/api-client/src/client.ts
+- 未修改：src/generated/api.d.ts、src/generated/openapi.json（用户生成物，未触碰）、Java 后端、package.json、generator script
+
+### FIX
+
+- client.ts 从 `./generated/api.js` 导入 `components` 类型
+- 新增类型别名（不复制字段）：
+  - `type CreateLearningSpaceRequest = components["schemas"]["CreateLearningSpaceRequest"]`
+  - `type CreateSourceRequest = components["schemas"]["CreateSourceRequest"]`
+- createLearningSpace(body: CreateLearningSpaceRequest)
+- createSource(spaceId, body: CreateSourceRequest)
+- 其它 wrapper（list/get ×2、createSource）检查：无其它手写 request/response type 重复；business path 参数 `spaceId: number` 与 generated 一致（SPIKE 的 `spaceId: string` 属无关 endpoint）
+
+### TESTS / STATIC
+
+- git diff --check clean
+- 禁止项全部满足：无 as any、无 @ts-ignore、无类型断言、无 unknown 强转、无 generated 编辑、无 Java 修改、无版本修改
+- typecheck 未由 AI 运行（用户将人工重跑）
+
+### RUNTIME EVIDENCE MISSING
+
+- 用户重新 `npm run typecheck` 结果（等待）
+
+### NEXT
+
+用户验证后视结果进入 BUSINESS-003。
+
+## LONG-RUN-001 Runtime Verification Complete
+
+用户已确认全部 runtime verification 成功。文档按用户反馈记录，不编造精确 test count。
+
+### BUSINESS-001 LearningSpace
+
+- implementation complete
+- user runtime verified — BUILD SUCCESS（focused tests PASS + full clean test PASS；用户未提供精确 test count，不记录具体数字）
+
+### BUSINESS-002 Source
+
+- focused Maven verification PASS
+- full clean Maven verification PASS
+- runtime verified
+
+### Shared API Client
+
+- real /v3/api-docs generation PASS
+- openapi-typescript generation PASS（src/generated/api.d.ts + openapi.json 已生成）
+- npm typecheck PASS（FIX-TS-01 后）
+
+### 备注
+
+- 服务停止后再次运行 api:generate 曾因 localhost:8080 不可达出现 ECONNREFUSED —— 预期环境状态（server 未运行），不属于代码失败，不记录为 defect。
+
+### 结论
+
+LONG-RUN-001 = COMPLETE
+
+```text
+SPIKE-001~005              COMPLETE
+BUSINESS-001 LearningSpace COMPLETE (user runtime verified)
+BUSINESS-002 Source        COMPLETE (user runtime verified)
+Shared OpenAPI TS Client   COMPLETE (user runtime verified)
+BUSINESS-003 KnowledgePoint NOT STARTED
+```
+
+### 下一步
+
+1. Git closeout（用户 git add / commit / push）。
+2. Git baseline clean 后开始 BUSINESS-003 KnowledgePoint Vertical Slice。
