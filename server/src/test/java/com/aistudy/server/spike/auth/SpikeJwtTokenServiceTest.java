@@ -1,9 +1,14 @@
 package com.aistudy.server.spike.auth;
 
 import com.aistudy.server.space.mapper.LearningSpaceMapper;
+import com.aistudy.server.source.asset.mapper.SourceAssetMapper;
+import com.aistudy.server.ingestion.job.mapper.IngestionJobMapper;
+import com.aistudy.server.source.content.mapper.ContentBlockMapper;
+import com.aistudy.server.source.page.mapper.SourcePageMapper;
 import com.aistudy.server.source.mapper.SourceMapper;
 import com.aistudy.server.knowledge.category.mapper.KnowledgeCategoryMapper;
 import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
+import com.aistudy.server.knowledge.source.mapper.KnowledgePointSourceMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -139,6 +144,26 @@ class SpikeJwtTokenServiceTest {
      */
     @MockitoBean
     private KnowledgePointMapper knowledgePointMapper;
+
+    /** BUSINESS-007: keep the test profile context bootable. */
+    @MockitoBean
+    private KnowledgePointSourceMapper knowledgePointSourceMapper;
+
+    /** BUSINESS-004: keep the test profile context bootable. */
+    @MockitoBean
+    private SourceAssetMapper sourceAssetMapper;
+
+    /** BUSINESS-005: keep the test profile context bootable. */
+    @MockitoBean
+    private IngestionJobMapper ingestionJobMapper;
+
+    /** BUSINESS-006: keep the test profile context bootable. */
+    @MockitoBean
+    private SourcePageMapper sourcePageMapper;
+
+    /** BUSINESS-006: keep the test profile context bootable. */
+    @MockitoBean
+    private ContentBlockMapper contentBlockMapper;
 
 
     @Test

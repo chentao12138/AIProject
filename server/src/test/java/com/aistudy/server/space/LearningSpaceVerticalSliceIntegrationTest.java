@@ -170,13 +170,42 @@ class LearningSpaceVerticalSliceIntegrationTest {
         return id;
     }
 
+    /**
+     * FK-aware scoped cleanup: source_asset / source first (V005/V008
+     * FKs — defensive even though this class only creates
+     * learning_space rows, so a leftover from another test class
+     * sharing the biz-e2e users cannot break the parent delete),
+     * then learning_space, all restricted to biz-e2e users.
+     */
     private void cleanBizTestRows() {
         String placeholders = String.join(",",
                 Collections.nCopies(BIZ_TEST_USERS.size(), "?"));
+        Object[] users = BIZ_TEST_USERS.toArray();
+        String spaceIds = "(SELECT id FROM learning_space WHERE owner_subject IN (" + placeholders + "))";
         jdbcTemplate.update(
-                "DELETE FROM learning_space "
-                        + "WHERE owner_subject IN (" + placeholders + ")",
-                BIZ_TEST_USERS.toArray());
+                "DELETE FROM knowledge_point_source WHERE space_id IN " + spaceIds, users);
+        jdbcTemplate.update(
+                "DELETE FROM knowledge_point WHERE space_id IN " + spaceIds, users);
+        // knowledge_category is self-referencing (parent_id FK): delete
+        // every non-root row first, then the remaining roots — correct
+        // for any nesting depth in one pass.
+        jdbcTemplate.update(
+                "DELETE FROM knowledge_category WHERE space_id IN " + spaceIds
+                        + " AND parent_id IS NOT NULL", users);
+        jdbcTemplate.update(
+                "DELETE FROM knowledge_category WHERE space_id IN " + spaceIds, users);
+        jdbcTemplate.update(
+                "DELETE FROM content_block WHERE space_id IN " + spaceIds, users);
+        jdbcTemplate.update(
+                "DELETE FROM source_page WHERE space_id IN " + spaceIds, users);
+        jdbcTemplate.update(
+                "DELETE FROM ingestion_job WHERE space_id IN " + spaceIds, users);
+        jdbcTemplate.update(
+                "DELETE FROM source_asset WHERE space_id IN " + spaceIds, users);
+        jdbcTemplate.update(
+                "DELETE FROM source WHERE space_id IN " + spaceIds, users);
+        jdbcTemplate.update(
+                "DELETE FROM learning_space WHERE owner_subject IN (" + placeholders + ")", users);
     }
 
     private void assertSchemaIsFlywayTest() {

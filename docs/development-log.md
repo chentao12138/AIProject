@@ -1058,3 +1058,969 @@ BUSINESS-004 Question            NOT STARTED
 ### NEXT
 
 用户 Git closeout（git add / commit / push）。BUSINESS-004 范围待定，不擅自开始。
+
+## 2026-09-06 LONG-RUN-003 Start
+
+### WHAT
+
+开始 BUSINESS-004 RAW SourceAsset Upload Vertical Slice（LONG-RUN-003）。
+
+### WHY
+
+延续 owner-boundary vertical slice 模式；在已完成 Source（SourceDocument metadata）上正式实现 RAW 文件持久化 + StorageService 抽象 + 认证 multipart 上传。
+
+### BASELINE（本机 git 实际输出）
+
+- HEAD = `7ef6a79 feat: implement knowledge catalog`（用户已 commit + push BUSINESS-003）
+- branch main 与 origin/main 同步（git status -sb 无 ahead/behind）
+- working tree clean
+- 最新 migration：V007（V008 为本轮新增编号）
+- **stale current-task 修正**：原写 "BUSINESS-003 COMPLETE — AWAITING GIT CLOSEOUT"，实际已 commit/push → 已改为 COMPLETE/COMMITTED/PUSHED（baseline 7ef6a79）
+
+### SCOPE（本轮）
+
+- SourceAsset（V008）+ StorageService + LocalStorageService + multipart upload + RAW bytes 保留 + sha256/size/MIME 元数据 + space/owner/IDOR 保护 + OpenAPI + 真实 MySQL tests
+- ZIP 本轮仅作为 ORIGINAL_PACKAGE RAW asset 安全保存，不解压
+- 禁止：IngestionJob / ZIP extraction / SourcePage / OCR / ContentBlock / KnowledgePointSource / Question；不创建 source_document（table source + class Source 即 SourceDocument metadata，V005 已定义）
+
+### DOCS 依据
+
+- data-model.md §5.2（SourceAsset 字段/assetRole/storageKey 逻辑 key）
+- content-ingestion.md §2/§4/§5/§7（RAW 层次、Asset 元数据、multipart 协议、ZIP 先存 RAW）
+- requirements.md R-SOURCE-001~007 + NFR-DATA-001~003 + NFR-SEC-001/002
+- api-guidelines.md §4（multipart/form-data 正式上传、文件名只展示不作物理路径）
+- architecture.md §7（StorageService/LocalStorageService/DB 只存 storageKey）
+- decisions.md ADR-033（StorageService 抽象）+ ADR-044（内容/流上传协议）
+- development-plan.md Phase 4（Source → Knowledge 链起点）
+
+### DECISIONS（关键）
+
+- V008：source_asset 表（FK×2 无 CASCADE；uk_source_asset_storage_key；idx space_source_created + space_sha256；utf8mb4）
+- storageKey = `yyyy/MM/<uuid>`（服务端生成）；original filename 只作 basename 展示
+- MIME/extension allowlist（V1：zip/pdf/jpg/jpeg/png/webp/md/markdown/txt）；assetRole 服务端定（zip→ORIGINAL_PACKAGE，其余→ORIGINAL_FILE）
+- 上传大小默认 1GB（AISTUDY_MAX_UPLOAD_SIZE override），servlet + service 双检查
+- DB/FS 补偿：TransactionSynchronization afterCompletion != COMMITTED → storageService.delete
+- 所有读四条件合一 owner-scoped SQL → 统一 404
+
+### NEXT
+
+PHASE A（V008）+ PHASE B（StorageService）→ Persistence + Storage Checkpoint 文档。
+
+## 2026-09-06 BUSINESS-004 Persistence + Storage Checkpoint
+
+### WHAT
+
+V008 source_asset migration + StorageService 抽象 + LocalStorageService 完成。
+
+### V008 source_asset（A1-A4）
+
+- 列：id, space_id FK→learning_space, source_id FK→source, asset_role VARCHAR(32), original_name VARCHAR(255), original_relative_path VARCHAR(1024) NULL, storage_key VARCHAR(512), mime_type VARCHAR(127), size_bytes BIGINT, sha256 CHAR(64), created_at DATETIME(6)
+- FK×2 无 CASCADE（fk_source_asset_space / fk_source_asset_source）；FK 无法证明 asset.space_id == source.space_id → service 显式验证 sourceId+spaceId+ownerSubject
+- 索引：idx_source_asset_space_source_created (space_id, source_id, created_at, id)；uk_source_asset_storage_key (storage_key) UNIQUE；idx_source_asset_space_sha256 (space_id, sha256)（sha256 不设 UNIQUE——去重留未来业务策略）
+- utf8mb4 / utf8mb4_unicode_ci；V005/V006/V007 未修改
+
+### StorageService（B1，ADR-033）
+
+- 概念接口：store(InputStream, StorageMetadata) → StorageResult；load(String)；delete(String)
+- StorageResult：storageKey / sizeBytes / sha256（lowercase hex）
+- StorageMetadata：本轮空 record（Local 实现不需要任何 metadata；业务元数据在 source_asset 表）
+- LocalStorageService 不依赖 Source entity
+
+### LocalStorageService（B2-B5）
+
+- storageKey = `yyyy/MM/<uuid>`（YearMonth + UUID，服务端生成；originalName/客户端 path 绝不作为物理文件名）
+- root 配置：aistudy.storage.local.root ← AISTUDY_STORAGE_ROOT env override；fallback `${user.home}/.aistudy/resources`（跨平台、不污染 Git）；无 Windows 硬编码
+- store：root resolve+normalize → startsWith(root) 断言 → mkdirs → 同目录 `.part-<uuid>` 临时文件 streaming（8192 buffer，单次 pass 同时 SHA-256 + byte count）→ ATOMIC_MOVE（AtomicMoveNotSupportedException → 普通 move fallback）→ failure deleteQuietly(part)
+- load/delete：同一 resolve+normalize+startsWith 防御（../、absolute、Windows drive escape 先于文件访问拒绝）
+- 无 input.readAllBytes() / MultipartFile.getBytes()（生产路径 stream）
+
+### DB/FS 补偿策略（C5）
+
+- 普通 @Transactional 不管 filesystem → upload 注册 TransactionSynchronization：afterCompletion != STATUS_COMMITTED → storageService.delete(storageKey)（best-effort，try/catch + log warn，不掩盖原始失败）；注册先于 insert，insert 失败也覆盖
+- 不引入 XA / distributed transaction
+
+### RUNTIME EVIDENCE MISSING
+
+- 全部（AI 不运行 Maven）
+
+### NEXT
+
+PHASE C/D：source.asset 业务模型（entity/mapper/service/controller/dto）+ multipart API → Upload API Checkpoint。
+
+## 2026-09-06 BUSINESS-004 Upload API Checkpoint
+
+### WHAT
+
+SourceAsset 业务模型 + multipart API 完成。
+
+### SOURCE.ASSET 包（C）
+
+- entity/SourceAsset（@TableName("source_asset")，BaseMapper 仅 insert）
+- mapper/SourceAssetMapper：selectByIdSpaceSourceOwner + selectBySpaceSourceOwner（均 JOIN source [s.id=sa.source_id AND s.space_id=sa.space_id] + JOIN learning_space [ls.owner_subject] —— 四条件合一，source↔space 一致性在 SQL）
+- service/SourceAssetService：upload（父 source getMine 校验 → 文件校验 → storage.store → insert + 补偿注册）/ listMine / getMine
+- controller/SourceAssetController：POST（multipart part "file"）/ GET list / GET {assetId}；@SecurityRequirement bearerAuth
+- dto/SourceAssetResponse：id, spaceId, sourceId, assetRole, originalName, mimeType, sizeBytes, sha256, createdAt（无 storageKey / originalRelativePath / physicalPath）
+
+### UPLOAD 校验（C1-C4）
+
+- assetRole 服务端定：.zip → ORIGINAL_PACKAGE；allowlist（pdf/jpg/jpeg/png/webp/md/markdown/txt）→ ORIGINAL_FILE；客户端不提交
+- originalName：basename（C:\fakepath\book.pdf → book.pdf；folder/book.pdf → book.pdf）；null/blank/仅分隔符 → 400；>255 → 400；绝不拼物理路径
+- MIME：declared 必须属于 extension 允许集（含 application/octet-stream fallback；null 视为 fallback）；不匹配 → 415
+- 大小：aistudy.upload.max-file-size（默认 1024MB，AISTUDY_MAX_UPLOAD_SIZE override，DataSize 解析）+ spring.servlet.multipart.max-file-size/max-request-size 同源配置；service 检查 file.getSize()（不依赖 servlet）；empty → 400；超限 → 413
+- 无 JSON request body（path/storageKey/sha256/sizeBytes/assetRole/spaceId/sourceId/ownerSubject 全部 path/server/storage 决定）
+
+### AUTHORIZATION（D1-D3）
+
+- 上传前 SourceService.getMine(owner, spaceId, sourceId) == null → 404（先于任何存储）
+- detail/list：SQL 四条件合一（assetId+spaceId+sourceId+owner），wrong user / wrong space / wrong source / source 跨 space → 统一 404
+- CSRF：/api/v1/spaces/** 已覆盖嵌套路由，SecurityConfig 零改动；无 csrf.disable() / permitAll
+- 无 unscoped selectById 业务读
+
+### CONFIG
+
+- application.yml：spring.servlet.multipart.{max-file-size,max-request-size} = ${AISTUDY_MAX_UPLOAD_SIZE:1024MB}；aistudy.upload.max-file-size 同源；aistudy.storage.local.root = ${AISTUDY_STORAGE_ROOT:${user.home}/.aistudy/resources}
+- 未建立 application-local.yml（.gitignore 忽略它；不做 local-profile 重构）
+
+### RUNTIME EVIDENCE MISSING
+
+- 全部（AI 不运行 Maven）
+
+### NEXT
+
+PHASE E tests：LocalStorageServiceTest / SourceAssetUploadIntegrationTest / SourceAssetOpenApiContractTest / Flyway V008 更新 / 旧 cleanup 修正 / 旧 context @MockitoBean 兼容 → Test Checkpoint。
+
+## 2026-09-06 BUSINESS-004 Test Checkpoint
+
+### WHAT
+
+全部测试落地：storage 单测 + 22 项上传集成测试 + 7 项 OpenAPI contract 测试 + Flyway V008 更新 + 旧 cleanup 修正 + 旧 context 兼容。
+
+### STORAGE TESTS（LocalStorageServiceTest，纯 Java + @TempDir，9 项）
+
+- store→load 字节 round-trip 完全一致；sizeBytes 精确；SHA-256 精确（lowercase hex）
+- storageKey 服务端生成：格式 yyyy/MM/<uuid>、不含 original filename、无反斜杠
+- key 解析后 startsWith(root)（不逃出 root）
+- delete 后 load 失败
+- load/delete 拒绝 `../`、`2026/09/../../`、绝对路径、空 key、Windows drive escape（先于文件访问）
+- 模拟流中途失败 → 无 final / 无 .part 残留
+- 测试 root 全部 @TempDir（绝不 D:\AIStudyData）
+
+### UPLOAD INTEGRATION TESTS（SourceAssetUploadIntegrationTest，flyway-it 真实 MySQL + MockMvc + JWT + @TempDir storage root + 1KB 测试限流，22 项）
+
+- 201（txt）；DB row 真实存在（storage_key 匹配 yyyy/MM/uuid）；storage round-trip 字节一致；size_bytes 精确；sha256 精确（DB + response）
+- zip → ORIGINAL_PACKAGE；pdf → ORIGINAL_FILE
+- 415（.exe 无 DB row；MIME 与 extension 明显不匹配）；400（empty）；413（超 1KB 测试限，无 DB row）
+- 404×4（user2 传 user1 source；正确 owner 但 source 属另一 owned space；wrong sourceId + valid assetId；wrong spaceId + valid source/asset）；401 anonymous
+- owner list 200（2 项）；user2 list 404；owner get 200；user2 get 404
+- C:\fakepath\book.pdf → DB original_name = book.pdf（basename）
+- response 无 storageKey / originalRelativePath（upload + list）
+- schema guard + FK-aware cleanup（source_asset → source → learning_space）
+
+### OPENAPI TESTS（SourceAssetOpenApiContractTest，test profile + @MockitoBean，7 项）
+
+- 3 条 asset paths 存在；POST multipart/form-data + file part（type=string format=binary）；request schema 无 storageKey/sha256/sizeBytes/assetRole/ownerSubject
+- 201 → SourceAssetResponse $ref；list array + items.$ref；detail $ref
+- SourceAssetResponse typed 9 字段 + 无 storageKey/originalRelativePath
+- 3 endpoints bearerAuth
+- 注：不断言 400/413/415 responses 存在（springdoc 不自动生成 ResponseStatusException 条目，避免脆弱断言）
+
+### FLYWAY TESTS（FlywayMigrationIntegrationTest V007→V008）
+
+- TEST A：fresh=8 / history 8 / versions+ranks+success 001-008 / source_asset 列（11）/ 索引（list 4 列 + sha256 2 列 + uk 1 列 NON_UNIQUE=0）/ FK×2 Map by CONSTRAINT_NAME（fk_source_asset_space→learning_space(id)、fk_source_asset_source→source(id)）/ charset
+- TEST B：upgrade=7 / history 8 / (11f) source_asset exists
+- TEST C：first=8 / second=0 / history 8 / versions 001-008
+
+### OLD CLEANUP（E6）
+
+- SourceVerticalSliceIntegrationTest：cleanup +source_asset 删除（source 前）
+- LearningSpaceVerticalSliceIntegrationTest：cleanup +source_asset + source 删除（learning_space 前，防御跨类残留）
+- KnowledgeCatalogVerticalSliceIntegrationTest：cleanup +source_asset 删除（category bottom-up 后、source 前）
+- 无 FOREIGN_KEY_CHECKS=0 / TRUNCATE / CASCADE
+
+### OLD CONTEXT COMPAT（E7）
+
+- 10 个旧 @SpringBootTest 类 +@MockitoBean SourceAssetMapper（test profile ×9：AiStudyApplicationTests、Knowledge/Source/LearningSpace OpenApiContractTest、SpikeHealthControllerTest、SpikeJwtTokenServiceTest、SpikePasswordEncoderTest、SpikeSecurityBoundaryTest、SpikeOpenApiContractTest；it ×1：SpikeRecordMapperIntegrationTest）
+- import 精确 1 次 / 字段精确 1 次（count 验证）；flyway-it 类（真实 mapper 自动注册）不加 mock
+- LocalStorageService bean 默认可启动（root fallback ${user.home}/.aistudy/resources），旧 context 无 storage 配置也 OK
+
+### SHARED CLIENT（PHASE F，Deferred）
+
+- 本轮不手改 generated api.d.ts/openapi.json（仍是 BUSINESS-003 快照，无 asset paths）
+- 不提前添加 upload wrapper：createApiClient() 固定 Content-Type: application/json，multipart 必须由 fetch 自行生成 boundary；等用户 Maven PASS → server → api:generate 后单独 BUSINESS-004-SHARED-CLIENT-CLOSEOUT（届时调整 JSON header 策略）
+- 不用 any / @ts-ignore 绕过
+
+### RUNTIME EVIDENCE MISSING
+
+- 全部（AI 不运行 Maven）
+
+### NEXT
+
+Final Static Review（PHASE H）→ 文档收口 → 用户 focused + full clean test。
+
+## 2026-09-06 LONG-RUN-003 Final Static Closeout
+
+### WHAT
+
+BUSINESS-004 RAW SourceAsset Upload 全部实现 + 测试 + 文档收口（静态）。AI 不运行 Maven → AWAITING USER RUNTIME VERIFICATION。
+
+### IMPLEMENTED
+
+- V008 source_asset（FK×2 无 CASCADE / uk_storage_key / idx×2 / utf8mb4）
+- storage 包：StorageService / StorageMetadata / StorageResult / LocalStorageService（stream + SHA-256 + ATOMIC_MOVE + path traversal 防御 + ${user.home}/.aistudy/resources fallback）
+- source.asset 包：entity / mapper（四条件合一 owner-scoped SQL）/ service（父 source 校验 + 文件校验 + 补偿删除）/ controller（multipart part "file"）/ dto（无 storageKey）
+- application.yml：multipart limits + aistudy.upload.max-file-size（AISTUDY_MAX_UPLOAD_SIZE，默认 1GB）+ aistudy.storage.local.root（AISTUDY_STORAGE_ROOT）
+- tests：LocalStorageServiceTest 9 + SourceAssetUploadIntegrationTest 22 + SourceAssetOpenApiContractTest 7 + Flyway V008（fresh=8/upgrade=7/second=0）
+- 旧兼容：3 个业务 integration cleanup +source_asset 删除；10 个旧 context +@MockitoBean SourceAssetMapper（import/field count 验证 1/1）
+- docs：current-task.md（LONG-RUN-003 全字段）/ development-log.md（Start + 3 checkpoints + 本段）/ development-plan.md（BUSINESS-004 IMPLEMENTED — AWAITING USER RUNTIME VERIFICATION；BUSINESS-005 NOT STARTED）
+
+### STATIC EVIDENCE（PHASE H 扫描）
+
+- git diff --check：clean
+- 生产代码无 getBytes() / readAllBytes()（仅 Javadoc 声明不用；测试文件允许小 byte[] 验证）
+- 无 source_document 重复实体（table source = SourceDocument metadata，V005 定义）
+- V008 无 CASCADE / FOREIGN_KEY_CHECKS=0 / TRUNCATE（仅注释声明不用）
+- 无 csrf.disable() / permitAll（SecurityConfig 零改动）
+- 无 ZipInputStream / OCR / IngestionJob（ZIP 仅 ORIGINAL_PACKAGE RAW 保存）
+- SourceAssetResponse 无 storageKey / originalRelativePath；request 无 server 字段
+- 无 unscoped selectById 业务读（service 仅调 scoped selectByIdSpaceSourceOwner）
+- 无 path traversal 缺口（resolve+normalize+startsWith 先于文件访问）
+- 无 generated TS 手工修改（packages/ 无改动）
+- 无 Javadoc */* 或 /*/ hazard（新文件全扫）
+- @Test 计数：Storage 9 / Upload IT 22（+1 @TestInstance）/ OpenAPI 7 / Flyway 3
+
+### RUNTIME EVIDENCE
+
+- BUSINESS-004：**NONE**（AI 不运行 Maven；用户 focused/full test 待跑）
+- 历史：BUSINESS-001/002/003 user verified（HEAD 7ef6a79）
+
+### NEXT（用户验证命令）
+
+focused（先确保 Docker MySQL + env 就绪）：
+
+```
+cd D:\AIProject\server
+$env:FLYWAY_DB_URL="jdbc:mysql://127.0.0.1:3306/aistudy_flyway_test?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false"
+$env:FLYWAY_DB_USERNAME="aistudy_spike"
+$env:FLYWAY_DB_PASSWORD="devspass2026"
+.\mvnw.cmd -Dtest="LocalStorageServiceTest,SourceAssetUploadIntegrationTest,SourceAssetOpenApiContractTest,FlywayMigrationIntegrationTest" test
+```
+
+然后 full：`.\mvnw.cmd clean test`
+
+用户 PASS 后：启动 server → `cd packages\api-client && npm run api:generate` → BUSINESS-004-SHARED-CLIENT-CLOSEOUT（multipart wrapper，不继承 application/json Content-Type）。BUSINESS-005 NOT STARTED，不擅自开始。
+
+## 2026-09-06 BUSINESS-004-RUNTIME-FIX-01 (attempt #1 2-failure 修复)
+
+### WHAT
+
+用户真实运行 focused BUSINESS-004 tests（attempt #1）：
+
+```
+Tests run: 41
+Failures: 2
+Errors: 0
+BUILD FAILURE
+```
+
+两个失败均来自 LocalStorageServiceTest（loadRejectsPathTraversal / deleteRejectsPathTraversal），其余 focused tests 未报告失败。本轮修复 LocalStorageService 安全边界（不扩大 BUSINESS-004）。
+
+### ROOT CAUSE
+
+- 测试 key `2026/09/../../secret.txt`：`root.resolve(key).normalize()` = `<root>/secret.txt`，仍在 root 内 → 原实现唯一的 `startsWith(root)` 检查通过
+- load() → 尝试读取 `<root>/secret.txt` → NoSuchFileException → 包装成 IllegalStateException（测试期望 IllegalArgumentException → FAIL）
+- delete() → deleteIfExists 对不存在文件静默返回 → 无异常（assertThrows FAIL）
+- 违反已确定契约：任何 `..` traversal segment 必须在文件系统访问之前拒绝
+
+### FIX（LocalStorageService 双层防御）
+
+- **A. lexical validation**（新增 validateStorageKeyLexically，在 resolve 之前）：拒绝 null/blank、Windows drive absolute（`C:\` / `C:/`，首字符字母+冒号）、POSIX absolute / UNC rooted（以 `/` 或 `\` 开头）、任何 `.` / `..` segment——按 `/` 和 `\` 双 separator 切分（`split("[/\\\\]+")`），覆盖 `2026/09/../../secret.txt` 与 `2026\09\..\..\secret.txt`
+- **B. normalized containment**（保留）：`root.resolve(key).normalize()` 后 `target.startsWith(root)` 仍必须成立——第二道防线，未删除
+- 统一 helper `resolveWithinRoot` 被 load/delete/store 共用，无两套逻辑
+- exception contract：非法 key 抛 IllegalArgumentException，发生在 IO try 之外，不被包装成 IllegalStateException；仅合法 key 的真实 IO failure 按 StorageService 语义包装
+
+### TESTS
+
+- 保留 loadRejectsPathTraversal / deleteRejectsPathTraversal（现在应通过）
+- 增强断言（不新增 @Test，仍 9 个）：load 增加 backslash traversal（`2026\09\..\..\secret.txt`）+ 真实 root escape（`../../../secret.txt`）；delete 增加 backslash variant + `C:/evil/file`（forward-slash drive）
+- 正常 generated storageKey 的 store/load/delete 测试未动（storeThenLoadReturnsExactBytes 等仍通过——key 无 `.`/`..` segment、非 absolute）
+
+### 未修改
+
+V008、SourceAssetService/Controller/Mapper/DTO、MIME/size validation、OpenAPI contract、Flyway contract、SecurityConfig、shared TS client
+
+### RUNTIME EVIDENCE
+
+- attempt #1（用户真实）：41/2/0 BUILD FAILURE（如上）
+- attempt #2：**MISSING** —— 等用户重跑 focused + full clean test
+
+### NEXT
+
+用户重跑 focused + full clean test。状态保持 AWAITING USER RUNTIME RE-VERIFICATION，不标 COMPLETE。
+
+## 2026-09-06 BUSINESS-004-SHARED-CLIENT-CLOSEOUT
+
+### WHAT
+
+用户完成真实 runtime verification（attempt #2），shared client SourceAsset wrapper 补齐（multipart）。
+
+### RUNTIME EVIDENCE（用户真实运行）
+
+- Focused Maven：**Tests run: 41, Failures: 0, Errors: 0, Skipped: 0, BUILD SUCCESS**（RUNTIME-FIX-01 确认）
+- Full clean Maven：**Tests run: 138, Failures: 0, Errors: 0, Skipped: 0, BUILD SUCCESS**
+- `npm run api:generate`：PASS（live backend → generated api.d.ts/openapi.json 已含 SourceAsset API：upload/list/get paths + SourceAssetResponse schema）
+
+### CONTENT-TYPE BUG + 修复
+
+- 问题：createApiClient() 全局固定 `Content-Type: application/json`——multipart 请求携带该 header 会破坏上传（fetch 必须自生成 `multipart/form-data; boundary=...`）
+- 修复：**删除全局 Content-Type**（createClient 不再设置 headers）
+- 验证（openapi-fetch 0.13 运行时源码 + tsc 实验）：JSON body 由 openapi-fetch 自动 JSON.stringify + 自动设置 application/json（无 body 不设置）；FormData body 透传不设置 Content-Type → 浏览器生成 boundary
+- 现有 LearningSpace / Source / Knowledge JSON POST 行为不变（tsc --noEmit 全包零错误）
+
+### WRAPPER（client.ts，与现有风格一致）
+
+- `uploadSourceAsset(spaceId, sourceId, file: File | Blob)` → POST .../sources/{sourceId}/assets
+  - body = `MultipartUploadBody extends FormData`（declare file: string）
+  - 设计：openapi-typescript 把 OpenAPI `format: binary` 近似为 `string`（generated requestBody = `{ file: string }`），FormData/File 直接传 body 会被 openapi-fetch 0.13 类型拒绝（tsc 实验 TS2741/TS2322 确认）
+  - 解决方案（零断言）：FormData 子类声明 `file: string` 属性——类型上精确满足 generated `{ file: string }`，运行时是真实 FormData（openapi-fetch instanceof 检测 → 透传 → 浏览器 boundary）
+  - 无 as any / @ts-ignore / unknown as / 手写假 multipart type（属性形状直接来自 generated contract）
+- `listSourceAssets(spaceId, sourceId)` → GET（generated typed data，无 storageKey 暴露——SourceAssetResponse schema 本身不含）
+- `getSourceAsset(spaceId, sourceId, assetId)` → GET
+- 响应类型由 openapi-fetch 从 operations 推导；未手写 SourceAssetResponse
+
+### FILES
+
+- 修改：packages/api-client/src/client.ts（删全局 Content-Type + MultipartUploadBody + 3 wrapper）
+- 未修改：src/index.ts（保持 createApiClient/ApiClient/TokenProvider 导出模式）；generated api.d.ts/openapi.json（用户 regenerate 产物）；任何 backend 代码 / migration
+- 修改：docs/current-task.md、docs/development-log.md、docs/development-plan.md
+
+### STATIC EVIDENCE
+
+- `tsc --noEmit`（项目 tsconfig）：零错误（JSON wrapper 未破坏 + multipart 类型成立）
+- client.ts 无 as any / : any / <any> / @ts-ignore / @ts-nocheck / unknown as（grep 仅命中注释）
+- 无手写 interface / type 对象冒充 generated（request 类型全部 components['schemas'] / paths 推导）
+- multipart 不手工设置 Content-Type（代码中无 Content-Type 字样，仅注释说明）
+- generated 文件 mtime 为用户 regenerate 时间，本轮无编辑
+- git diff --check clean
+
+### DECISIONS
+
+- 全局 Content-Type 删除后 JSON 请求由 openapi-fetch 自动处理（其运行时显式 `Content-Type: application/json` for non-FormData body）
+- multipart 用 FormData 子类而非 bodySerializer（更直接：body 本身就是 FormData，且无需二次转换）
+- file 参数类型 `File | Blob`（DOM lib 下浏览器/Electron renderer 可直接传 File）
+
+### DEFERRED / 剩余
+
+- 用户最终 `npm run typecheck`（wrapper 加入后）
+- 用户 Git closeout
+- BUSINESS-005 范围待定（不擅自开始）
+
+### NEXT
+
+用户命令：`cd D:\AIProject\packages\api-client` → `npm run typecheck` → Git closeout。BUSINESS-004 状态：BACKEND RUNTIME VERIFIED / SHARED CLIENT IMPLEMENTED / AWAITING FINAL USER TYPECHECK（不标 COMPLETE）。
+
+## 2026-09-06 BUSINESS-004 Final Runtime Closeout
+
+### WHAT
+
+BUSINESS-004 RAW SourceAsset Upload 全部 runtime evidence 齐备（用户真实运行），正式收口。
+
+### RUNTIME EVIDENCE（全部用户真实运行）
+
+- focused runtime 第一次运行发现 LocalStorageService traversal validation 缺口（`2026/09/../../secret.txt` normalize 后仍在 root 内，单纯 startsWith(root) 不足以拒绝）→ RUNTIME-FIX-01 修复：lexical traversal validation（双 separator segment 检查 + absolute/drive 拒绝）为第一层 + normalized root containment 保留为第二层
+- Focused Maven（RUNTIME-FIX-01 后）：**Tests run: 41, Failures: 0, Errors: 0, Skipped: 0, BUILD SUCCESS**
+- Full clean Maven：**Tests run: 138, Failures: 0, Errors: 0, Skipped: 0, BUILD SUCCESS**
+- Live OpenAPI：`npm run api:generate` PASS（generated api.d.ts/openapi.json 含 SourceAsset API）
+- Shared SourceAsset multipart client：已实现（uploadSourceAsset / listSourceAssets / getSourceAsset；MultipartUploadBody 零断言桥接 generated binary 类型；全局 Content-Type 已移除，multipart boundary 由 fetch 自生成）
+- Final `npm run typecheck`（wrapper 加入后）：**PASS，无报错**
+
+### 结论
+
+BUSINESS-004 = **COMPLETE**
+
+```text
+SPIKE-001~005                    COMPLETE
+BUSINESS-001 LearningSpace       COMPLETE (user runtime verified)
+BUSINESS-002 Source              COMPLETE (user runtime verified)
+Shared OpenAPI TS Client         COMPLETE (user runtime verified)
+BUSINESS-003 Knowledge Catalog   COMPLETE (user runtime verified)
+BUSINESS-004 SourceAsset Upload  COMPLETE (user runtime verified)
+BUSINESS-005 IngestionJob        NOT STARTED
+FE-001 Desktop                   NOT STARTED
+```
+
+### NEXT
+
+用户 Git closeout（git add / commit / push）。下一阶段：前端 FE-001 Desktop；后端 BUSINESS-005（IngestionJob + ZIP Safety）可在并行中开始（均不擅自开始，等用户指令）。
+
+## 2026-09-06 02:50 BUSINESS-005 checkpoint (AUTORUN-4H-001)
+
+### WHAT
+
+BUSINESS-005 IngestionJob + ZIP Safety Foundation 静态实现完成（AI 不运行 Maven → AWAITING USER RUNTIME VERIFICATION）。
+
+### WHY
+
+runbook Target A：ingestion 依赖链第一环。V1 最小生命周期 + 可复用 ZIP 安全检查，为 BUSINESS-006 TXT/MD 解析提供 job 载体。
+
+### FILES
+
+- 新增 V009__create_ingestion_job.sql（FK×3 无 CASCADE / idx×3 / utf8mb4 / 15 列含 asset_id NULL FK→source_asset）
+- 新增 ingestion/zip/ 5 类（ZipSafetyLimits / ZipViolation / ZipEntryInfo / ZipInspectionResult / ZipArchiveInspector）
+- 新增 ingestion/job/ 7 类（entity / mapper / service / IngestionErrorCode / controller / dto×2）
+- 修改 application.yml（aistudy.ingestion.zip.* env-overridable：10000 entries / 4GB entry / 16GB total / 200:1 / reject-encrypted）
+- 新增 tests：ZipArchiveInspectorTest 16 / IngestionJobIntegrationTest 21 / IngestionJobOpenApiContractTest 8
+- 修改 FlywayMigrationIntegrationTest（V009：fresh=9 / upgrade=8 / second=0 / history 9 / 列序-3 索引-FK×3-charset 断言）
+- 修改 11 个旧 test-profile context（+@MockitoBean IngestionJobMapper，脚本批量 + 落盘验证）
+- docs：current-task.md / development-log.md / development-plan.md
+
+### DB
+
+V009 ingestion_job：id, space_id, source_id, asset_id NULL, status VARCHAR(32), stage VARCHAR(32), progress_percent INT DEFAULT 0, started_at/finished_at DATETIME(6) NULL, retry_count INT DEFAULT 0, error_code VARCHAR(64) NULL, error_message VARCHAR(1000) NULL, created_by_user_id VARCHAR(255), created_at/updated_at DATETIME(6)。
+
+### API
+
+- POST /spaces/{spaceId}/sources/{sourceId}/ingestion-jobs {assetId} → 201（ZIP asset 同步 safety gate：合法→PENDING；非法→FAILED ZIP_SAFETY_VIOLATION；非 ZIP→PENDING）
+- GET /spaces/{spaceId}/sources/{sourceId}/ingestion-jobs → 200 newest first
+- GET /spaces/{spaceId}/ingestion-jobs/{jobId} → 200/404（space-scoped）
+- POST /spaces/{spaceId}/ingestion-jobs/{jobId}/retry → 200/404/409（仅 FAILED→PENDING，retryCount++）
+
+### SECURITY
+
+create 先 source+asset 四条件 owner 校验（SourceService.getMine + SourceAssetService.getMine）→ 404 且零写入；读 owner-scoped SQL JOIN；error_message safe（≤1000，无 stack trace/绝对路径）；CSRF SecurityConfig 零改动；无 unscoped selectById 业务读。
+
+### TESTS
+
+- Zip 纯单元 16：traversal（/ 与 \ 双 separator）/ rooted / drive / blank / entry 数 / 单 entry 大小 / 总大小 / 压缩比炸弹 / 加密（GP flag patch，reject 开与关）/ corrupt / truncated / 边界相等合法 / 合法嵌套 manifest
+- Integration 21（flyway-it 真实 MySQL）：create 三种 asset 结局 / DB 行 / 无 stack trace / 400 / 401 / IDOR 矩阵（user/space/source/asset/job）/ get / list 顺序 / retry 三态
+- OpenAPI 8：paths / requestBody required assetId / typed $ref×3 / 无 stackTrace 字段 / bearerAuth×4
+- Flyway：V009 全断言
+
+### STATIC EVIDENCE
+
+git diff --check clean；字节级 'pass' 损坏扫描无实际损坏；Javadoc hazard 扫描 clean；括号配平粗检无失衡。
+
+### RUNTIME EVIDENCE MISSING
+
+BUSINESS-005 = NONE（AI 不运行 Maven）。用户验证命令见 Final Report（focused: ZipArchiveInspectorTest,IngestionJobIntegrationTest,IngestionJobOpenApiContractTest,FlywayMigrationIntegrationTest；full: mvnw clean test）。
+
+### DECISIONS
+
+- 字段以 data-model §7.1 为准 + runbook 明确要求的 asset_id；sourceDocumentId→table source
+- status=PENDING/RUNNING/SUCCEEDED/FAILED 最小生命周期；stage 用 content-ingestion §6 全表；PARTIAL_FAILED 推迟
+- ZIP 检查=中央目录零抽取（runbook 5.4）；伪造 size 残余风险记录并随 extraction 解决
+- retry 用 mapper 显式 NULL @Update（updateById 跳过 null 字段会残留旧值）
+- ZIP limits @Value + env override（项目既有约定，不引 @ConfigurationProperties）
+
+### DEFERRED
+
+ZIP extraction / manifest 持久化 / IngestionIssue / PARTIAL_FAILED / 异步 worker；PDF/OCR/image；Question/Practice/Exam（窗口禁止）。
+
+### RISKS
+
+Flyway 11.7.2 vs MySQL 8.4 WARN（既有）；V009 FK 顺序依赖；中央目录 size 伪造；ZIP 检查在 create 事务内同步执行（大包 HTTP 延迟，V1 接受）。
+
+### NEXT
+
+BUSINESS-006 Content Ingestion Foundation（TXT/Markdown）→ BUSINESS-007（仅当 ContentBlock 真实存在）→ Final Static Closeout。
+
+## 2026-09-06 03:02 BUSINESS-006 checkpoint (AUTORUN-4H-001)
+
+### WHAT
+
+BUSINESS-006 Content Ingestion Foundation（TXT/Markdown）静态实现完成（AI 不运行 Maven → AWAITING USER RUNTIME VERIFICATION）。
+
+### WHY
+
+runbook Target B：为安全确定性 V1 输入（TXT/MD）落地摄取管线：job 生命周期驱动 + 无 AI 确定性解析 + SourcePage/ContentBlock 持久化 + 溯源元数据，为 BUSINESS-007 provenance 提供前置。
+
+### FILES
+
+- 新增 V010__create_source_page.sql / V011__create_content_block.sql（FK 无 CASCADE / idx×2 每表 / utf8mb4；content_block.source_outline_node_id 预留列无 FK，SourceOutlineNode 表推迟）
+- 新增 ingestion/extract/：TxtMarkdownContentParser（纯 Java）/ IngestionParseException / ContentExtractionService
+- 新增 source/page/ 与 source/content/ 各 5 类（entity/mapper/service/controller/dto）
+- 修改 IngestionJobService（格式派发 + 文本管线）、IngestionJobMapper（countActiveOrSucceeded）、IngestionErrorCode（+ENCODING_ERROR/DOCUMENT_TOO_LARGE/UNSUPPORTED_FORMAT）、application.yml（aistudy.ingestion.text.max-document-bytes 默认 64MB）
+- 新增 tests：TxtMarkdownContentParserTest 18 / ContentIngestionIntegrationTest 20 / SourceContentOpenApiContractTest 7
+- 修改 FlywayMigrationIntegrationTest（V010/V011：fresh=11/upgrade=10/second=0/history 11/列-索引-FK×3-charset）；IngestionJobIntegrationTest 4 处语义更新；11 个旧 context +@MockitoBean SourcePageMapper+ContentBlockMapper
+
+### DB
+
+V010 source_page：id/space_id/source_id/source_asset_id NULL/source_page_number NULL/page_order/printed_page_number NULL/page_type/order_confidence NULL/order_status/extracted_text TEXT NULL/extraction_confidence NULL/created_at/updated_at；idx (space_id,source_id,page_order,id)+(space_id,source_asset_id)；FK×3。
+V011 content_block：id/space_id/source_id/source_page_id NULL/source_outline_node_id NULL 无 FK/block_type/sort_order/normalized_text TEXT NOT NULL/structured_data_json TEXT NULL/locator_json TEXT NULL/created_at/updated_at；idx (space_id,source_id,sort_order,id)+(space_id,source_page_id,sort_order,id)；FK×3。
+
+### API
+
+- create 升级：TXT/MD → 201 SUCCEEDED（内容错误→FAILED+errorCode）；ZIP → 201 PENDING/FAILED（不变）；PDF/image → 422 INGESTION_NOT_READY 零 job；asset 已有 PENDING/RUNNING/SUCCEEDED job → 409
+- GET /spaces/{spaceId}/sources/{sourceId}/pages → 200（page_order ASC）
+- GET .../content-blocks?pageId= → 200（sort_order ASC；pageId 过滤器，跨 source 空列表）
+- retry 同派发（FAILED→PENDING→重跑管线）
+
+### SECURITY
+
+create/retry source+asset 四条件 owner 校验先行；pages/blocks owner-scoped JOIN；422/409 不产生行；error_message safe ≤1000；CSRF 零改动；无 unscoped 读。
+
+### TESTS
+
+- Parser 单元 18（编码/归一/分段/拆分/全部 MD 规则/setext 不解释/非法 UTF-8）
+- Integration 20（真实 MySQL + upload→create→read 全链路）：成功精确断言 / 失败零残留 / 422×2 / 409×2 语义 / retry / IDOR 矩阵 / 列表与过滤 / locator 行号
+- OpenAPI 7；Flyway V010/V011 全断言；BUSINESS-005 测试语义同步（txt SUCCEEDED、生命周期行用 ZIP、list 双 asset、get SUCCEEDED）
+
+### STATIC EVIDENCE
+
+git diff --check clean；'pass' 损坏字节级扫描 0；Javadoc hazard / 括号配平 clean。
+
+### RUNTIME EVIDENCE MISSING
+
+BUSINESS-005/006 = NONE（AI 不运行 Maven）。用户验证命令见 Final Report。
+
+### DECISIONS
+
+- 1 text asset = 1 page（BODY/AUTO/order 1）+ 有序 blocks（locator 1-based 行号）；outline 表推迟，列预留
+- 严格 UTF-8 + BOM 剥离 + CRLF 归一（仅 EXTRACTED）；GBK 推迟；非法 → FAILED ENCODING_ERROR actionable
+- 确定性 MD 子集（ATX/围栏含 info/列表/pipe 表格）；setext 不解释；60KB 块按行边界拆分零截断
+- 同步执行（快速确定性；异步/MQ 推迟）；先解析后单事务落库 → FAILED 零内容残留
+- 格式门禁 422 INGESTION_NOT_READY（api-guidelines 错误码）；重复 409 防静默重复内容
+- 有界读取 64MB 默认；解析错误→FAILED job，环境 IO→请求失败回滚（不伪造 FAILED）
+
+### DEFERRED
+
+SourceOutlineNode / ZIP extraction / manifest / IngestionIssue / PARTIAL_FAILED / 异步 worker；GBK/PDF/OCR/image；MD setext/inline/嵌套/表格结构化；Question/Practice/Exam（窗口禁止）。
+
+### RISKS
+
+Flyway 11.7.2 vs MySQL 8.4 WARN（既有）；FK 顺序依赖 V005/V008/V009；cleanup 深度新增 content_block/source_page；create 同步文本管线延迟（有界）；TEXT 64KB 由 60KB 块拆分兜底。
+
+### NEXT
+
+BUSINESS-007 KnowledgePoint Provenance（前置 ContentBlock 已满足）→ Final Static Closeout → Final Report。
+
+## 2026-09-06 03:08 BUSINESS-007 checkpoint (AUTORUN-4H-001)
+
+### WHAT
+
+BUSINESS-007 KnowledgePoint Provenance 静态实现完成（AI 不运行 Maven → AWAITING USER RUNTIME VERIFICATION）。前置满足：ContentBlock（V011）真实存在。
+
+### WHY
+
+runbook Target C：provenance 基础设施（R-KNOW-002 / ADR-039 / data-model §8.2）：KnowledgePoint ↔ ContentBlock M:N 关联 + 同 space invariant 强制，为 AI 提取 slice 提供链接通道。无 AI 调用（§7.3）。
+
+### FILES
+
+- 新增 V012__create_knowledge_point_source.sql（显式 space_id / uk 成对唯一 / idx×2 / FK×3 无 CASCADE / utf8mb4）
+- 新增 knowledge/source/：entity / mapper（insert + 双 JOIN owner-scoped 读 + dedup 预查 <script> foreach）/ service / controller / dto×2
+- 修改 ContentBlockMapper（selectByIdSpaceOwner）+ ContentBlockService（getMine）
+- 新增 tests：KnowledgePointProvenanceIntegrationTest 15 / KnowledgePointProvenanceOpenApiContractTest 6
+- 修改 FlywayMigrationIntegrationTest（V012：fresh=12/upgrade=11/second=0/history 12/列-uk-idx×2-FK×3-charset）；11 个旧 context +@MockitoBean KnowledgePointSourceMapper
+- docs：current-task.md / development-log.md / development-plan.md
+
+### DB
+
+V012 knowledge_point_source：id/space_id/knowledge_point_id/content_block_id/relation_type NULL/relevance_score NULL/created_by_user_id/created_at；uk(knowledge_point_id,content_block_id)；idx(space_id,knowledge_point_id,id)+(space_id,content_block_id,id)；FK×3 RESTRICT。
+
+### API
+
+- POST /spaces/{spaceId}/knowledge-points/{knowledgePointId}/sources {contentBlockIds[]} → 201 该 point 全量当前链接；任一无效 → 404 零插入；空 → 400
+- GET 同路径 → 200 链接列表（id ASC）/ 404
+- 幂等 add：已链接对 no-op；originType 不变（AI 提取 slice 创建时带链接）
+
+### SECURITY
+
+同 space invariant 双层：point getMine（deleted_at IS NULL）+ 每 block getMine（id+space+owner，source↔space JOIN）先行，任一 null → 404 零写入；读 JOIN（point+block+learning_space）owner-scoped；CSRF 零改动；无 unscoped 读。
+
+### TESTS
+
+- Integration 15（真实 MySQL 全链路 upload→ingest→point→link）：同 space 成功+DB 断言 / 双 source 同 space / 幂等 / 批量一坏全拒 / 跨 space block / 跨 space point / 非 owner point / 非 owner block / 不存在 point / 软删除 point / 空 400 / 匿名 401 / list / 跨 user list 404 / 跨 space list 404
+- OpenAPI 6；Flyway V012 全断言；11 旧 context 兼容
+
+### STATIC EVIDENCE
+
+git diff --check clean；'pass' 损坏 / Javadoc hazard / 括号配平 clean。
+
+### RUNTIME EVIDENCE MISSING
+
+BUSINESS-005/006/007 = NONE（AI 不运行 Maven）。用户验证命令见 Final Report。
+
+### DECISIONS
+
+- 显式 space_id + 双层强制（服务校验 + JOIN 读）；批量幂等 add；uk 成对唯一
+- relation_type/relevance_score V1 恒 NULL（列预留）；不改变 originType；软删除 point 不可链接
+- 无 unlink/删除 API（V1 最小面）；无 AI 调用
+
+### DEFERRED
+
+originType SOURCE_DERIVED/AI_DERIVED 创建流程；relation_type/relevance_score 生产者；unlink；Question/Practice/Exam（窗口禁止）。
+
+### RISKS
+
+Flyway 11.7.2 vs MySQL 8.4 WARN（既有）；V012 FK 依赖 V007/V011；cleanup 深度新增 knowledge_point_source；批量 N 次 getMine（V1 接受）；大 batch 上限未设。
+
+### NEXT
+
+Final Static Closeout（runbook §11）→ Final Report（runbook §13）→ 停止（不开始 Question/Practice/Exam）。
+
+## 2026-09-06 03:10 AUTORUN-4H-001 Final Static Closeout
+
+### WHAT
+
+无人值守窗口收口：BUSINESS-005/006/007 全部静态实现 + 文档 + 关闭检查（runbook §11）。AI 不运行 Maven → 三个目标全部 IMPLEMENTED — AWAITING USER RUNTIME VERIFICATION。
+
+### CLOSEOUT CHECKS（§11 verify 列表，全部通过）
+
+- 无前端改动（packages/ 3 个文件为会话开始前已存在的 BUSINESS-004 closeout 变更：client.ts wrapper + api:generate 产物，本次会话零写入）
+- 无 git 写操作（仅 status/diff/log）
+- 无 generated TS 手工编辑
+- 无重复领域模型（IngestionJob/SourcePage/ContentBlock/KnowledgePointSource/ZipArchiveInspector/ContentExtractionService 各 1 份）
+- 无全局 CSRF disable / 无 permitAll（SpikeSecurityConfig 零改动；6 个命中均为注释性禁止声明）
+- 无 H2（pom.xml 零改动）；无 Redis/MQ/ES/Graph DB
+- 无跨 space 无界读（新 mapper 全部 owner-scoped JOIN；业务服务 0 处 unscoped selectById）
+- 无伪造 runtime PASS（全部 AWAITING USER RUNTIME VERIFICATION）
+- 无 Question/Practice/Exam 代码（扫描 0 命中）
+
+### TOTALS
+
+- Migrations：V009 ingestion_job / V010 source_page / V011 content_block / V012 knowledge_point_source（4 个新 migration）
+- 新生产 Java 文件：31（ingestion.zip×5 + ingestion.job×7 + ingestion.extract×3 + source.page×5 + source.content×5 + knowledge.source×6）；修改：ContentBlockMapper、ContentBlockService、IngestionJobService、IngestionJobMapper、IngestionErrorCode、application.yml
+- 新测试：111 个 @Test（8 个新类：Zip 16 / Job IT 21 / Job OpenAPI 8 / Parser 18 / Content IT 20 / Content OpenAPI 7 / Provenance IT 15 / Provenance OpenAPI 6）
+- 旧兼容：11 个 test-profile context 累计 +@MockitoBean（IngestionJobMapper + SourcePageMapper + ContentBlockMapper + KnowledgePointSourceMapper，脚本批量 + 字节级落盘验证）
+- FlywayMigrationIntegrationTest：fresh=12 / upgrade=11 / second=0 / history 12 / V009~V012 表断言
+- git diff --check：clean（多次）；git status：39 项（含 21 个跟踪修改 + 18 个未跟踪新增）
+
+### NEXT（用户验证命令）
+
+focused（先确保 Docker MySQL + env 就绪）：
+
+```
+cd D:\AIProject\server
+$env:FLYWAY_DB_URL="jdbc:mysql://127.0.0.1:3306/aistudy_flyway_test?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false"
+$env:FLYWAY_DB_USERNAME="aistudy_spike"
+$env:FLYWAY_DB_PASSWORD="devspass2026"
+.\mvnw.cmd -Dtest="ZipArchiveInspectorTest,TxtMarkdownContentParserTest,IngestionJobIntegrationTest,ContentIngestionIntegrationTest,KnowledgePointProvenanceIntegrationTest,IngestionJobOpenApiContractTest,SourceContentOpenApiContractTest,KnowledgePointProvenanceOpenApiContractTest,FlywayMigrationIntegrationTest" test
+```
+
+然后 full：`.\\mvnw.cmd clean test`。
+
+FINAL STATE：IMPLEMENTED（BUSINESS-005/006/007）— AWAITING USER RUNTIME VERIFICATION
+
+## 2026-09-06 11:12 AUTORUN-4H-PRE-RUNTIME-FIX-01 checkpoint
+
+### WHAT
+
+外部 reviewer 源码审查确认 3 个问题，本轮修复（BUSINESS-005/006/007 不重新实现；只处理已确认问题）。AI 不运行 Maven → 状态保持 IMPLEMENTED — AWAITING USER RUNTIME VERIFICATION。
+
+### FIX 1 — ZipEntry.isEncrypted() 不存在（compile blocker）
+
+- 事实：JDK 21 java.util.zip.ZipEntry 无 isEncrypted()；原 ZipArchiveInspector 两处调用（entry 检查 + ZipEntryInfo 构造）为确定性编译失败
+- 修复：删除全部调用；删除 ZipEntryInfo.encrypted 字段（产品/API 不需要）；删除 ZipViolationType.ENCRYPTED_ENTRY；删除 ZipSafetyLimits.rejectEncryptedEntries 与 application.yml aistudy.ingestion.zip.reject-encrypted（无真实实现能力的开关，V1 明确 encrypted ZIP 永远拒绝）
+- 加密检测（pure-JDK）：ZipFile 中央目录遍历不暴露加密；JDK 在打开 entry 数据流时抛 ZipException（"invalid CEN header (encrypted entry)"）→ inspector 对每个非目录 entry 做 open+close 探针（不读任何数据、不解压），ZipException 汇入统一安全 INVALID_ARCHIVE verdict；外部 job 语义仍 ZIP_SAFETY_VIOLATION
+- 测试：删除 encryptedEntryRejected / encryptedEntryAcceptedWhenRejectionDisabled，新增 encryptedArchiveProducesSafeInvalidVerdict（GP flag patch fixture；valid=false + INVALID_ARCHIVE + message 非空 + 无 temp path + 无 stack trace）；ZipSafetyLimits 构造全部改 4 参数
+- 零新增依赖：无 commons-compress/Tika、无 JDK internal API、无手工 ZIP 解析、无反射
+
+### FIX 2 — SourcePage.extracted_text TEXT 与 64MB 文档上限冲突
+
+- 事实：V010 extracted_text TEXT（~64KB bytes）却写入整个 doc.fullText()（上限 64MB）；block splitting 不保护 page 列 → 数据容量契约错误
+- 修复：V010 extracted_text TEXT → LONGTEXT（64MB 信封全覆盖；MEDIUMTEXT 16MB 仍不够）；V010 注释同步修正；FlywayMigrationIntegrationTest 新增 DATA_TYPE 断言（extracted_text='longtext'，page_order 仍 int）；V001-V008 旧 migration 未动
+- 文档：current-task/development-log 中 "TEXT (up to 64KB)" 描述修正
+
+### FIX 3 — ContentBlock 按 UTF-8 bytes 真正 bounded
+
+- 事实：normalized_text TEXT 是 byte capacity；原 MAX_BLOCK_CHARS=60000 是 char 单位（60000 中文=180000 bytes 超限）；且漏口 A（单行超限不切，因仅 j>chunkStart 时切）、漏口 B（CODE/HEADING 路径不经过 bounded chunking）
+- 修复：TxtMarkdownContentParser 重写统一发射器：
+  - MAX_BLOCK_UTF8_BYTES = 60_000（UTF-8 BYTES，非 char）；不变式：所有 ParsedBlock.text UTF-8 bytes <= 60000
+  - 全部 block type（HEADING/PARAGRAPH/LIST/TABLE/CODE）走同一 emitBounded：按行边界分组（\n 计入 byte 预算）
+  - 单行单独超限 → 行内按 Unicode code point 边界拆分（不截断、不丢字符、不切 surrogate pair；行内 chunk 的 lineStart==lineEnd==原行号，provenance 仍正确定位）
+  - 修复分组边界漏洞：组内首行单独超限（如最后一行）也必须行内拆分，绝不放行整行超限块
+  - utf8Len 为 surrogate-aware 无分配字节计数；不用 String.length() 冒充 byte size
+- 测试增强（TxtMarkdownContentParserTest，18→24）：
+  - (6) 改为 MAX_BLOCK_UTF8_BYTES + 每块 byte 断言 + 无损重组
+  - (19) ASCII 多行超限拆分无损（25KB×3 行 → 2 块，全部 <=60000 bytes）
+  - (20) 中文（20000 中=60000 bytes 边界 + 60003 超限）→ 3 块全 bounded + 无损
+  - (21) emoji U+1F600×15001（60004 bytes）→ surrogate-safe 拆分 + UTF-8 roundtrip + 不 cut pair
+  - (22) 单行 70000 → 2 块（60000+10000），lineStart==lineEnd==1
+  - (23) 超长 fenced CODE → 2 个 bounded CODE 块无损
+  - (24) 超长 HEADING → 2 个 bounded HEADING 块（marker 剥离、无损）
+  - 全部断言 UTF-8 bytes（非 String.length）
+- 逻辑自检：独立 javac 编译 TxtMarkdownContentParser + 8 个边界场景 main（非 Maven、非项目测试套件）：PASS 8/8（chinese-3-blocks / single-line-split / overlong-last-line / emoji-surrogate-safe / overlong-fenced-code / overlong-heading / overlong-list / overlong-table）——自检后临时目录已删除
+- 新集成测试 ContentLargeDocumentIntegrationTest（独立类，不动 1KB limit 类；生产默认 64MB limit）4 项，真实 MySQL 证明：~101KB ASCII / 75KB 中文 / 100KB 单行 / 80KB emoji → SUCCEEDED + extracted_text LONGTEXT 全量持久化 + 每 block UTF-8 bytes <=60000 + 按 parser 规则重组无损 + surrogate roundtrip
+
+### FILES
+
+- 修改：ingestion/zip/{ZipArchiveInspector,ZipSafetyLimits,ZipViolation,ZipEntryInfo}.java；ingestion/job/service/IngestionJobService.java（构造参数去 rejectEncrypted）；application.yml（去 reject-encrypted + 注释）；ingestion/extract/TxtMarkdownContentParser.java（重写发射器）；V010__create_source_page.sql（LONGTEXT）；FlywayMigrationIntegrationTest（DATA_TYPE 断言×2）
+- 修改（tests）：ZipArchiveInspectorTest（15 项：-2 加密旧测 +1 安全 verdict 新测；4 参数 limits）；TxtMarkdownContentParserTest（24 项：+6 增强/新增）
+- 新增（tests）：ContentLargeDocumentIntegrationTest（4 项）
+- docs：current-task.md、development-log.md
+
+### STATIC EVIDENCE
+
+- git diff --check：clean
+- grep isEncrypted()：production 0 命中（含注释改写，严格 grep 通过）
+- grep rejectEncrypted：production 0 命中
+- 'pass' 损坏 / Javadoc hazard / 括号配平：clean
+- 无新依赖（pom 未动）；无 JDK internal API；无手工 ZIP 解压；无 Question/Practice/Exam；无 git write
+- 测试总数：9 个新类 120 个 @Test（15+21+8+24+20+7+15+6+4；closeout 时的 111 为修复前基线）
+
+### RUNTIME EVIDENCE MISSING
+
+BUSINESS-005/006/007 = NONE（AI 不运行 Maven；parser 逻辑自检为独立 javac 检查，不构成项目 runtime PASS）。等用户 focused + full clean test。
+
+### NEXT
+
+用户验证命令（focused 增加新测试类）：见 Final Report。之后 full clean test → Git closeout（用户执行）。
+
+## 2026-09-06 AUTORUN-4H-RUNTIME-FIX-01 checkpoint
+
+### WHAT
+
+用户真实 Maven focused attempt #1：testCompile 阶段编译失败，测试未执行。修复 ZipArchiveInspectorTest 一处未处理的 checked IOException。
+
+### RUNTIME EVIDENCE（用户真实运行）
+
+- Maven production compile：PASS — 79 source files compiled
+- Maven testCompile：FAIL
+  - ERROR: ZipArchiveInspectorTest.java:[229,44] unreported exception java.io.IOException; must be caught or declared to be thrown
+- BUILD FAILURE
+- 本轮测试实际没有开始执行 —— 不记录任何 focused test PASS/FAIL 数量
+
+### ROOT CAUSE
+
+- ZipArchiveInspectorTest.encryptedArchiveProducesSafeInvalidVerdict()（PRE-RUNTIME-FIX-01 新增的加密 ZIP 安全 verdict 测试）声明为 `void ... ()` 无 throws
+- 方法体 line 229 `byte[] zip = markEncrypted(zipBytes(entries));` 调用 zipBytes(...)（签名 `private static byte[] zipBytes(Map<String, byte[]> entries) throws IOException`，line 290）→ checked IOException 未报告 → [229,44] 编译错误
+- 属于 test fixture 的 checked-exception 声明遗漏，非 production 问题
+
+### FIX（最小，仅测试方法签名）
+
+- `void encryptedArchiveProducesSafeInvalidVerdict()` → `void encryptedArchiveProducesSafeInvalidVerdict() throws Exception`
+- 与本类其他 14 个 @Test（全部 `throws Exception`）风格一致
+- 未删除测试、未弱化安全断言（valid=false / INVALID_ARCHIVE / message 非空 / 无 temp path / 无 stack trace 全部保留）
+
+### CHECKED-EXCEPTION AUDIT（该测试类）
+
+- 15 @Test = 15 throws Exception，全部有传播
+- zipBytes：throws IOException ✓（调用方均传播）；markEncrypted：纯 byte 操作无 IO 无需 throws ✓
+- 类内无 Files.* 调用、无 temp-file helper；ZipOutputStream 仅在 zipBytes 内 ✓
+- ByteArrayInputStream 非 checked ✓
+
+### PRODUCTION UNTOUCHED
+
+ZipArchiveInspector.java / ZipSafetyLimits.java / V009-V012 / TxtMarkdownContentParser.java / ContentExtractionService.java / 业务 API / OpenAPI / Flyway schema 全部未修改。未重新引入 ZipEntry.isEncrypted()。
+
+### STATIC EVIDENCE
+
+git diff --check：clean（修复后）。
+
+### NEXT
+
+用户重跑 focused tests → full clean test。状态保持 BUSINESS-005/006/007 IMPLEMENTED — AWAITING USER RUNTIME RE-VERIFICATION。
+
+## 2026-09-06 AUTORUN-4H-RUNTIME-FIX-02 checkpoint
+
+### WHAT
+
+用户真实 focused attempt #2（BUSINESS-005/006/007）：Tests run: 123 / Failures: 10 / Errors: 35 / Skipped: 0 / BUILD FAILURE。按 root cause 聚类（A-H）修复，不逐 failure 修。AI 不运行 Maven → 状态保持 IMPLEMENTED — AWAITING USER RUNTIME RE-VERIFICATION。
+
+### RUNTIME EVIDENCE（用户真实运行 attempt #2）
+
+Tests run: 123, Failures: 10, Errors: 35, Skipped: 0, BUILD FAILURE
+
+### ROOT CAUSE GROUPS + FIXES
+
+A. **integration cleanup FK 顺序（20 Errors，单 root cause）** — IngestionJobIntegrationTest cleanup 缺 content_block/source_page：该类的 TXT job 测试产生 source_page+content_block 行（引用 source_asset），旧 cleanup 直接 DELETE source_asset → fk_source_page_asset 拒绝 → 首个失败后 @AfterEach 连锁 20 Error。修复：cleanup 补 knowledge_point_source→content_block→source_page 在前（与 ContentIngestion/ContentLarge/Provenance IT 一致）。审查全部 integration cleanup：LearningSpace/Source/KnowledgeCatalog/SourceAssetUpload IT 不产生新表行，无需改动。
+
+B. **OpenAPI test context 缺 mapper mock（15 Errors，2 个真实 root）** — surefire Caused by：
+   - IngestionJobOpenApiContractTest：NoSuchBeanDefinition 'com.aistudy.server.source.page.mapper.SourcePageMapper'（bean contentExtractionService 构造失败）→ 缺 SourcePageMapper/ContentBlockMapper/KnowledgePointSourceMapper（1 个 context 失败 + 7 个 threshold 连锁）
+   - SourceContentOpenApiContractTest：NoSuchBeanDefinition 'com.aistudy.server.knowledge.source.mapper.KnowledgePointSourceMapper'（bean knowledgePointSourceController 构造失败）→ 缺 1 个（1 + 6 连锁）
+   - 修复：按 KnowledgePointProvenanceOpenApiContractTest 完整集合补 @MockitoBean（该 class 9 个全齐，此前 PASS）；未改 SpikeMybatisConfig / mapper scan / test profile / MySQL。
+
+C. **empty-upload 契约冲突（1 Failure）** — emptyDocumentSucceedsWithZeroBlocks 用 0-byte upload → 400（BUSINESS-004 契约，不修改 production）。改测试：whitespace-only fixture "   \n\n"（非 0 字节）→ 重命名 whitespaceOnlyDocumentSucceedsWithZeroBlocks，断言 page extracted_text = whitespace、0 blocks。
+
+D. **ContentLargeDocumentIntegrationTest ×4 全 404（1 个 fixture bug）** — helper ingestAndGetBlocks 内部重复 insertFixtureSpace（第 2 个 space），upload path 用新 spaceId + 旧 sourceId → SourceService.getMine null → 404。修复：helper 签名加 spaceId 参数、删除内部建 space；4 处调用传同一 spaceId；helper 内新增 scoping 一致性断言（source.space_id==path space、ls.owner_subject==token subject、asset.space_id/source_id==path）。404 anti-IDOR 契约未放宽。
+
+E. **parser locator bug（1）+ stale expectation（1）** —
+   - txtOversizedParagraphSplitsAtLineBoundary expected 1 actual 2（lineEnd）：真实 parser bug —— emitBounded 拆分后所有组都用整个内容范围的 locator（locStart..locEnd），而非组自身行范围 → 修复：拆分发生时每组 locator=组自身行范围（split 标志；未拆分单组保持调用方 locator，CODE fence-span 语义不变）
+   - mdMixedDocumentKeepsDeterministicOrder expected 2 actual 3（lineStart）：stale expectation —— "intro paragraph" 是 normalized 文本第 3 行（行1=标题、行2=空行），正确值 3（PRE-FIX 行为一致；空行计入行号规则未变）→ 修测试
+
+F. **ZIP 总字节数 stale（1）** — validNestedArchiveInspectsClean expected 8 actual 13：真实 totalUncompressedBytes = hello(5)+world(5)+cover(3)=13（目录 0）→ 修测试 8→13；production inspector 不动。
+
+G. **provenance fixture 只产 1 个 block（1）** — ownerListsProvenanceLinks 用 "one\ntwo" → 连续非空行=1 个 PARAGRAPH block → 1 link。修复：fixture 改 "one\n\ntwo"（空行分隔 → 2 blocks）+ 断言 ingestTextSource 返回 2 blockIds；TXT paragraph semantics 未改。
+
+H. **Flyway final history count stale（1）** — existingV001DatabaseUpgradesToLatestAndPreservesData line 1158 assertEquals(11, finalCount) 但注释已写 12 行：final history rows = 12（V001 + V002..V012 = 12）；migrationsExecuted=11 已正确（line 1020）→ 修断言 11→12；migration 历史未动。
+
+### SPRING CONTEXT MOCK AUDIT（全量重新扫描，非仅脚本报告）
+
+9 个 test-profile @SpringBootTest 全部 10 个 mapper/repo @MockitoBean 齐（AiStudyApplicationTests / 6 OpenAPI contract / SpikeHealthControllerTest / SpikeJwtTokenServiceTest / SpikePasswordEncoderTest / SpikeSecurityBoundaryTest / SpikeOpenApiContractTest）；flyway-it/it 真实 DB 类无需 mock（LearningSpaceVerticalSliceIntegrationTest / SpikeSpaceAuthorizationEndToEndIntegrationTest / SpikeRecordMapperIntegrationTest 等为真实 mapper bean）。
+
+### STATIC EVIDENCE
+
+git diff --check clean；39 项 git status；FOREIGN_KEY_CHECKS/TRUNCATE/CASCADE 仅注释声明；isEncrypted() production 0；无 H2/CSRF/permitAll 改动；无 Question/Practice/Exam；无 git write；V009-V012 未重写。
+
+### NEXT
+
+用户重跑 focused → full clean test。状态：BUSINESS-005/006/007 IMPLEMENTED — AWAITING USER RUNTIME RE-VERIFICATION。
+
+## ELECTRON-CORS-001-B Checkpoint（2026-09-06）
+
+- 目标：Spring Boot backend 为 Desktop 两个 renderer origin 提供显式标准 CORS（/api/**）
+- 实现：新 ServerCorsConfig.java（@Configuration；CorsConfigurationSource bean；registerCorsConfiguration("/api/**")；allowedOrigins 来自 aistudy.cors.allowed-origins，env AISTUDY_CORS_ALLOWED_ORIGINS 逗号分隔，安全默认 http://localhost:5173,app://aistudy，缺省不退化 *）；SpikeSecurityConfig + .cors(Customizer.withDefaults())（preflight 在认证前由 CORS 层响应；无 permitAll/csrf.disable 变化）；application.yml 加 cors 段
+- 方法集证据：全库 Controller 扫描 = 仅 GET/POST（+隐含 OPTIONS），无 PUT/PATCH/DELETE → allowedMethods GET,POST,OPTIONS
+- 契约细节：allowedHeaders Authorization/Content-Type/Accept（Spring case-insensitive 匹配浏览器 preflight authorization,content-type）；exposedHeaders 空；allowCredentials=false（Bearer 非 cookie）；maxAge 1h
+- 测试：新 CorsContractIntegrationTest 9 项全 PASS（A dev preflight 2xx+ACAO echo+methods+headers / B app://aistudy preflight / C evil 无 ACAO / D Origin:null 无 ACAO / E localhost:9999 无 ACAO / F anonymous GET app origin 401+ACAO / G dev origin 401+ACAO / H evil actual GET 403 无 ACAO（Spring CorsFilter "Invalid CORS request" 语义）/ I valid Bearer+Origin 200+ACAO）；SpikeSecurityBoundaryTest 10/10 保持（auth regression 无变化）
+- Full clean test（补全 DB_URL + FLYWAY_DB env，Windows mvnw.cmd）：**Tests run 267, Failures 2, Errors 0, Skipped 0**；2 Failures = IngestionJobIntegrationTest.ownerCanGetOwnJob:542（期望 200 得 404）与 SourceContentOpenApiContractTest.blocksGetDeclaresPageIdQueryParam:128（JSON path 参数顺序）——BUSINESS-005/006 既有遗留（两轮 full 稳定一致、与 CORS 改动零交集；未修，属 BUSINESS 分支，报告用户）
+- Errors 归因：首轮 2 Errors = SpikeRecordMapperIntegrationTest it profile 缺 DB_URL env（补 env 后 PASS 2/2）
+- Runtime probe：跳过（任务条件 full PASS 未满足；MockMvc 9 项已覆盖 CORS 契约）
+- 静态扫描：@CrossOrigin / allowedOrigins("*") / allowedOriginPatterns / csrf.disable / permitAll("/api/**") / 手拼 ACAO → 0 实际命中（仅注释提及）
+- 文件：+server/src/main/java/com/aistudy/server/spike/auth/ServerCorsConfig.java、+server/src/test/java/com/aistudy/server/spike/auth/CorsContractIntegrationTest.java；M SpikeSecurityConfig.java、M application.yml；docs/current-task.md、docs/development-log.md
+- git diff --check clean；未执行 git add/commit/push/reset/restore
+- 结论：ELECTRON-CORS-001-B PASS — READY FOR REAL ELECTRON/BACKEND INTEGRATION；Real authenticated Electron flow（有效 JWT）待 Integration C
+
+## 2026-09-06 AUTORUN-4H-RUNTIME-FIX-03 checkpoint
+
+### WHAT
+
+用户真实 focused attempt #3：Tests run: 123 / Failures: 2 / Errors: 0 / BUILD FAILURE。外部 reviewer 定位两个均为 TEST BUG；本轮只修测试，production 零修改。
+
+### RUNTIME EVIDENCE（用户真实运行 attempt #3）
+
+Tests run: 123, Failures: 2, Errors: 0, Skipped: 0, BUILD FAILURE
+
+### ROOT CAUSE A — IngestionJob detail 测试请求了错误 URL
+
+- JOB_BASE = "/api/v1/spaces/{spaceId}/ingestion-jobs"（仅 {spaceId} 一个 placeholder）
+- ownerCanGetOwnJob / otherUserCannotGetMyJob / jobFromAnotherSpaceCannotBeRead 均用 get(JOB_BASE, spaceId, jobId) → 多余 jobId vararg 被 UriTemplate 忽略 → 实际请求 LIST route 而非 detail route → owner 测试期望 $.id 却收到 array → failure；两个 404 测试"通过"是因为 LIST route 的 404（source 不存在），属于 false positive，未真正经过 detail endpoint
+- 修复：新增 JOB_DETAIL = JOB_BASE + "/{jobId}"；3 个测试全部改用 get(JOB_DETAIL, spaceId, jobId) → 真正经过 Controller → IngestionJobService.getMine → IngestionJobMapper.selectByIdSpaceOwner 验证 owner/space isolation
+- retry 用 JOB_BASE + "/{jobId}/retry" 本身正确，保持不动
+- production Controller（GET /api/v1/spaces/{spaceId}/ingestion-jobs/{jobId} 已存在）/ Service / Mapper 零修改
+
+### ROOT CAUSE B — OpenAPI 参数测试依赖数组顺序
+
+- blocksGetDeclaresPageIdQueryParam 用 parameters[0] 断言 pageId → 实际 parameters[0] 是 spaceId → failure
+- OpenAPI parameters 数组顺序（spaceId/sourceId/pageId）不是稳定 contract；禁止改 Controller 参数排序迎合测试
+- 修复：改为按 name 匹配 — parameters[*].name hasItem("pageId")；filter [?(@.name == 'pageId')] 断言 in == "query"、required == false（hasItem）；import org.hamcrest.Matchers.hasItem
+
+### WORKING TREE NOTE（非本会话修改，如实报告）
+
+git status 42 项中包含 SpikeSecurityConfig.java +8 行（ELECTRON-CORS-001-B：.cors(Customizer.withDefaults()) + ServerCorsConfig 注释）——该修改非本会话产生（AUTORUN 全程未写 SecurityConfig），应为用户/外部侧 ELECTRON CORS 工作。RUNTIME-FIX-03 未触碰、未 revert（git restore 禁止）；attempt #3 的 123 tests 已证明其不破坏任何 test context。
+
+### STATIC EVIDENCE
+
+git diff --check clean；production（IngestionJobController/Service/Mapper、Source content 三件套、V009-V012、SecurityConfig、OpenAPI annotation）零修改；本轮仅改 2 个测试文件；无 git write。
+
+### NEXT
+
+用户重跑 focused → full clean test。状态：BUSINESS-005/006/007 IMPLEMENTED — AWAITING USER RUNTIME RE-VERIFICATION。
+
+## BACKEND-REGRESSION-FIX-001 Checkpoint（2026-09-06）
+
+- 目标：修复 full suite 已知 2 失败，恢复 BUSINESS baseline 全绿
+- 失败 1 根因（IngestionJob 404）：测试 fixture bug——detail GET 用 JOB_BASE（"/api/v1/spaces/{spaceId}/ingestion-jobs"，无 {jobId} 占位符），MockMvc buildAndExpand 丢多余变量 → 请求打到无 handler 路径 → 404。JOB_DETAIL 常量早已定义（RUNTIME-FIX-3:A）但 ownerCanGetOwnJob / otherUserCannotGetMyJob / jobFromAnotherSpaceCannotBeRead 三处未使用。修复：三处改用 JOB_DETAIL。实证：owner GET 的 owner-scoped SELECT 此前从未执行（SQL 日志证实）；修复后 21/21 PASS，owner 200 / cross-owner 404 / cross-space 404 语义真实生效；production 零改动
+- 失败 2 根因（OpenAPI）：blocksGetDeclaresPageIdQueryParam 断言 parameters[0].name==pageId——springdoc 按方法签名序输出（spaceId 在 index 0），数组顺序非契约。修复：按 name 查找（hasItem + Jayway filter 断言 in/required）。真实 contract 含 pageId query 参数 ✓
+- 新暴露 8F/16E（full#3，与代码改动无关——单独隔离跑 Provenance/SourceVerticalSlice 全 PASS）：类间顺序残留——BUSINESS-005/006/007 新表（ingestion_job/source_page/content_block/knowledge_point/knowledge_category/knowledge_point_source）未同步进旧 IT 类 cleanBizTestRows（3/4/6/7 表不等），特定顺序下某类 AfterEach 残留 → 后续类 DELETE source_asset FK 违反 / insertFixtureSpace 返回残留 id
+- 修复 3：统一 7 个 IT 类 cleanBizTestRows 为完整 9 表深度优先（knowledge_point_source → knowledge_point → knowledge_category[非 root 先删，任意深度正确] → content_block → source_page → ingestion_job → source_asset → source → learning_space）；KnowledgeCatalog 旧 deleteKnowledgeCategoriesBottomUp 保留未用
+- 最终 full（Windows mvnw.cmd clean test，DB_URL + FLYWAY_DB env 齐全）：**Tests run 267 / Failures 0 / Errors 0 / Skipped 0 → BUILD SUCCESS**（28 类逐类 0/0）
+- 外部 unrecorded writer 说明：调查期间两个目标测试文件被外部部分修复（JOB_DETAIL 两处 + OpenAPI by-name），与本次根因一致，已合并验证
+- CORS 回归：CorsContractIntegrationTest 9/9（full 中）保持；CORS-B production 未回退
+- 文件：M 测试 7 个（cleanup 统一）+ M 测试 2 个（JOB_DETAIL/OpenAPI，含外部修改合并）；production 零改动；docs 2 个
+
+## ELECTRON-CORS-001-C Checkpoint（2026-09-06）
+
+- 新增（test-only，非 *Test 命名不进入 full suite）：E2eBackendHarness（8080 DEFINED_PORT + flyway-it keep-alive + token 文件 %TEMP%\aistudy-desktop-e2e-token.txt）、E2eDbEvidence（只读 DB 证据）
+- 真实链路证据（全部真实 HTTP/UI/DB）：
+  1. PowerShell 预检：Bearer + Origin app://aistudy → GET /api/v1/spaces → 200 + ACAO=app://aistudy + []
+  2. Electron dev + CDP：Development Session Apply → spaces 空态 → Create Space E2E-C-Space-1788668853157（hash 自动 #/spaces/1/sources）→ Create Source（DESKTOP_UPLOAD/REGISTERED）→ Category ×2（root）→ Point E2E-C-Point-1788668901507（DRAFT）→ detail → Publish（PUBLISHED + Published at）
+  3. E2eDbEvidence：4 表全真实落库；knowledge_point.status=PUBLISHED、published_at=2026-09-06T12:28:30.207760；owner 链全部 desktop-e2e-user
+  4. Production probe（临时 runner 加载 app://aistudy + executeJavaScript 带 JWT fetch）：status 200 + spaces JSON 可读；JS 读 ACAO 为 null 属预期（exposedHeaders 空），HTTP 层已另证 ACAO 回显
+- 清理：Electron/harness 停止；token 文件删除；临时脚本删除；E2E-C-* 保留验收
+- 回归：CorsContractIntegrationTest 9/9、SpikeSecurityBoundaryTest 10/10；frontend 43/43 + build PASS（见 frontend log）
+- 未写任何真实 JWT；无 production auth 改动；无 token 持久化
+
+## 2026-09-06 BUSINESS-005-007-SHARED-CLIENT-CLOSEOUT checkpoint
+
+### WHAT
+
+shared API client 补齐 BUSINESS-005/006/007 typed wrappers（基于用户 live backend 重新生成的真实 OpenAPI contract）。AI 不运行 npm/Maven。
+
+### RUNTIME EVIDENCE（用户真实运行）
+
+- BUSINESS-005/006/007 focused Maven：Tests run: 123 / Failures: 0 / Errors: 0 / Skipped: 0 / BUILD SUCCESS
+- Full clean Maven：Tests run: 267 / Failures: 0 / Errors: 0 / Skipped: 0 / BUILD SUCCESS
+- Live backend（flyway-it）→ `npm run api:generate` PASS：generated api.d.ts/openapi.json 已含 BUSINESS-007 全部 paths/schemas（用户 12:45 生成物，本轮零修改）
+
+### GENERATED CONTRACT（实际 paths/operations）
+
+- POST/GET /api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs（create_2 / list_2）
+- GET /api/v1/spaces/{spaceId}/ingestion-jobs/{jobId}（get_5）；POST .../{jobId}/retry（retry）
+- GET .../sources/{sourceId}/pages（list_7）；GET .../content-blocks（list_8，query pageId?: number）
+- POST/GET .../knowledge-points/{knowledgePointId}/sources（link / list_5）
+- schemas：CreateIngestionJobRequest{assetId}、IngestionJobResponse、SourcePageResponse、ContentBlockResponse、LinkKnowledgePointSourcesRequest{contentBlockIds}、KnowledgePointSourceResponse
+
+### SHARED CLIENT（client.ts +8 wrappers，类型全部来自 generated）
+
+- createIngestionJob(spaceId, sourceId, assetId) → POST .../ingestion-jobs（body: CreateIngestionJobRequest 别名）
+- listIngestionJobs(spaceId, sourceId) → GET
+- getIngestionJob(spaceId, jobId) → GET space-scoped detail
+- retryIngestionJob(spaceId, jobId) → POST retry
+- listSourcePages(spaceId, sourceId) → GET pages
+- listContentBlocks(spaceId, sourceId, pageId?) → GET content-blocks（pageId 仅当定义时进 query）
+- addKnowledgePointSources(spaceId, knowledgePointId, contentBlockIds) → POST sources（body: LinkKnowledgePointSourcesRequest 别名；批量幂等语义在 backend）
+- listKnowledgePointSources(spaceId, knowledgePointId) → GET sources
+- 响应类型全部由 openapi-fetch 从 generated operations 推导（无手写 DTO / 无 any / 无 @ts-ignore / 无 unknown as / 无重复 DTO）
+- index.ts 保持既有最小导出（createApiClient / ApiClient / TokenProvider），未改
+
+### REGRESSION / STATIC
+
+- 既有 LearningSpace/Source/SourceAsset/KnowledgeCategory/KnowledgePoint wrappers 未动；MultipartUploadBody + 无全局 Content-Type 行为保持（fetch 自生成 multipart boundary）
+- 17 个 client path 字面量逐一与 generated contract 匹配（脚本断言）
+- generated api.d.ts/openapi.json mtime = 用户 api:generate 产物（12:45），本轮零写入
+- backend production 零修改；git diff --check clean；无 Question/Practice/Exam；无 git write
+
+### NEXT（用户最终命令）
+
+cd D:\AIProject\packages\api-client → npm run typecheck
+
+状态：BUSINESS-005/006/007 = RUNTIME VERIFIED + SHARED CLIENT IMPLEMENTED — AWAITING FINAL USER TYPECHECK（不标 COMPLETE）。
+
+## 2026-09-06 BUSINESS-004-007 FINAL CLOSEOUT
+
+### WHAT
+
+BUSINESS-004 ~ BUSINESS-007 后端业务块全部 runtime verified（用户真实运行），正式收口。AI 不运行 Maven/npm → 全部 evidence 来自用户。
+
+### RUNTIME EVIDENCE（全部用户真实运行）
+
+- BUSINESS-004 focused：Tests run 41 / Failures 0 / Errors 0 / Skipped 0 / BUILD SUCCESS
+- BUSINESS-004 full clean：Tests run 138 / Failures 0 / Errors 0 / Skipped 0 / BUILD SUCCESS
+- BUSINESS-005~007 focused：Tests run 123 / Failures 0 / Errors 0 / Skipped 0 / BUILD SUCCESS
+- Full clean（全量）：Tests run 267 / Failures 0 / Errors 0 / Skipped 0 / BUILD SUCCESS
+- Live OpenAPI：npm run api:generate PASS（generated 覆盖 V008~V012 全部 endpoints）
+- Shared client：BUSINESS-004 multipart + BUSINESS-005/006/007 11 个新 wrapper 实现
+- Final TypeScript：npm run typecheck PASS
+
+### VERIFICATION-DRIVEN FIXES（不隐藏中间失败，汇总）
+
+- RUNTIME-FIX-01：attempt #1 testCompile 失败（ZipArchiveInspectorTest:229 未处理 checked IOException，测试未执行）→ 测试方法签名 +throws Exception，production 零改动
+- RUNTIME-FIX-02：attempt #2 123/10/35 —— A. IngestionJobIntegrationTest cleanup 缺 content_block/source_page（FK 拒删，20 Error 连锁）；B. 两个 OpenAPI contract test 缺新 mapper mock（surefire Caused by 实证，15 Error）；C. empty-upload 测试违反 BUSINESS-004 契约（改 whitespace-only fixture）；D. LargeDoc helper 重复建 space 致 404（fixture bug）；E. parser 拆分后 locator 语义 bug（改 production）+ mdMixed stale 期望；F. ZIP totalBytes stale（13）；G. provenance fixture 单 block（改 "one\n\ntwo"）；H. Flyway final history count stale（12）
+- RUNTIME-FIX-03：attempt #3 123/2 —— A. 3 个 detail GET 误用 list route（JOB_DETAIL 修正，含两个 false-positive 404 测试）；B. OpenAPI 参数测试依赖数组顺序（改按 name 匹配）
+- PRE-RUNTIME-FIX-01（reviewer 静态审查）：ZipEntry.isEncrypted() 不存在 → 删除 + V1 encrypted ZIP 永远拒绝；V010 extracted_text TEXT→LONGTEXT；ContentBlock 改 UTF-8 byte 有界（60,000 bytes，全部 block type，单行 code-point 拆分）
+
+### TEST INFRASTRUCTURE DECISION
+
+- 共享 flyway-it schema 集成测试统一 ResourceLock（串行执行）
+- FK-complete cleanup：knowledge_point_source → content_block → source_page → ingestion_job → source_asset → source → learning_space（Knowledge 侧前置 knowledge_point/knowledge_category）
+- 无 FOREIGN_KEY_CHECKS / TRUNCATE / CASCADE / DROP FK；schema guard 仅 aistudy_flyway_test
+
+### SCHEMA（当前最新）
+
+V001-V008（基线+SPIKE+BUSINESS-004）+ V009 ingestion_job + V010 source_page（LONGTEXT extracted_text）+ V011 content_block + V012 knowledge_point_source
+
+### SHARED CLIENT（packages/api-client）
+
+createLearningSpace/list/get、createSource/list/get、create/list/get KnowledgeCategory、create/list/get/publish KnowledgePoint、upload/list/get SourceAsset、create/list/get/retry IngestionJob、list SourcePages、list ContentBlocks(pageId?)、add/list KnowledgePointSources —— 全部 typed，generated contract 驱动，无 any/@ts-ignore，multipart 无全局 Content-Type。
+
+### FINAL STATE
+
+BUSINESS-004 COMPLETE（user runtime verified）
+BUSINESS-005 COMPLETE（user runtime verified）
+BUSINESS-006 COMPLETE（user runtime verified）
+BUSINESS-007 COMPLETE（user runtime verified）
+= AWAITING USER GIT CLOSEOUT
+
+### NEXT
+
+用户 git add/commit/push → clean baseline → 下一业务块 Question/Practice foundation（NOT STARTED，按 development-plan 顺序，设计前重读 docs + 真实 schema）。

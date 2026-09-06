@@ -2,6 +2,11 @@ package com.aistudy.server.knowledge;
 
 import com.aistudy.server.knowledge.category.mapper.KnowledgeCategoryMapper;
 import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
+import com.aistudy.server.knowledge.source.mapper.KnowledgePointSourceMapper;
+import com.aistudy.server.source.asset.mapper.SourceAssetMapper;
+import com.aistudy.server.ingestion.job.mapper.IngestionJobMapper;
+import com.aistudy.server.source.content.mapper.ContentBlockMapper;
+import com.aistudy.server.source.page.mapper.SourcePageMapper;
 import com.aistudy.server.source.mapper.SourceMapper;
 import com.aistudy.server.space.mapper.LearningSpaceMapper;
 import com.aistudy.server.spike.auth.SpikeSpaceMembershipRepository;
@@ -76,6 +81,26 @@ class KnowledgeOpenApiContractTest {
     /** BUSINESS-003: keep the test profile context bootable. */
     @MockitoBean
     private KnowledgePointMapper knowledgePointMapper;
+
+    /** BUSINESS-007: keep the test profile context bootable. */
+    @MockitoBean
+    private KnowledgePointSourceMapper knowledgePointSourceMapper;
+
+    /** BUSINESS-004: keep the test profile context bootable. */
+    @MockitoBean
+    private SourceAssetMapper sourceAssetMapper;
+
+    /** BUSINESS-005: keep the test profile context bootable. */
+    @MockitoBean
+    private IngestionJobMapper ingestionJobMapper;
+
+    /** BUSINESS-006: keep the test profile context bootable. */
+    @MockitoBean
+    private SourcePageMapper sourcePageMapper;
+
+    /** BUSINESS-006: keep the test profile context bootable. */
+    @MockitoBean
+    private ContentBlockMapper contentBlockMapper;
 
     /** All seven Knowledge paths must be present. */
     @Test

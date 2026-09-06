@@ -36,7 +36,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/knowledge-points": {
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs": {
         parameters: {
             query?: never;
             header?: never;
@@ -46,6 +46,54 @@ export interface paths {
         get: operations["list_2"];
         put?: never;
         post: operations["create_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_3"];
+        put?: never;
+        post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_4"];
+        put?: never;
+        post: operations["create_3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_5"];
+        put?: never;
+        post: operations["link"];
         delete?: never;
         options?: never;
         head?: never;
@@ -75,9 +123,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_3"];
+        get: operations["list_6"];
         put?: never;
-        post: operations["create_3"];
+        post: operations["create_4"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ingestion-jobs/{jobId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["retry"];
         delete?: never;
         options?: never;
         head?: never;
@@ -180,7 +244,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}": {
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_7"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/content-blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_8"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/{assetId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -196,7 +292,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/knowledge-categories/{categoryId}": {
+    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -204,6 +300,38 @@ export interface paths {
             cookie?: never;
         };
         get: operations["get_3"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-categories/{categoryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_4"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ingestion-jobs/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_5"];
         put?: never;
         post?: never;
         delete?: never;
@@ -248,6 +376,52 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        CreateIngestionJobRequest: {
+            /** Format: int64 */
+            assetId: number;
+        };
+        IngestionJobResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            assetId?: number;
+            status?: string;
+            stage?: string;
+            /** Format: int32 */
+            progressPercent?: number;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: int32 */
+            retryCount?: number;
+            errorCode?: string;
+            errorMessage?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        SourceAssetResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            assetRole?: string;
+            originalName?: string;
+            mimeType?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            sha256?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
         CreateKnowledgePointRequest: {
             title: string;
             summary?: string;
@@ -275,6 +449,24 @@ export interface components {
             updatedAt?: string;
             /** Format: date-time */
             publishedAt?: string;
+        };
+        LinkKnowledgePointSourcesRequest: {
+            contentBlockIds: number[];
+        };
+        KnowledgePointSourceResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            knowledgePointId?: number;
+            /** Format: int64 */
+            contentBlockId?: number;
+            relationType?: string;
+            /** Format: double */
+            relevanceScore?: number;
+            /** Format: date-time */
+            createdAt?: string;
         };
         CreateKnowledgeCategoryRequest: {
             name: string;
@@ -311,6 +503,53 @@ export interface components {
         };
         SpikeStatusResponse: {
             status?: string;
+        };
+        SourcePageResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            sourceAssetId?: number;
+            /** Format: int32 */
+            sourcePageNumber?: number;
+            /** Format: int32 */
+            pageOrder?: number;
+            /** Format: int32 */
+            printedPageNumber?: number;
+            pageType?: string;
+            /** Format: double */
+            orderConfidence?: number;
+            orderStatus?: string;
+            extractedText?: string;
+            /** Format: double */
+            extractionConfidence?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ContentBlockResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            sourcePageId?: number;
+            blockType?: string;
+            /** Format: int32 */
+            sortOrder?: number;
+            normalizedText?: string;
+            structuredDataJson?: string;
+            locatorJson?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
         };
     };
     responses: never;
@@ -419,6 +658,109 @@ export interface operations {
             header?: never;
             path: {
                 spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJobResponse"][];
+                };
+            };
+        };
+    };
+    create_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateIngestionJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJobResponse"];
+                };
+            };
+        };
+    };
+    list_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceAssetResponse"][];
+                };
+            };
+        };
+    };
+    upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceAssetResponse"];
+                };
+            };
+        };
+    };
+    list_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
             };
             cookie?: never;
         };
@@ -435,7 +777,7 @@ export interface operations {
             };
         };
     };
-    create_2: {
+    create_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -457,6 +799,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgePointResponse"];
+                };
+            };
+        };
+    };
+    list_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                knowledgePointId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgePointSourceResponse"][];
+                };
+            };
+        };
+    };
+    link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                knowledgePointId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkKnowledgePointSourcesRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgePointSourceResponse"][];
                 };
             };
         };
@@ -484,7 +876,7 @@ export interface operations {
             };
         };
     };
-    list_3: {
+    list_6: {
         parameters: {
             query?: never;
             header?: never;
@@ -506,7 +898,7 @@ export interface operations {
             };
         };
     };
-    create_3: {
+    create_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -528,6 +920,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeCategoryResponse"];
+                };
+            };
+        };
+    };
+    retry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                jobId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJobResponse"];
                 };
             };
         };
@@ -659,7 +1074,79 @@ export interface operations {
             };
         };
     };
+    list_7: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourcePageResponse"][];
+                };
+            };
+        };
+    };
+    list_8: {
+        parameters: {
+            query?: {
+                pageId?: number;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentBlockResponse"][];
+                };
+            };
+        };
+    };
     get_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+                assetId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceAssetResponse"];
+                };
+            };
+        };
+    };
+    get_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -682,7 +1169,7 @@ export interface operations {
             };
         };
     };
-    get_3: {
+    get_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -701,6 +1188,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeCategoryResponse"];
+                };
+            };
+        };
+    };
+    get_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                jobId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJobResponse"];
                 };
             };
         };

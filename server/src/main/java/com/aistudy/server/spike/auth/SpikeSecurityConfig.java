@@ -178,6 +178,14 @@ public class SpikeSecurityConfig {
                         "/api/v1/spaces/**",
                         "/api/v1/spaces/*/sources",
                         "/api/v1/spaces/*/sources/**"))
+                // ELECTRON-CORS-001-B: explicit Browser CORS for the
+                // Desktop renderer origins (http://localhost:5173 dev,
+                // app://aistudy prod). The CorsConfigurationSource bean
+                // lives in ServerCorsConfig; preflight OPTIONS is
+                // answered by the CORS layer BEFORE authentication,
+                // while real GET/POST still require Bearer JWT below.
+                // No permitAll("/api/**"), no csrf.disable().
+                .cors(Customizer.withDefaults())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new Anonymous401EntryPoint()));
         return http.build();

@@ -1,6 +1,6 @@
 # 开发计划
 
-> 状态：**PLATFORM SKELETON STARTING**
+> 状态：**BUSINESS-001 ~ BUSINESS-007 全部 COMPLETE（用户 runtime verified，2026-09-06）— AWAITING USER GIT CLOSEOUT；下一后端业务块：Phase 5 Vertical Slice B（Question/Practice foundation）NOT STARTED**
 >
 > SPIKE-001 ~ SPIKE-005 已完成当前所需技术验证。SPIKE-006 ~ SPIKE-014 不再作为业务开发前置门槛，改为在相关能力真正进入实现时按需验证。下一阶段开始正式 Platform Skeleton，并从 LearningSpace vertical slice 开始。
 
@@ -307,7 +307,43 @@ admin-web/
 - Shared client：knowledge wrapper 7 方法已实现（client.ts，类型来自 generated）。
 - 剩余：用户 Git closeout。详情见 development-log.md。
 
-**BUSINESS-004：NOT STARTED**（next task to be decided after BUSINESS-003 closeout；KnowledgePointSource 依赖 ContentBlock，当前 content ingestion 未实现，不擅自开始）。
+**BUSINESS-004：✅ COMPLETE（User Runtime Verified）**（RAW SourceAsset Upload Vertical Slice，LONG-RUN-003）：
+
+- V008 SourceAsset（FK×2 无 CASCADE、uk_storage_key、idx×2、utf8mb4）
+- StorageService 抽象（ADR-033）+ LocalStorageService（stream + SHA-256 + ATOMIC_MOVE + 双层 path traversal 防御）
+- RAW preservation（字节级保留，R-SOURCE-002）；sha256 / size / MIME 元数据（R-SOURCE-003）
+- authenticated multipart upload（owner/space/IDOR 保护，统一 404）
+- OpenAPI contract + 真实 MySQL tests
+- 真实 runtime：focused 41/41 PASS（含 RUNTIME-FIX-01 后）+ full clean 138/138 PASS + api:generate PASS + multipart shared client + final typecheck PASS
+- 详情见 development-log.md。
+
+**BUSINESS-005：✅ COMPLETE（User Runtime Verified）**（2026-09-06 收口）：focused 123/123 PASS + full clean 267/267 PASS + api:generate PASS + final typecheck PASS；client.ts createIngestionJob/listIngestionJobs/getIngestionJob/retryIngestionJob 已实现。详情见 development-log FINAL CLOSEOUT。
+
+- V009 ingestion_job（FK×3 无 CASCADE、idx×3、15 列含 asset_id、utf8mb4）
+- ingestion.zip：ZipArchiveInspector 纯 Java 中央目录安全检查（zip-slip/rooted/drive/blank 名称、entry 数、单 entry 与总解压大小、压缩比炸弹、加密/不支持 method；零抽取）
+- ingestion.job：PENDING→RUNNING→SUCCEEDED/FAILED 最小生命周期 + stage 全表 + retry（FAILED→PENDING，retryCount++）+ create 同步 ZIP safety gate（非法→FAILED ZIP_SAFETY_VIOLATION，safe message 无 stack trace）
+- API 4 endpoints（create/get/list/retry），全 owner/space scoped 404 anti-probing，typed OpenAPI
+- tests：Zip 单元 16 + Integration 21（真实 MySQL）+ OpenAPI 8 + Flyway V009；11 个旧 context +@MockitoBean 兼容
+- 详情见 development-log.md BUSINESS-005 checkpoint。等用户 focused + full clean test runtime verification。
+
+**BUSINESS-006：✅ COMPLETE（User Runtime Verified）**（2026-09-06 收口）：focused 123/123 PASS + full clean 267/267 PASS + api:generate PASS + final typecheck PASS；client.ts listSourcePages/listContentBlocks(pageId?) 已实现。详情见 development-log FINAL CLOSEOUT。
+
+- V010 source_page + V011 content_block（FK 无 CASCADE、idx×2 每表、utf8mb4；content_block.source_outline_node_id 预留列无 FK，SourceOutlineNode 表推迟）
+- ingestion.extract：TxtMarkdownContentParser 纯 Java 确定性 TXT/MD 解析（严格 UTF-8+BOM+CRLF 归一；ATX/围栏含 ```java/列表/pipe 表格；60KB 块按行拆分；locator 1-based 行号）+ ContentExtractionService（有界读取 → 先解析后单事务落库，FAILED 零残留）
+- IngestionJob 派发升级：TXT/MD → 同步执行 SUCCEEDED/FAILED(ENCODING_ERROR/DOCUMENT_TOO_LARGE)；ZIP → safety gate；PDF/image → 422 INGESTION_NOT_READY；重复 → 409；retry 同派发
+- 内容读 API：GET pages / GET content-blocks?pageId=（owner-scoped，typed OpenAPI）
+- tests：Parser 单元 18 + Integration 20（真实 MySQL 全链路）+ OpenAPI 7 + Flyway V010/V011；BUSINESS-005 测试语义同步；11 个旧 context +2 @MockitoBean
+- 详情见 development-log.md BUSINESS-006 checkpoint。等用户 runtime verification。
+
+**BUSINESS-007：✅ COMPLETE（User Runtime Verified）**（2026-09-06 收口）：focused 123/123 PASS + full clean 267/267 PASS + api:generate PASS + final typecheck PASS；client.ts addKnowledgePointSources/listKnowledgePointSources 已实现。详情见 development-log FINAL CLOSEOUT。
+
+- V012 knowledge_point_source（显式 space_id、uk 成对唯一、idx×2、FK×3 无 CASCADE、utf8mb4）
+- knowledge/source 全栈：POST/GET /spaces/{spaceId}/knowledge-points/{kpId}/sources（批量幂等 add；任一无效 id → 404 零插入；返回 point 全量当前链接）
+- 同 space invariant 双层强制（两端 owner-scoped 读先行 + 读 JOIN）；relation_type/relevance_score V1 NULL；不改变 originType（AI 提取 slice 负责）；无 AI 调用
+- tests：Integration 15（真实 MySQL 全链路）+ OpenAPI 6 + Flyway V012；11 个旧 context +@MockitoBean
+- 详情见 development-log.md BUSINESS-007 checkpoint。等用户 runtime verification。
+
+**FE-001 Desktop：NOT STARTED**（前端下一阶段；不实现）。
 
 ## Phase 4：Vertical Slice A — Source → Knowledge
 
@@ -330,6 +366,8 @@ admin-web/
 验收数据：`数据库系统工程师教程.zip`。
 
 ## Phase 5：Vertical Slice B — Question → Practice → Wrong
+
+> 状态：**NOT STARTED**（BUSINESS-004~007 已于 2026-09-06 收口 COMPLETE；Question/Practice 为下一后端业务块，用户 Git closeout 后开始）
 
 1. Question/Option。
 2. KnowledgePoint relation。

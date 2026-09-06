@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   2. target V001 -> migrate()
  *   3. seed "V001升级前保留数据"
  *   4. record V001 checksum from flyway_schema_history (dynamic, not hardcoded)
- *   5. target latest -> migrate() -> V002..V007 applied
+ *   5. target latest -> migrate() -> V002..V012 applied
  *   6. verify V001 checksum unchanged
  *   7. verify old data preserved
  *   8. verify both SPIKE tables exist (flyway_spike_record AND
@@ -45,8 +45,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *      columns, idx_knowledge_category_space_parent_sort, FKs
  *  13. verify production knowledge_point table (V007, BUSINESS-003):
  *      columns, indexes, FKs, charset
- *  14. migrate again -> migrationsExecuted == 0
- *  15. history still V001..V007 only
+ *  14. verify production source_asset table (V008, BUSINESS-004):
+ *      columns, indexes, unique storage_key, FKs, charset
+ *  15. migrate again -> migrationsExecuted == 0
+ *  16. history still V001..V012 only
  *
  * Schema isolation (CRITICAL):
  *   - The test MUST run against aistudy_flyway_test ONLY.
@@ -110,17 +112,17 @@ class FlywayMigrationIntegrationTest {
         assertEquals(0, histCount,
                 "flyway_schema_history must not exist after clean()");
 
-        // (1) Migrate to latest. V007 is now the latest version.
+        // (1) Migrate to latest. V012 is now the latest version.
         MigrateResult result = flyway().migrate();
         int applied = result.migrationsExecuted;
-        assertEquals(7, applied,
-                "Fresh migration must apply V001..V007 (actual: " + applied + ")");
+        assertEquals(12, applied,
+                "Fresh migration must apply V001..V012 (actual: " + applied + ")");
 
-        // (2) Verify flyway_schema_history has 7 rows: V001..V007.
+        // (2) Verify flyway_schema_history has 12 rows: V001..V012.
         Integer finalCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history",
                 Integer.class);
-        assertEquals(7, finalCount);
+        assertEquals(12, finalCount);
 
         List<Map<String, Object>> history = jdbc.queryForList(
                 "SELECT installed_rank, version, description, script, checksum, success FROM flyway_schema_history ORDER BY installed_rank");
@@ -131,6 +133,11 @@ class FlywayMigrationIntegrationTest {
         assertEquals("005", String.valueOf(history.get(4).get("version")));
         assertEquals("006", String.valueOf(history.get(5).get("version")));
         assertEquals("007", String.valueOf(history.get(6).get("version")));
+        assertEquals("008", String.valueOf(history.get(7).get("version")));
+        assertEquals("009", String.valueOf(history.get(8).get("version")));
+        assertEquals("010", String.valueOf(history.get(9).get("version")));
+        assertEquals("011", String.valueOf(history.get(10).get("version")));
+        assertEquals("012", String.valueOf(history.get(11).get("version")));
         assertEquals(1, history.get(0).get("installed_rank"));
         assertEquals(2, history.get(1).get("installed_rank"));
         assertEquals(3, history.get(2).get("installed_rank"));
@@ -138,6 +145,11 @@ class FlywayMigrationIntegrationTest {
         assertEquals(5, history.get(4).get("installed_rank"));
         assertEquals(6, history.get(5).get("installed_rank"));
         assertEquals(7, history.get(6).get("installed_rank"));
+        assertEquals(8, history.get(7).get("installed_rank"));
+        assertEquals(9, history.get(8).get("installed_rank"));
+        assertEquals(10, history.get(9).get("installed_rank"));
+        assertEquals(11, history.get(10).get("installed_rank"));
+        assertEquals(12, history.get(11).get("installed_rank"));
         assertEquals(Boolean.TRUE, history.get(0).get("success"));
         assertEquals(Boolean.TRUE, history.get(1).get("success"));
         assertEquals(Boolean.TRUE, history.get(2).get("success"));
@@ -145,6 +157,11 @@ class FlywayMigrationIntegrationTest {
         assertEquals(Boolean.TRUE, history.get(4).get("success"));
         assertEquals(Boolean.TRUE, history.get(5).get("success"));
         assertEquals(Boolean.TRUE, history.get(6).get("success"));
+        assertEquals(Boolean.TRUE, history.get(7).get("success"));
+        assertEquals(Boolean.TRUE, history.get(8).get("success"));
+        assertEquals(Boolean.TRUE, history.get(9).get("success"));
+        assertEquals(Boolean.TRUE, history.get(10).get("success"));
+        assertEquals(Boolean.TRUE, history.get(11).get("success"));
 
         // (3) Verify SPIKE-only flyway_spike_record table exists with both
         // V001 and V002 columns (unchanged from SPIKE-003 assertions).
@@ -497,6 +514,454 @@ class FlywayMigrationIntegrationTest {
             assertEquals("utf8mb4_unicode_ci", charset.get("COLLATION_NAME"),
                     tableName + " collation must be utf8mb4_unicode_ci");
         }
+
+        // (21) Verify the V008 source_asset table (BUSINESS-004).
+        Integer assetTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_asset'",
+                Integer.class);
+        assertEquals(1, assetTableCount,
+                "V008 must create the source_asset table");
+
+        List<String> expectedAssetColumns = new ArrayList<>();
+        expectedAssetColumns.add("id");
+        expectedAssetColumns.add("space_id");
+        expectedAssetColumns.add("source_id");
+        expectedAssetColumns.add("asset_role");
+        expectedAssetColumns.add("original_name");
+        expectedAssetColumns.add("original_relative_path");
+        expectedAssetColumns.add("storage_key");
+        expectedAssetColumns.add("mime_type");
+        expectedAssetColumns.add("size_bytes");
+        expectedAssetColumns.add("sha256");
+        expectedAssetColumns.add("created_at");
+        List<String> actualAssetColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_asset' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        assertEquals(expectedAssetColumns, actualAssetColumns,
+                "source_asset must have exactly the expected columns in order");
+
+        // (22) Verify source_asset indexes: list index, sha256 index,
+        // and the UNIQUE storage_key.
+        List<String> assetSourceCreatedIndex = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_asset' "
+                        + "AND INDEX_NAME = 'idx_source_asset_space_source_created' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        List<String> expectedAssetSourceCreated = new ArrayList<>();
+        expectedAssetSourceCreated.add("space_id");
+        expectedAssetSourceCreated.add("source_id");
+        expectedAssetSourceCreated.add("created_at");
+        expectedAssetSourceCreated.add("id");
+        assertEquals(expectedAssetSourceCreated, assetSourceCreatedIndex,
+                "idx_source_asset_space_source_created must cover (space_id, source_id, created_at, id)");
+
+        List<String> assetSha256Index = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_asset' "
+                        + "AND INDEX_NAME = 'idx_source_asset_space_sha256' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        List<String> expectedAssetSha256 = new ArrayList<>();
+        expectedAssetSha256.add("space_id");
+        expectedAssetSha256.add("sha256");
+        assertEquals(expectedAssetSha256, assetSha256Index,
+                "idx_source_asset_space_sha256 must cover (space_id, sha256)");
+
+        List<String> assetStorageKeyUnique = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_asset' "
+                        + "AND INDEX_NAME = 'uk_source_asset_storage_key' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        List<String> expectedAssetStorageKey = new ArrayList<>();
+        expectedAssetStorageKey.add("storage_key");
+        assertEquals(expectedAssetStorageKey, assetStorageKeyUnique,
+                "uk_source_asset_storage_key must be a unique index on storage_key");
+        Map<String, Object> ukNonUnique = jdbc.queryForMap(
+                "SELECT NON_UNIQUE FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_asset' "
+                        + "AND INDEX_NAME = 'uk_source_asset_storage_key' LIMIT 1");
+        assertEquals(0, ((Number) ukNonUnique.get("NON_UNIQUE")).intValue(),
+                "uk_source_asset_storage_key must be UNIQUE");
+
+        // (23) Verify source_asset FKs: space_id -> learning_space,
+        // source_id -> source. Map by CONSTRAINT_NAME — the assertions
+        // do NOT depend on information_schema return order.
+        List<Map<String, Object>> assetFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME "
+                        + "FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'source_asset' "
+                        + "  AND CONSTRAINT_NAME IN ('fk_source_asset_space', 'fk_source_asset_source')");
+        assertEquals(2, assetFkRows.size(),
+                "source_asset must have exactly 2 FKs (actual: " + assetFkRows.size() + ")");
+
+        Map<String, Map<String, Object>> assetFkByName = new HashMap<>();
+        for (Map<String, Object> row : assetFkRows) {
+            assetFkByName.put(String.valueOf(row.get("CONSTRAINT_NAME")), row);
+        }
+        assertEquals("learning_space",
+                assetFkByName.get("fk_source_asset_space").get("REFERENCED_TABLE_NAME"),
+                "fk_source_asset_space must reference learning_space");
+        assertEquals("id",
+                assetFkByName.get("fk_source_asset_space").get("REFERENCED_COLUMN_NAME"),
+                "fk_source_asset_space must reference learning_space(id)");
+        assertEquals("source",
+                assetFkByName.get("fk_source_asset_source").get("REFERENCED_TABLE_NAME"),
+                "fk_source_asset_source must reference source");
+        assertEquals("id",
+                assetFkByName.get("fk_source_asset_source").get("REFERENCED_COLUMN_NAME"),
+                "fk_source_asset_source must reference source(id)");
+
+        // (24) Verify source_asset charset/collation (utf8mb4 / utf8mb4_unicode_ci).
+        Map<String, Object> assetCharset = jdbc.queryForMap(
+                "SELECT CCSA.CHARACTER_SET_NAME, CCSA.COLLATION_NAME "
+                        + "FROM information_schema.TABLES T "
+                        + "JOIN information_schema.COLLATION_CHARACTER_SET_APPLICABILITY CCSA "
+                        + "  ON T.TABLE_COLLATION = CCSA.COLLATION_NAME "
+                        + "WHERE T.TABLE_SCHEMA = DATABASE() AND T.TABLE_NAME = 'source_asset'");
+        assertEquals("utf8mb4", assetCharset.get("CHARACTER_SET_NAME"),
+                "source_asset charset must be utf8mb4");
+        assertEquals("utf8mb4_unicode_ci", assetCharset.get("COLLATION_NAME"),
+                "source_asset collation must be utf8mb4_unicode_ci");
+
+        // (25) Verify the V009 ingestion_job table (BUSINESS-005).
+        Integer jobTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ingestion_job'",
+                Integer.class);
+        assertEquals(1, jobTableCount,
+                "V009 must create the ingestion_job table");
+
+        // (26) Verify ingestion_job columns in order.
+        List<String> jobColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ingestion_job' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        List<String> expectedJobColumns = new ArrayList<>(List.of(
+                "id", "space_id", "source_id", "asset_id", "status", "stage",
+                "progress_percent", "started_at", "finished_at", "retry_count",
+                "error_code", "error_message", "created_by_user_id",
+                "created_at", "updated_at"));
+        assertEquals(expectedJobColumns, jobColumns,
+                "ingestion_job must have exactly the expected columns in order");
+
+        // (27) Verify ingestion_job indexes: source history, status
+        // lookup, asset lookup.
+        List<String> jobIndexColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ingestion_job' "
+                        + "AND INDEX_NAME = 'idx_ingestion_job_space_source_created' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        assertEquals(List.of("space_id", "source_id", "created_at", "id"),
+                jobIndexColumns,
+                "idx_ingestion_job_space_source_created must cover (space_id, source_id, created_at, id)");
+
+        List<String> jobStatusIndexColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ingestion_job' "
+                        + "AND INDEX_NAME = 'idx_ingestion_job_space_status_created' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        assertEquals(List.of("space_id", "status", "created_at", "id"),
+                jobStatusIndexColumns,
+                "idx_ingestion_job_space_status_created must cover (space_id, status, created_at, id)");
+
+        List<String> jobAssetIndexColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ingestion_job' "
+                        + "AND INDEX_NAME = 'idx_ingestion_job_space_asset' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        assertEquals(List.of("space_id", "asset_id"),
+                jobAssetIndexColumns,
+                "idx_ingestion_job_space_asset must cover (space_id, asset_id)");
+
+        // (28) Verify ingestion_job FKs: space_id -> learning_space,
+        // source_id -> source, asset_id -> source_asset. All default
+        // RESTRICT (no CASCADE, matching the FK-by-name convention).
+        List<Map<String, Object>> jobFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME "
+                        + "FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'ingestion_job' "
+                        + "  AND CONSTRAINT_NAME IN ('fk_ingestion_job_space', "
+                        + "    'fk_ingestion_job_source', 'fk_ingestion_job_asset')");
+        assertEquals(3, jobFkRows.size(),
+                "ingestion_job must have exactly 3 FKs (actual: " + jobFkRows.size() + ")");
+        Map<String, Map<String, Object>> jobFkByName = new java.util.HashMap<>();
+        for (Map<String, Object> row : jobFkRows) {
+            jobFkByName.put((String) row.get("CONSTRAINT_NAME"), row);
+        }
+        assertEquals("learning_space",
+                jobFkByName.get("fk_ingestion_job_space").get("REFERENCED_TABLE_NAME"),
+                "fk_ingestion_job_space must reference learning_space");
+        assertEquals("id",
+                jobFkByName.get("fk_ingestion_job_space").get("REFERENCED_COLUMN_NAME"),
+                "fk_ingestion_job_space must reference learning_space(id)");
+        assertEquals("source",
+                jobFkByName.get("fk_ingestion_job_source").get("REFERENCED_TABLE_NAME"),
+                "fk_ingestion_job_source must reference source");
+        assertEquals("id",
+                jobFkByName.get("fk_ingestion_job_source").get("REFERENCED_COLUMN_NAME"),
+                "fk_ingestion_job_source must reference source(id)");
+        assertEquals("source_asset",
+                jobFkByName.get("fk_ingestion_job_asset").get("REFERENCED_TABLE_NAME"),
+                "fk_ingestion_job_asset must reference source_asset");
+        assertEquals("id",
+                jobFkByName.get("fk_ingestion_job_asset").get("REFERENCED_COLUMN_NAME"),
+                "fk_ingestion_job_asset must reference source_asset(id)");
+
+        // (29) Verify ingestion_job charset/collation (utf8mb4 / utf8mb4_unicode_ci).
+        Map<String, Object> jobCharset = jdbc.queryForMap(
+                "SELECT CCSA.CHARACTER_SET_NAME, CCSA.COLLATION_NAME "
+                        + "FROM information_schema.TABLES T "
+                        + "JOIN information_schema.COLLATION_CHARACTER_SET_APPLICABILITY CCSA "
+                        + "  ON T.TABLE_COLLATION = CCSA.COLLATION_NAME "
+                        + "WHERE T.TABLE_SCHEMA = DATABASE() AND T.TABLE_NAME = 'ingestion_job'");
+        assertEquals("utf8mb4", jobCharset.get("CHARACTER_SET_NAME"),
+                "ingestion_job charset must be utf8mb4");
+        assertEquals("utf8mb4_unicode_ci", jobCharset.get("COLLATION_NAME"),
+                "ingestion_job collation must be utf8mb4_unicode_ci");
+
+        // (30) Verify the V010 source_page table (BUSINESS-006).
+        Integer pageTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_page'",
+                Integer.class);
+        assertEquals(1, pageTableCount,
+                "V010 must create the source_page table");
+
+        List<String> pageColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_page' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        assertEquals(List.of(
+                        "id", "space_id", "source_id", "source_asset_id",
+                        "source_page_number", "page_order", "printed_page_number",
+                        "page_type", "order_confidence", "order_status",
+                        "extracted_text", "extraction_confidence",
+                        "created_at", "updated_at"),
+                pageColumns,
+                "source_page must have exactly the expected columns in order");
+
+        // (30b) extracted_text MUST be LONGTEXT: the V1 text ingestion
+        // limit is 64MB and 1 asset = 1 page, so the full decoded text
+        // of a page can vastly exceed TEXT (~64KB) capacity
+        // (AUTORUN-4H-PRE-RUNTIME-FIX-01).
+        String extractedTextType = jdbc.queryForObject(
+                "SELECT DATA_TYPE FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_page' "
+                        + "AND COLUMN_NAME = 'extracted_text'",
+                String.class);
+        assertEquals("longtext", extractedTextType,
+                "source_page.extracted_text must be LONGTEXT (64MB ingestion envelope)");
+        String pageOrderType = jdbc.queryForObject(
+                "SELECT DATA_TYPE FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_page' "
+                        + "AND COLUMN_NAME = 'page_order'",
+                String.class);
+        assertEquals("int", pageOrderType,
+                "source_page.page_order must remain INT");
+
+        List<String> pageIndexColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_page' "
+                        + "AND INDEX_NAME = 'idx_source_page_space_source_order' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        assertEquals(List.of("space_id", "source_id", "page_order", "id"),
+                pageIndexColumns,
+                "idx_source_page_space_source_order must cover (space_id, source_id, page_order, id)");
+
+        List<Map<String, Object>> pageFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_page' "
+                        + "  AND CONSTRAINT_NAME IN ('fk_source_page_space', 'fk_source_page_source', "
+                        + "    'fk_source_page_asset')");
+        assertEquals(3, pageFkRows.size(),
+                "source_page must have exactly 3 FKs (actual: " + pageFkRows.size() + ")");
+        Map<String, String> pageFkTables = new java.util.HashMap<>();
+        for (Map<String, Object> row : pageFkRows) {
+            pageFkTables.put((String) row.get("CONSTRAINT_NAME"),
+                    (String) row.get("REFERENCED_TABLE_NAME"));
+        }
+        assertEquals("learning_space", pageFkTables.get("fk_source_page_space"));
+        assertEquals("source", pageFkTables.get("fk_source_page_source"));
+        assertEquals("source_asset", pageFkTables.get("fk_source_page_asset"));
+
+        Map<String, Object> pageCharset = jdbc.queryForMap(
+                "SELECT CCSA.CHARACTER_SET_NAME, CCSA.COLLATION_NAME "
+                        + "FROM information_schema.TABLES T "
+                        + "JOIN information_schema.COLLATION_CHARACTER_SET_APPLICABILITY CCSA "
+                        + "  ON T.TABLE_COLLATION = CCSA.COLLATION_NAME "
+                        + "WHERE T.TABLE_SCHEMA = DATABASE() AND T.TABLE_NAME = 'source_page'");
+        assertEquals("utf8mb4", pageCharset.get("CHARACTER_SET_NAME"),
+                "source_page charset must be utf8mb4");
+        assertEquals("utf8mb4_unicode_ci", pageCharset.get("COLLATION_NAME"),
+                "source_page collation must be utf8mb4_unicode_ci");
+
+        // (31) Verify the V011 content_block table (BUSINESS-006).
+        Integer blockTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'content_block'",
+                Integer.class);
+        assertEquals(1, blockTableCount,
+                "V011 must create the content_block table");
+
+        List<String> blockColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'content_block' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        assertEquals(List.of(
+                        "id", "space_id", "source_id", "source_page_id",
+                        "source_outline_node_id", "block_type", "sort_order",
+                        "normalized_text", "structured_data_json", "locator_json",
+                        "created_at", "updated_at"),
+                blockColumns,
+                "content_block must have exactly the expected columns in order");
+
+        // (31b) normalized_text stays TEXT (NOT LONGTEXT): blocks are
+        // deliberately small for provenance citation; the parser enforces
+        // MAX_BLOCK_UTF8_BYTES (60,000 UTF-8 bytes) per block
+        // (AUTORUN-4H-PRE-RUNTIME-FIX-01).
+        String normalizedTextType = jdbc.queryForObject(
+                "SELECT DATA_TYPE FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'content_block' "
+                        + "AND COLUMN_NAME = 'normalized_text'",
+                String.class);
+        assertEquals("text", normalizedTextType,
+                "content_block.normalized_text must remain TEXT (60KB UTF-8 bounded blocks)");
+
+        List<String> blockIndexColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'content_block' "
+                        + "AND INDEX_NAME = 'idx_content_block_space_source_order' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        assertEquals(List.of("space_id", "source_id", "sort_order", "id"),
+                blockIndexColumns,
+                "idx_content_block_space_source_order must cover (space_id, source_id, sort_order, id)");
+
+        List<Map<String, Object>> blockFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'content_block' "
+                        + "  AND CONSTRAINT_NAME IN ('fk_content_block_space', 'fk_content_block_source', "
+                        + "    'fk_content_block_page')");
+        assertEquals(3, blockFkRows.size(),
+                "content_block must have exactly 3 FKs (actual: " + blockFkRows.size() + ")");
+        Map<String, String> blockFkTables = new java.util.HashMap<>();
+        for (Map<String, Object> row : blockFkRows) {
+            blockFkTables.put((String) row.get("CONSTRAINT_NAME"),
+                    (String) row.get("REFERENCED_TABLE_NAME"));
+        }
+        assertEquals("learning_space", blockFkTables.get("fk_content_block_space"));
+        assertEquals("source", blockFkTables.get("fk_content_block_source"));
+        assertEquals("source_page", blockFkTables.get("fk_content_block_page"));
+
+        Map<String, Object> blockCharset = jdbc.queryForMap(
+                "SELECT CCSA.CHARACTER_SET_NAME, CCSA.COLLATION_NAME "
+                        + "FROM information_schema.TABLES T "
+                        + "JOIN information_schema.COLLATION_CHARACTER_SET_APPLICABILITY CCSA "
+                        + "  ON T.TABLE_COLLATION = CCSA.COLLATION_NAME "
+                        + "WHERE T.TABLE_SCHEMA = DATABASE() AND T.TABLE_NAME = 'content_block'");
+        assertEquals("utf8mb4", blockCharset.get("CHARACTER_SET_NAME"),
+                "content_block charset must be utf8mb4");
+        assertEquals("utf8mb4_unicode_ci", blockCharset.get("COLLATION_NAME"),
+                "content_block collation must be utf8mb4_unicode_ci");
+
+        // (32) Verify the V012 knowledge_point_source table (BUSINESS-007).
+        Integer kpsTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point_source'",
+                Integer.class);
+        assertEquals(1, kpsTableCount,
+                "V012 must create the knowledge_point_source table");
+
+        List<String> kpsColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point_source' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        assertEquals(List.of(
+                        "id", "space_id", "knowledge_point_id", "content_block_id",
+                        "relation_type", "relevance_score", "created_by_user_id",
+                        "created_at"),
+                kpsColumns,
+                "knowledge_point_source must have exactly the expected columns in order");
+
+        // (33) Verify the pair unique key and both lookup indexes.
+        List<String> pairUkColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point_source' "
+                        + "AND INDEX_NAME = 'uk_knowledge_point_source_pair' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        assertEquals(List.of("knowledge_point_id", "content_block_id"),
+                pairUkColumns,
+                "uk_knowledge_point_source_pair must cover (knowledge_point_id, content_block_id)");
+        Integer pairNonUnique = jdbc.queryForObject(
+                "SELECT NON_UNIQUE FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point_source' "
+                        + "AND INDEX_NAME = 'uk_knowledge_point_source_pair' LIMIT 1",
+                Integer.class);
+        assertEquals(0, pairNonUnique, "uk_knowledge_point_source_pair must be UNIQUE");
+
+        List<String> kpsPointIndex = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point_source' "
+                        + "AND INDEX_NAME = 'idx_knowledge_point_source_space_point' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        assertEquals(List.of("space_id", "knowledge_point_id", "id"),
+                kpsPointIndex,
+                "idx_knowledge_point_source_space_point must cover (space_id, knowledge_point_id, id)");
+
+        List<String> kpsBlockIndex = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point_source' "
+                        + "AND INDEX_NAME = 'idx_knowledge_point_source_space_block' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        assertEquals(List.of("space_id", "content_block_id", "id"),
+                kpsBlockIndex,
+                "idx_knowledge_point_source_space_block must cover (space_id, content_block_id, id)");
+
+        // (34) Verify knowledge_point_source FKs: space / point / block.
+        List<Map<String, Object>> kpsFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point_source' "
+                        + "  AND CONSTRAINT_NAME IN ('fk_knowledge_point_source_space', "
+                        + "    'fk_knowledge_point_source_point', 'fk_knowledge_point_source_block')");
+        assertEquals(3, kpsFkRows.size(),
+                "knowledge_point_source must have exactly 3 FKs (actual: " + kpsFkRows.size() + ")");
+        Map<String, String> kpsFkTables = new java.util.HashMap<>();
+        for (Map<String, Object> row : kpsFkRows) {
+            kpsFkTables.put((String) row.get("CONSTRAINT_NAME"),
+                    (String) row.get("REFERENCED_TABLE_NAME"));
+        }
+        assertEquals("learning_space", kpsFkTables.get("fk_knowledge_point_source_space"));
+        assertEquals("knowledge_point", kpsFkTables.get("fk_knowledge_point_source_point"));
+        assertEquals("content_block", kpsFkTables.get("fk_knowledge_point_source_block"));
+
+        Map<String, Object> kpsCharset = jdbc.queryForMap(
+                "SELECT CCSA.CHARACTER_SET_NAME, CCSA.COLLATION_NAME "
+                        + "FROM information_schema.TABLES T "
+                        + "JOIN information_schema.COLLATION_CHARACTER_SET_APPLICABILITY CCSA "
+                        + "  ON T.TABLE_COLLATION = CCSA.COLLATION_NAME "
+                        + "WHERE T.TABLE_SCHEMA = DATABASE() AND T.TABLE_NAME = 'knowledge_point_source'");
+        assertEquals("utf8mb4", kpsCharset.get("CHARACTER_SET_NAME"),
+                "knowledge_point_source charset must be utf8mb4");
+        assertEquals("utf8mb4_unicode_ci", kpsCharset.get("COLLATION_NAME"),
+                "knowledge_point_source collation must be utf8mb4_unicode_ci");
     }
 
     // ==================== TEST B ====================
@@ -549,16 +1014,16 @@ class FlywayMigrationIntegrationTest {
         assertNotNull(beforeChecksum,
                 "V001 checksum must be present in flyway_schema_history before upgrade");
 
-        // (7) Migrate to latest. V002..V007 should all apply.
+        // (7) Migrate to latest. V002..V012 should all apply.
         MigrateResult result2 = flyway().migrate();
         int appliedV2 = result2.migrationsExecuted;
-        assertEquals(6, appliedV2,
-                "target=latest on V001-only db must apply V002..V007 (actual: " + appliedV2 + ")");
+        assertEquals(11, appliedV2,
+                "target=latest on V001-only db must apply V002..V012 (actual: " + appliedV2 + ")");
 
-        // (8) Verify history has 7 rows: V001..V007.
+        // (8) Verify history has 12 rows: V001..V012.
         List<Map<String, Object>> h2 = jdbc.queryForList(
                 "SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY installed_rank");
-        assertEquals(7, h2.size());
+        assertEquals(12, h2.size());
         assertEquals("001", String.valueOf(h2.get(0).get("version")));
         assertEquals("002", String.valueOf(h2.get(1).get("version")));
         assertEquals("003", String.valueOf(h2.get(2).get("version")));
@@ -566,6 +1031,11 @@ class FlywayMigrationIntegrationTest {
         assertEquals("005", String.valueOf(h2.get(4).get("version")));
         assertEquals("006", String.valueOf(h2.get(5).get("version")));
         assertEquals("007", String.valueOf(h2.get(6).get("version")));
+        assertEquals("008", String.valueOf(h2.get(7).get("version")));
+        assertEquals("009", String.valueOf(h2.get(8).get("version")));
+        assertEquals("010", String.valueOf(h2.get(9).get("version")));
+        assertEquals("011", String.valueOf(h2.get(10).get("version")));
+        assertEquals("012", String.valueOf(h2.get(11).get("version")));
         assertEquals(Boolean.TRUE, h2.get(0).get("success"));
         assertEquals(Boolean.TRUE, h2.get(1).get("success"));
         assertEquals(Boolean.TRUE, h2.get(2).get("success"));
@@ -573,6 +1043,11 @@ class FlywayMigrationIntegrationTest {
         assertEquals(Boolean.TRUE, h2.get(4).get("success"));
         assertEquals(Boolean.TRUE, h2.get(5).get("success"));
         assertEquals(Boolean.TRUE, h2.get(6).get("success"));
+        assertEquals(Boolean.TRUE, h2.get(7).get("success"));
+        assertEquals(Boolean.TRUE, h2.get(8).get("success"));
+        assertEquals(Boolean.TRUE, h2.get(9).get("success"));
+        assertEquals(Boolean.TRUE, h2.get(10).get("success"));
+        assertEquals(Boolean.TRUE, h2.get(11).get("success"));
 
         // (9) V001 checksum UNCHANGED.
         Integer afterChecksum = jdbc.queryForObject(
@@ -627,30 +1102,72 @@ class FlywayMigrationIntegrationTest {
         assertEquals(1, pointAfterUpgrade,
                 "knowledge_point must exist after upgrade to latest");
 
+        // (11f) source_asset now exists (V008 effect, BUSINESS-004).
+        Integer assetAfterUpgrade = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_asset'",
+                Integer.class);
+        assertEquals(1, assetAfterUpgrade,
+                "source_asset must exist after upgrade to latest");
+
+        // (11g) ingestion_job now exists (V009 effect, BUSINESS-005).
+        Integer jobAfterUpgrade = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ingestion_job'",
+                Integer.class);
+        assertEquals(1, jobAfterUpgrade,
+                "ingestion_job must exist after upgrade to latest");
+
+        // (11h) source_page now exists (V010 effect, BUSINESS-006).
+        Integer pageAfterUpgrade = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_page'",
+                Integer.class);
+        assertEquals(1, pageAfterUpgrade,
+                "source_page must exist after upgrade to latest");
+
+        // (11i) content_block now exists (V011 effect, BUSINESS-006).
+        Integer blockAfterUpgrade = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'content_block'",
+                Integer.class);
+        assertEquals(1, blockAfterUpgrade,
+                "content_block must exist after upgrade to latest");
+
+        // (11j) knowledge_point_source now exists (V012 effect, BUSINESS-007).
+        Integer kpsAfterUpgrade = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point_source'",
+                Integer.class);
+        assertEquals(1, kpsAfterUpgrade,
+                "knowledge_point_source must exist after upgrade to latest");
+
         // (12) Old data still exists with V002's note column NULL.
         Map<String, Object> old = jdbc.queryForMap(
                 "SELECT id, name, note FROM flyway_spike_record WHERE id = ?", preId);
         assertEquals("V001升级前保留数据", old.get("name"));
 
-        // (13) V002..V007 idempotent on second migrate.
+        // (13) V002..V012 idempotent on second migrate.
         MigrateResult result3 = flyway().migrate();
         assertEquals(0, result3.migrationsExecuted,
                 "second migrate on already-latest schema must be a no-op");
 
-        // (14) History still 7 rows.
+        // (14) History still 12 rows (V001 + V002..V012 = 12; the
+        // 11 in the assertion above was the migrationsExecuted count,
+        // not the history row count — RUNTIME-FIX-02-H).
         Integer finalCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history", Integer.class);
-        assertEquals(7, finalCount);
+        assertEquals(12, finalCount);
     }
 
     // ==================== TEST C ====================
 
     @Test
     void latestDatabaseRequiresNoMigrationOnSecondMigrate() {
-        // (1) Migrate to latest. V007 is the new latest version.
+        // (1) Migrate to latest. V012 is the new latest version.
         MigrateResult first = flyway().migrate();
-        assertEquals(7, first.migrationsExecuted,
-                "first migrate must apply V001..V007 (actual: " + first.migrationsExecuted + ")");
+        assertEquals(12, first.migrationsExecuted,
+                "first migrate must apply V001..V012 (actual: " + first.migrationsExecuted + ")");
 
         // (2) Confirm the SPIKE-only flyway_spike_record table has the
         // V002 note column.
@@ -700,15 +1217,55 @@ class FlywayMigrationIntegrationTest {
         assertEquals(1, pointExists,
                 "knowledge_point must exist after fresh migrate to latest");
 
+        // (2g) Also confirm the V008 source_asset table exists.
+        Integer assetExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_asset'",
+                Integer.class);
+        assertEquals(1, assetExists,
+                "source_asset must exist after fresh migrate to latest");
+
+        // (2h) Also confirm the V009 ingestion_job table exists.
+        Integer jobExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ingestion_job'",
+                Integer.class);
+        assertEquals(1, jobExists,
+                "ingestion_job must exist after fresh migrate to latest");
+
+        // (2i) Also confirm the V010 source_page table exists.
+        Integer pageExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_page'",
+                Integer.class);
+        assertEquals(1, pageExists,
+                "source_page must exist after fresh migrate to latest");
+
+        // (2j) Also confirm the V011 content_block table exists.
+        Integer blockExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'content_block'",
+                Integer.class);
+        assertEquals(1, blockExists,
+                "content_block must exist after fresh migrate to latest");
+
+        // (2k) Also confirm the V012 knowledge_point_source table exists.
+        Integer kpsExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_point_source'",
+                Integer.class);
+        assertEquals(1, kpsExists,
+                "knowledge_point_source must exist after fresh migrate to latest");
+
         // (3) Migrate AGAIN. Must be a no-op.
         MigrateResult second = flyway().migrate();
         assertEquals(0, second.migrationsExecuted,
                 "second migrate must execute 0 migrations (actual: " + second.migrationsExecuted + ")");
 
-        // (4) History still exactly 7 rows.
+        // (4) History still exactly 12 rows.
         Integer historyCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history", Integer.class);
-        assertEquals(7, historyCount);
+        assertEquals(12, historyCount);
 
         // (5) Versions unchanged.
         List<String> versions = jdbc.queryForList(
@@ -721,6 +1278,11 @@ class FlywayMigrationIntegrationTest {
         expected.add("005");
         expected.add("006");
         expected.add("007");
+        expected.add("008");
+        expected.add("009");
+        expected.add("010");
+        expected.add("011");
+        expected.add("012");
         assertEquals(expected, versions);
     }
 
