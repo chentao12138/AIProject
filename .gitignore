@@ -254,3 +254,6 @@ desktop.ini
 mysql-data/
 docker-data/
 volumes/
+
+
+sensenova-load-test/
