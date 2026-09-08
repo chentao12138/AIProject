@@ -2,6 +2,7 @@ package com.aistudy.server.e2e;
 
 import com.aistudy.server.spike.auth.SpikeJwtTokenService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -38,6 +39,7 @@ import java.util.concurrent.CountDownLatch;
         webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT,
         properties = "server.port=8080")
 @ActiveProfiles("flyway-it")
+@ResourceLock("aistudy-flyway-test")
 public class E2eBackendHarness {
 
     /** The e2e subject used for every E2E-C-* record. */

@@ -1,6 +1,7 @@
 package com.aistudy.server.e2e;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,6 +25,7 @@ import java.util.Map;
  */
 @SpringBootTest
 @ActiveProfiles("flyway-it")
+@ResourceLock("aistudy-flyway-test")
 public class E2eDbEvidence {
 
     private static final String SUBJECT = E2eBackendHarness.E2E_SUBJECT;

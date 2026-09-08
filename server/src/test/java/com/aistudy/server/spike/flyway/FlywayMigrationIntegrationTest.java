@@ -5,13 +5,18 @@ import org.flywaydb.core.api.output.MigrateResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.env.Environment;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +74,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @SpringBootTest
 @ActiveProfiles("flyway-it")
+@ResourceLock("aistudy-flyway-test")
 class FlywayMigrationIntegrationTest {
 
     /**
@@ -112,56 +118,31 @@ class FlywayMigrationIntegrationTest {
         assertEquals(0, histCount,
                 "flyway_schema_history must not exist after clean()");
 
-        // (1) Migrate to latest. V012 is now the latest version.
+        // (1) Migrate to latest. Expected version list is derived from
+        // the real classpath (no hardcoded counts — grows with each
+        // business migration).
         MigrateResult result = flyway().migrate();
         int applied = result.migrationsExecuted;
-        assertEquals(12, applied,
-                "Fresh migration must apply V001..V012 (actual: " + applied + ")");
+        List<String> expectedVersions = expectedMigrationVersions();
+        assertEquals(expectedVersions.size(), applied,
+                "Fresh migration must apply V001..V" + expectedVersions.get(expectedVersions.size() - 1)
+                        + " (actual: " + applied + ")");
 
-        // (2) Verify flyway_schema_history has 12 rows: V001..V012.
+        // (2) Verify flyway_schema_history rows.
         Integer finalCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history",
                 Integer.class);
-        assertEquals(12, finalCount);
+        assertEquals(expectedVersions.size(), finalCount);
 
         List<Map<String, Object>> history = jdbc.queryForList(
                 "SELECT installed_rank, version, description, script, checksum, success FROM flyway_schema_history ORDER BY installed_rank");
-        assertEquals("001", String.valueOf(history.get(0).get("version")));
-        assertEquals("002", String.valueOf(history.get(1).get("version")));
-        assertEquals("003", String.valueOf(history.get(2).get("version")));
-        assertEquals("004", String.valueOf(history.get(3).get("version")));
-        assertEquals("005", String.valueOf(history.get(4).get("version")));
-        assertEquals("006", String.valueOf(history.get(5).get("version")));
-        assertEquals("007", String.valueOf(history.get(6).get("version")));
-        assertEquals("008", String.valueOf(history.get(7).get("version")));
-        assertEquals("009", String.valueOf(history.get(8).get("version")));
-        assertEquals("010", String.valueOf(history.get(9).get("version")));
-        assertEquals("011", String.valueOf(history.get(10).get("version")));
-        assertEquals("012", String.valueOf(history.get(11).get("version")));
-        assertEquals(1, history.get(0).get("installed_rank"));
-        assertEquals(2, history.get(1).get("installed_rank"));
-        assertEquals(3, history.get(2).get("installed_rank"));
-        assertEquals(4, history.get(3).get("installed_rank"));
-        assertEquals(5, history.get(4).get("installed_rank"));
-        assertEquals(6, history.get(5).get("installed_rank"));
-        assertEquals(7, history.get(6).get("installed_rank"));
-        assertEquals(8, history.get(7).get("installed_rank"));
-        assertEquals(9, history.get(8).get("installed_rank"));
-        assertEquals(10, history.get(9).get("installed_rank"));
-        assertEquals(11, history.get(10).get("installed_rank"));
-        assertEquals(12, history.get(11).get("installed_rank"));
-        assertEquals(Boolean.TRUE, history.get(0).get("success"));
-        assertEquals(Boolean.TRUE, history.get(1).get("success"));
-        assertEquals(Boolean.TRUE, history.get(2).get("success"));
-        assertEquals(Boolean.TRUE, history.get(3).get("success"));
-        assertEquals(Boolean.TRUE, history.get(4).get("success"));
-        assertEquals(Boolean.TRUE, history.get(5).get("success"));
-        assertEquals(Boolean.TRUE, history.get(6).get("success"));
-        assertEquals(Boolean.TRUE, history.get(7).get("success"));
-        assertEquals(Boolean.TRUE, history.get(8).get("success"));
-        assertEquals(Boolean.TRUE, history.get(9).get("success"));
-        assertEquals(Boolean.TRUE, history.get(10).get("success"));
-        assertEquals(Boolean.TRUE, history.get(11).get("success"));
+        assertEquals(expectedVersions.size(), history.size(),
+                "history row count must match expected versions");
+        for (int i = 0; i < expectedVersions.size(); i++) {
+            assertEquals(expectedVersions.get(i), String.valueOf(history.get(i).get("version")));
+            assertEquals(i + 1, history.get(i).get("installed_rank"));
+            assertEquals(Boolean.TRUE, history.get(i).get("success"));
+        }
 
         // (3) Verify SPIKE-only flyway_spike_record table exists with both
         // V001 and V002 columns (unchanged from SPIKE-003 assertions).
@@ -962,6 +943,285 @@ class FlywayMigrationIntegrationTest {
                 "knowledge_point_source charset must be utf8mb4");
         assertEquals("utf8mb4_unicode_ci", kpsCharset.get("COLLATION_NAME"),
                 "knowledge_point_source collation must be utf8mb4_unicode_ci");
+
+        // (35) Verify the V019 mastery table (BUSINESS-014): columns,
+        // unique (user_subject, space_id, knowledge_point_id), FKs to
+        // learning_space + knowledge_point, charset.
+        Integer masteryTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mastery'",
+                Integer.class);
+        assertEquals(1, masteryTableCount,
+                "V019 must create the mastery table");
+
+        List<String> expectedMasteryColumns = new ArrayList<>();
+        expectedMasteryColumns.add("id");
+        expectedMasteryColumns.add("user_subject");
+        expectedMasteryColumns.add("space_id");
+        expectedMasteryColumns.add("knowledge_point_id");
+        expectedMasteryColumns.add("mastery_score");
+        expectedMasteryColumns.add("confidence");
+        expectedMasteryColumns.add("practice_evidence_count");
+        expectedMasteryColumns.add("exam_evidence_count");
+        expectedMasteryColumns.add("review_evidence_count");
+        expectedMasteryColumns.add("last_evidence_at");
+        expectedMasteryColumns.add("created_at");
+        expectedMasteryColumns.add("updated_at");
+        List<String> actualMasteryColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mastery' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        assertEquals(expectedMasteryColumns, actualMasteryColumns,
+                "mastery must have exactly the expected columns in order");
+
+        List<String> masteryUkColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mastery' "
+                        + "AND INDEX_NAME = 'uk_mastery_user_space_kp' ORDER BY SEQ_IN_INDEX",
+                String.class);
+        List<String> expectedMasteryUk = new ArrayList<>();
+        expectedMasteryUk.add("user_subject");
+        expectedMasteryUk.add("space_id");
+        expectedMasteryUk.add("knowledge_point_id");
+        assertEquals(expectedMasteryUk, masteryUkColumns,
+                "uk_mastery_user_space_kp must cover (user_subject, space_id, knowledge_point_id)");
+        Integer masteryUkNonUnique = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mastery' "
+                        + "AND INDEX_NAME = 'uk_mastery_user_space_kp' AND NON_UNIQUE = 0",
+                Integer.class);
+        assertTrue(masteryUkNonUnique > 0, "uk_mastery_user_space_kp must be a UNIQUE index");
+
+        List<Map<String, Object>> masteryFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME "
+                        + "FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'mastery' "
+                        + "  AND CONSTRAINT_NAME IN ('fk_mastery_space', 'fk_mastery_kp')");
+        assertEquals(2, masteryFkRows.size(),
+                "mastery must have exactly 2 FKs (actual: " + masteryFkRows.size() + ")");
+        Map<String, Map<String, Object>> masteryFkByName = new HashMap<>();
+        for (Map<String, Object> row : masteryFkRows) {
+            masteryFkByName.put(String.valueOf(row.get("CONSTRAINT_NAME")), row);
+        }
+        assertEquals("learning_space",
+                masteryFkByName.get("fk_mastery_space").get("REFERENCED_TABLE_NAME"),
+                "fk_mastery_space must reference learning_space");
+        assertEquals("id",
+                masteryFkByName.get("fk_mastery_space").get("REFERENCED_COLUMN_NAME"),
+                "fk_mastery_space must reference learning_space(id)");
+        assertEquals("knowledge_point",
+                masteryFkByName.get("fk_mastery_kp").get("REFERENCED_TABLE_NAME"),
+                "fk_mastery_kp must reference knowledge_point");
+        assertEquals("id",
+                masteryFkByName.get("fk_mastery_kp").get("REFERENCED_COLUMN_NAME"),
+                "fk_mastery_kp must reference knowledge_point(id)");
+
+        Map<String, Object> masteryCharset = jdbc.queryForMap(
+                "SELECT CCSA.CHARACTER_SET_NAME, CCSA.COLLATION_NAME "
+                        + "FROM information_schema.TABLES T "
+                        + "JOIN information_schema.COLLATION_CHARACTER_SET_APPLICABILITY CCSA "
+                        + "  ON T.TABLE_COLLATION = CCSA.COLLATION_NAME "
+                        + "WHERE T.TABLE_SCHEMA = DATABASE() AND T.TABLE_NAME = 'mastery'");
+        assertEquals("utf8mb4", masteryCharset.get("CHARACTER_SET_NAME"),
+                "mastery charset must be utf8mb4");
+        assertEquals("utf8mb4_unicode_ci", masteryCharset.get("COLLATION_NAME"),
+                "mastery collation must be utf8mb4_unicode_ci");
+
+        // (36) Verify the V020 exam_diagnosis + exam_diagnosis_item
+        // tables (BUSINESS-015): unique per attempt, FK to
+        // exam_attempt, item FK to exam_diagnosis.
+        Integer diagnosisTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'exam_diagnosis'",
+                Integer.class);
+        assertEquals(1, diagnosisTableCount,
+                "V020 must create the exam_diagnosis table");
+
+        List<String> expectedDiagnosisColumns = new ArrayList<>();
+        expectedDiagnosisColumns.add("id");
+        expectedDiagnosisColumns.add("exam_attempt_id");
+        expectedDiagnosisColumns.add("user_subject");
+        expectedDiagnosisColumns.add("space_id");
+        expectedDiagnosisColumns.add("summary");
+        expectedDiagnosisColumns.add("created_at");
+        List<String> actualDiagnosisColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'exam_diagnosis' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        assertEquals(expectedDiagnosisColumns, actualDiagnosisColumns,
+                "exam_diagnosis must have exactly the expected columns in order");
+
+        List<String> diagnosisUkColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'exam_diagnosis' "
+                        + "AND INDEX_NAME = 'uk_exam_diagnosis_attempt' ORDER BY SEQ_IN_INDEX",
+                String.class);
+        assertEquals(List.of("exam_attempt_id"), diagnosisUkColumns,
+                "uk_exam_diagnosis_attempt must cover exam_attempt_id");
+        Integer diagnosisUkNonUnique = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'exam_diagnosis' "
+                        + "AND INDEX_NAME = 'uk_exam_diagnosis_attempt' AND NON_UNIQUE = 0",
+                Integer.class);
+        assertTrue(diagnosisUkNonUnique > 0, "uk_exam_diagnosis_attempt must be UNIQUE");
+
+        List<Map<String, Object>> diagnosisFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME "
+                        + "FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'exam_diagnosis' "
+                        + "  AND CONSTRAINT_NAME IN ('fk_exam_diagnosis_space', 'fk_exam_diagnosis_attempt')");
+        assertEquals(2, diagnosisFkRows.size(),
+                "exam_diagnosis must have exactly 2 FKs (actual: " + diagnosisFkRows.size() + ")");
+        Map<String, String> diagnosisFkTables = new HashMap<>();
+        for (Map<String, Object> row : diagnosisFkRows) {
+            diagnosisFkTables.put(String.valueOf(row.get("CONSTRAINT_NAME")),
+                    String.valueOf(row.get("REFERENCED_TABLE_NAME")));
+        }
+        assertEquals("learning_space", diagnosisFkTables.get("fk_exam_diagnosis_space"),
+                "fk_exam_diagnosis_space must reference learning_space");
+        assertEquals("exam_attempt", diagnosisFkTables.get("fk_exam_diagnosis_attempt"),
+                "fk_exam_diagnosis_attempt must reference exam_attempt");
+
+        Integer diagnosisItemTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'exam_diagnosis_item'",
+                Integer.class);
+        assertEquals(1, diagnosisItemTableCount,
+                "V020 must create the exam_diagnosis_item table");
+
+        List<String> expectedDiagnosisItemColumns = new ArrayList<>();
+        expectedDiagnosisItemColumns.add("id");
+        expectedDiagnosisItemColumns.add("exam_diagnosis_id");
+        expectedDiagnosisItemColumns.add("dimension_type");
+        expectedDiagnosisItemColumns.add("dimension_id");
+        expectedDiagnosisItemColumns.add("label");
+        expectedDiagnosisItemColumns.add("score");
+        expectedDiagnosisItemColumns.add("max_score");
+        expectedDiagnosisItemColumns.add("accuracy");
+        expectedDiagnosisItemColumns.add("evidence_count");
+        expectedDiagnosisItemColumns.add("severity");
+        expectedDiagnosisItemColumns.add("recommendation");
+        expectedDiagnosisItemColumns.add("created_at");
+        List<String> actualDiagnosisItemColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'exam_diagnosis_item' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        assertEquals(expectedDiagnosisItemColumns, actualDiagnosisItemColumns,
+                "exam_diagnosis_item must have exactly the expected columns in order");
+
+        List<Map<String, Object>> itemFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME "
+                        + "FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'exam_diagnosis_item' "
+                        + "  AND CONSTRAINT_NAME = 'fk_diagnosis_item_diagnosis'");
+        assertEquals(1, itemFkRows.size(),
+                "exam_diagnosis_item must have exactly 1 FK");
+        assertEquals("exam_diagnosis",
+                String.valueOf(itemFkRows.get(0).get("REFERENCED_TABLE_NAME")),
+                "fk_diagnosis_item_diagnosis must reference exam_diagnosis");
+
+        // (37) Verify the V021 study_plan + study_task tables
+        // (BUSINESS-016): plan FK to learning_space, task FKs to
+        // study_plan + learning_space, task index on plan.
+        Integer studyPlanTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'study_plan'",
+                Integer.class);
+        assertEquals(1, studyPlanTableCount,
+                "V021 must create the study_plan table");
+
+        List<String> expectedStudyPlanColumns = new ArrayList<>();
+        expectedStudyPlanColumns.add("id");
+        expectedStudyPlanColumns.add("user_subject");
+        expectedStudyPlanColumns.add("space_id");
+        expectedStudyPlanColumns.add("name");
+        expectedStudyPlanColumns.add("start_date");
+        expectedStudyPlanColumns.add("end_date");
+        expectedStudyPlanColumns.add("status");
+        expectedStudyPlanColumns.add("created_at");
+        expectedStudyPlanColumns.add("updated_at");
+        List<String> actualStudyPlanColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'study_plan' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        assertEquals(expectedStudyPlanColumns, actualStudyPlanColumns,
+                "study_plan must have exactly the expected columns in order");
+
+        List<Map<String, Object>> studyPlanFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME "
+                        + "FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'study_plan' "
+                        + "  AND CONSTRAINT_NAME = 'fk_study_plan_space'");
+        assertEquals(1, studyPlanFkRows.size(),
+                "study_plan must have exactly 1 FK");
+        assertEquals("learning_space",
+                String.valueOf(studyPlanFkRows.get(0).get("REFERENCED_TABLE_NAME")),
+                "fk_study_plan_space must reference learning_space");
+
+        Integer studyTaskTableCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'study_task'",
+                Integer.class);
+        assertEquals(1, studyTaskTableCount,
+                "V021 must create the study_task table");
+
+        List<String> expectedStudyTaskColumns = new ArrayList<>();
+        expectedStudyTaskColumns.add("id");
+        expectedStudyTaskColumns.add("study_plan_id");
+        expectedStudyTaskColumns.add("user_subject");
+        expectedStudyTaskColumns.add("space_id");
+        expectedStudyTaskColumns.add("task_type");
+        expectedStudyTaskColumns.add("target_type");
+        expectedStudyTaskColumns.add("target_id");
+        expectedStudyTaskColumns.add("title");
+        expectedStudyTaskColumns.add("reason");
+        expectedStudyTaskColumns.add("due_at");
+        expectedStudyTaskColumns.add("priority");
+        expectedStudyTaskColumns.add("status");
+        expectedStudyTaskColumns.add("completed_at");
+        expectedStudyTaskColumns.add("created_at");
+        expectedStudyTaskColumns.add("updated_at");
+        List<String> actualStudyTaskColumns = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'study_task' "
+                        + "ORDER BY ORDINAL_POSITION",
+                String.class);
+        assertEquals(expectedStudyTaskColumns, actualStudyTaskColumns,
+                "study_task must have exactly the expected columns in order");
+
+        List<String> studyTaskPlanIndex = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'study_task' "
+                        + "AND INDEX_NAME = 'idx_study_task_plan' ORDER BY SEQ_IN_INDEX",
+                String.class);
+        assertEquals(List.of("study_plan_id"), studyTaskPlanIndex,
+                "idx_study_task_plan must cover study_plan_id");
+
+        List<Map<String, Object>> studyTaskFkRows = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME "
+                        + "FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'study_task' "
+                        + "  AND CONSTRAINT_NAME IN ('fk_study_task_plan', 'fk_study_task_space')");
+        assertEquals(2, studyTaskFkRows.size(),
+                "study_task must have exactly 2 FKs");
+        Map<String, String> studyTaskFkTables = new HashMap<>();
+        for (Map<String, Object> row : studyTaskFkRows) {
+            studyTaskFkTables.put(String.valueOf(row.get("CONSTRAINT_NAME")),
+                    String.valueOf(row.get("REFERENCED_TABLE_NAME")));
+        }
+        assertEquals("study_plan", studyTaskFkTables.get("fk_study_task_plan"),
+                "fk_study_task_plan must reference study_plan");
+        assertEquals("learning_space", studyTaskFkTables.get("fk_study_task_space"),
+                "fk_study_task_space must reference learning_space");
     }
 
     // ==================== TEST B ====================
@@ -1014,40 +1274,23 @@ class FlywayMigrationIntegrationTest {
         assertNotNull(beforeChecksum,
                 "V001 checksum must be present in flyway_schema_history before upgrade");
 
-        // (7) Migrate to latest. V002..V012 should all apply.
+        // (7) Migrate to latest. All migrations after V001 apply.
         MigrateResult result2 = flyway().migrate();
         int appliedV2 = result2.migrationsExecuted;
-        assertEquals(11, appliedV2,
-                "target=latest on V001-only db must apply V002..V012 (actual: " + appliedV2 + ")");
+        List<String> expectedVersions = expectedMigrationVersions();
+        assertEquals(expectedVersions.size() - 1, appliedV2,
+                "target=latest on V001-only db must apply V002..V"
+                        + expectedVersions.get(expectedVersions.size() - 1)
+                        + " (actual: " + appliedV2 + ")");
 
-        // (8) Verify history has 12 rows: V001..V012.
+        // (8) Verify history has one row per migration: V001..latest.
         List<Map<String, Object>> h2 = jdbc.queryForList(
                 "SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY installed_rank");
-        assertEquals(12, h2.size());
-        assertEquals("001", String.valueOf(h2.get(0).get("version")));
-        assertEquals("002", String.valueOf(h2.get(1).get("version")));
-        assertEquals("003", String.valueOf(h2.get(2).get("version")));
-        assertEquals("004", String.valueOf(h2.get(3).get("version")));
-        assertEquals("005", String.valueOf(h2.get(4).get("version")));
-        assertEquals("006", String.valueOf(h2.get(5).get("version")));
-        assertEquals("007", String.valueOf(h2.get(6).get("version")));
-        assertEquals("008", String.valueOf(h2.get(7).get("version")));
-        assertEquals("009", String.valueOf(h2.get(8).get("version")));
-        assertEquals("010", String.valueOf(h2.get(9).get("version")));
-        assertEquals("011", String.valueOf(h2.get(10).get("version")));
-        assertEquals("012", String.valueOf(h2.get(11).get("version")));
-        assertEquals(Boolean.TRUE, h2.get(0).get("success"));
-        assertEquals(Boolean.TRUE, h2.get(1).get("success"));
-        assertEquals(Boolean.TRUE, h2.get(2).get("success"));
-        assertEquals(Boolean.TRUE, h2.get(3).get("success"));
-        assertEquals(Boolean.TRUE, h2.get(4).get("success"));
-        assertEquals(Boolean.TRUE, h2.get(5).get("success"));
-        assertEquals(Boolean.TRUE, h2.get(6).get("success"));
-        assertEquals(Boolean.TRUE, h2.get(7).get("success"));
-        assertEquals(Boolean.TRUE, h2.get(8).get("success"));
-        assertEquals(Boolean.TRUE, h2.get(9).get("success"));
-        assertEquals(Boolean.TRUE, h2.get(10).get("success"));
-        assertEquals(Boolean.TRUE, h2.get(11).get("success"));
+        assertEquals(expectedVersions.size(), h2.size());
+        for (int i = 0; i < expectedVersions.size(); i++) {
+            assertEquals(expectedVersions.get(i), String.valueOf(h2.get(i).get("version")));
+            assertEquals(Boolean.TRUE, h2.get(i).get("success"));
+        }
 
         // (9) V001 checksum UNCHANGED.
         Integer afterChecksum = jdbc.queryForObject(
@@ -1147,27 +1390,30 @@ class FlywayMigrationIntegrationTest {
                 "SELECT id, name, note FROM flyway_spike_record WHERE id = ?", preId);
         assertEquals("V001升级前保留数据", old.get("name"));
 
-        // (13) V002..V012 idempotent on second migrate.
+        // (13) second migrate on already-latest schema must be a no-op.
         MigrateResult result3 = flyway().migrate();
         assertEquals(0, result3.migrationsExecuted,
                 "second migrate on already-latest schema must be a no-op");
 
-        // (14) History still 12 rows (V001 + V002..V012 = 12; the
-        // 11 in the assertion above was the migrationsExecuted count,
-        // not the history row count — RUNTIME-FIX-02-H).
+        // (14) History still exactly one row per migration
+        // (V001 + V002..latest; migrationsExecuted in (7) was the
+        // delta count, not the history row count — RUNTIME-FIX-02-H).
         Integer finalCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history", Integer.class);
-        assertEquals(12, finalCount);
+        assertEquals(expectedMigrationVersions().size(), finalCount);
     }
 
     // ==================== TEST C ====================
 
     @Test
     void latestDatabaseRequiresNoMigrationOnSecondMigrate() {
-        // (1) Migrate to latest. V012 is the new latest version.
+        // (1) Migrate to latest. Count derived from the real classpath.
         MigrateResult first = flyway().migrate();
-        assertEquals(12, first.migrationsExecuted,
-                "first migrate must apply V001..V012 (actual: " + first.migrationsExecuted + ")");
+        List<String> expectedVersions = expectedMigrationVersions();
+        assertEquals(expectedVersions.size(), first.migrationsExecuted,
+                "first migrate must apply V001..V"
+                        + expectedVersions.get(expectedVersions.size() - 1)
+                        + " (actual: " + first.migrationsExecuted + ")");
 
         // (2) Confirm the SPIKE-only flyway_spike_record table has the
         // V002 note column.
@@ -1262,28 +1508,40 @@ class FlywayMigrationIntegrationTest {
         assertEquals(0, second.migrationsExecuted,
                 "second migrate must execute 0 migrations (actual: " + second.migrationsExecuted + ")");
 
-        // (4) History still exactly 12 rows.
+        // (4) History still exactly one row per migration.
         Integer historyCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history", Integer.class);
-        assertEquals(12, historyCount);
+        assertEquals(expectedVersions.size(), historyCount);
 
         // (5) Versions unchanged.
         List<String> versions = jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history ORDER BY installed_rank", String.class);
-        List<String> expected = new ArrayList<>();
-        expected.add("001");
-        expected.add("002");
-        expected.add("003");
-        expected.add("004");
-        expected.add("005");
-        expected.add("006");
-        expected.add("007");
-        expected.add("008");
-        expected.add("009");
-        expected.add("010");
-        expected.add("011");
-        expected.add("012");
-        assertEquals(expected, versions);
+        assertEquals(expectedVersions, versions);
+    }
+
+    /**
+     * Derives the expected migration version list from the real
+     * classpath ({@code db/migration/V*.sql}), so this test never
+     * needs a hardcoded count again when business migrations are
+     * added (RUNTIME-FIX-02-H recurring staleness eliminated at
+     * BUSINESS-008).
+     */
+    private List<String> expectedMigrationVersions() {
+        try {
+            Resource[] resources = new PathMatchingResourcePatternResolver()
+                    .getResources("classpath:db/migration/V*.sql");
+            List<String> versions = new ArrayList<>();
+            for (Resource r : resources) {
+                String name = r.getFilename();
+                if (name != null && name.startsWith("V") && name.contains("__")) {
+                    versions.add(name.substring(1, name.indexOf("__")));
+                }
+            }
+            versions.sort(Comparator.comparingInt(Integer::parseInt));
+            return versions;
+        } catch (Exception e) {
+            throw new IllegalStateException("cannot enumerate migration files", e);
+        }
     }
 
     // ==================== helpers ====================

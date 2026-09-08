@@ -14,6 +14,21 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import com.aistudy.server.question.mapper.QuestionMapper;
+import com.aistudy.server.question.mapper.QuestionOptionMapper;
+import com.aistudy.server.question.mapper.QuestionKnowledgePointMapper;
+import com.aistudy.server.practice.mapper.PracticeSessionMapper;
+import com.aistudy.server.practice.mapper.PracticeSessionQuestionMapper;
+import com.aistudy.server.practice.mapper.PracticeAnswerMapper;
+import com.aistudy.server.wrong.mapper.WrongQuestionMapper;
+import com.aistudy.server.wrong.mapper.ReviewTaskMapper;
+import com.aistudy.server.wrong.mapper.ReviewRecordMapper;
+import com.aistudy.server.exam.mapper.ExamMapper;
+import com.aistudy.server.exam.mapper.ExamPaperMapper;
+import com.aistudy.server.exam.mapper.ExamQuestionMapper;
+import com.aistudy.server.exam.mapper.ExamAttemptMapper;
+import com.aistudy.server.exam.mapper.ExamAnswerMapper;
+import com.aistudy.server.exam.mapper.ExamResultMapper;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -123,6 +138,48 @@ class AiStudyApplicationTests {
     /** BUSINESS-006: keep the test profile context bootable. */
     @MockitoBean
     private ContentBlockMapper contentBlockMapper;
+    @MockitoBean
+    private com.aistudy.server.question.mapper.QuestionMapper questionMapper;
+    @MockitoBean
+    private com.aistudy.server.question.mapper.QuestionOptionMapper questionOptionMapper;
+    @MockitoBean
+    private com.aistudy.server.question.mapper.QuestionKnowledgePointMapper questionKnowledgePointMapper;
+    @MockitoBean
+    private com.aistudy.server.practice.mapper.PracticeSessionMapper practiceSessionMapper;
+    @MockitoBean
+    private com.aistudy.server.practice.mapper.PracticeSessionQuestionMapper practiceSessionQuestionMapper;
+    @MockitoBean
+    private com.aistudy.server.practice.mapper.PracticeAnswerMapper practiceAnswerMapper;
+    @MockitoBean
+    private com.aistudy.server.wrong.mapper.WrongQuestionMapper wrongQuestionMapper;
+    @MockitoBean
+    private com.aistudy.server.wrong.mapper.ReviewTaskMapper reviewTaskMapper;
+    @MockitoBean
+    private com.aistudy.server.wrong.mapper.ReviewRecordMapper reviewRecordMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamMapper examMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamPaperMapper examPaperMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamQuestionMapper examQuestionMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamAttemptMapper examAttemptMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamAnswerMapper examAnswerMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamResultMapper examResultMapper;
+    @MockitoBean
+    private com.aistudy.server.mastery.mapper.MasteryMapper masteryMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamDiagnosisMapper examDiagnosisMapper;
+
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamDiagnosisItemMapper examDiagnosisItemMapper;
+    @MockitoBean
+    private com.aistudy.server.studyplan.mapper.StudyPlanMapper studyPlanMapper;
+
+    @MockitoBean
+    private com.aistudy.server.studyplan.mapper.StudyTaskMapper studyTaskMapper;
 
 
     @Test

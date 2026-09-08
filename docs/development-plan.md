@@ -1,8 +1,6 @@
 # 开发计划
 
-> 状态：**BUSINESS-001 ~ BUSINESS-007 全部 COMPLETE（用户 runtime verified，2026-09-06）— AWAITING USER GIT CLOSEOUT；下一后端业务块：Phase 5 Vertical Slice B（Question/Practice foundation）NOT STARTED**
->
-> SPIKE-001 ~ SPIKE-005 已完成当前所需技术验证。SPIKE-006 ~ SPIKE-014 不再作为业务开发前置门槛，改为在相关能力真正进入实现时按需验证。下一阶段开始正式 Platform Skeleton，并从 LearningSpace vertical slice 开始。
+> 状态：**BUSINESS-001 ~ BUSINESS-007 全部 COMPLETE（用户 runtime verified，2026-09-06）；BUSINESS-008~016 COMPLETE / RUNTIME VERIFIED（2026-09-08 final backend closeout）**
 
 ## Phase 0：Baseline Final Review
 
@@ -367,7 +365,7 @@ admin-web/
 
 ## Phase 5：Vertical Slice B — Question → Practice → Wrong
 
-> 状态：**NOT STARTED**（BUSINESS-004~007 已于 2026-09-06 收口 COMPLETE；Question/Practice 为下一后端业务块，用户 Git closeout 后开始）
+> 状态：**BUSINESS-008/009/010/011/012/013/014/015/016 COMPLETE / RUNTIME VERIFIED（2026-09-08 final backend closeout；V013~V021）**
 
 1. Question/Option。
 2. KnowledgePoint relation。
