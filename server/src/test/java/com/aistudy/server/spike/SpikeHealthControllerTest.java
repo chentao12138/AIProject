@@ -1,9 +1,14 @@
 package com.aistudy.server.spike;
 
 import com.aistudy.server.space.mapper.LearningSpaceMapper;
+import com.aistudy.server.source.asset.mapper.SourceAssetMapper;
+import com.aistudy.server.ingestion.job.mapper.IngestionJobMapper;
+import com.aistudy.server.source.content.mapper.ContentBlockMapper;
+import com.aistudy.server.source.page.mapper.SourcePageMapper;
 import com.aistudy.server.source.mapper.SourceMapper;
 import com.aistudy.server.knowledge.category.mapper.KnowledgeCategoryMapper;
 import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
+import com.aistudy.server.knowledge.source.mapper.KnowledgePointSourceMapper;
 import com.aistudy.server.spike.auth.SpikeSpaceMembershipRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +22,21 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import com.aistudy.server.question.mapper.QuestionMapper;
+import com.aistudy.server.question.mapper.QuestionOptionMapper;
+import com.aistudy.server.question.mapper.QuestionKnowledgePointMapper;
+import com.aistudy.server.practice.mapper.PracticeSessionMapper;
+import com.aistudy.server.practice.mapper.PracticeSessionQuestionMapper;
+import com.aistudy.server.practice.mapper.PracticeAnswerMapper;
+import com.aistudy.server.wrong.mapper.WrongQuestionMapper;
+import com.aistudy.server.wrong.mapper.ReviewTaskMapper;
+import com.aistudy.server.wrong.mapper.ReviewRecordMapper;
+import com.aistudy.server.exam.mapper.ExamMapper;
+import com.aistudy.server.exam.mapper.ExamPaperMapper;
+import com.aistudy.server.exam.mapper.ExamQuestionMapper;
+import com.aistudy.server.exam.mapper.ExamAttemptMapper;
+import com.aistudy.server.exam.mapper.ExamAnswerMapper;
+import com.aistudy.server.exam.mapper.ExamResultMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -107,6 +127,68 @@ class SpikeHealthControllerTest {
      */
     @MockitoBean
     private KnowledgePointMapper knowledgePointMapper;
+
+    /** BUSINESS-007: keep the test profile context bootable. */
+    @MockitoBean
+    private KnowledgePointSourceMapper knowledgePointSourceMapper;
+
+    /** BUSINESS-004: keep the test profile context bootable. */
+    @MockitoBean
+    private SourceAssetMapper sourceAssetMapper;
+
+    /** BUSINESS-005: keep the test profile context bootable. */
+    @MockitoBean
+    private IngestionJobMapper ingestionJobMapper;
+
+    /** BUSINESS-006: keep the test profile context bootable. */
+    @MockitoBean
+    private SourcePageMapper sourcePageMapper;
+
+    /** BUSINESS-006: keep the test profile context bootable. */
+    @MockitoBean
+    private ContentBlockMapper contentBlockMapper;
+    @MockitoBean
+    private com.aistudy.server.question.mapper.QuestionMapper questionMapper;
+    @MockitoBean
+    private com.aistudy.server.question.mapper.QuestionOptionMapper questionOptionMapper;
+    @MockitoBean
+    private com.aistudy.server.question.mapper.QuestionKnowledgePointMapper questionKnowledgePointMapper;
+    @MockitoBean
+    private com.aistudy.server.practice.mapper.PracticeSessionMapper practiceSessionMapper;
+    @MockitoBean
+    private com.aistudy.server.practice.mapper.PracticeSessionQuestionMapper practiceSessionQuestionMapper;
+    @MockitoBean
+    private com.aistudy.server.practice.mapper.PracticeAnswerMapper practiceAnswerMapper;
+    @MockitoBean
+    private com.aistudy.server.wrong.mapper.WrongQuestionMapper wrongQuestionMapper;
+    @MockitoBean
+    private com.aistudy.server.wrong.mapper.ReviewTaskMapper reviewTaskMapper;
+    @MockitoBean
+    private com.aistudy.server.wrong.mapper.ReviewRecordMapper reviewRecordMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamMapper examMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamPaperMapper examPaperMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamQuestionMapper examQuestionMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamAttemptMapper examAttemptMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamAnswerMapper examAnswerMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamResultMapper examResultMapper;
+    @MockitoBean
+    private com.aistudy.server.mastery.mapper.MasteryMapper masteryMapper;
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamDiagnosisMapper examDiagnosisMapper;
+
+    @MockitoBean
+    private com.aistudy.server.exam.mapper.ExamDiagnosisItemMapper examDiagnosisItemMapper;
+    @MockitoBean
+    private com.aistudy.server.studyplan.mapper.StudyPlanMapper studyPlanMapper;
+
+    @MockitoBean
+    private com.aistudy.server.studyplan.mapper.StudyTaskMapper studyTaskMapper;
 
 
     @Test

@@ -1,9 +1,6 @@
 package com.aistudy.server.spike.mysql;
 
-import com.aistudy.server.space.mapper.LearningSpaceMapper;
-import com.aistudy.server.source.mapper.SourceMapper;
-import com.aistudy.server.knowledge.category.mapper.KnowledgeCategoryMapper;
-import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
+import com.aistudy.server.config.SpikeMybatisConfig;
 import com.aistudy.server.spike.mysql.mapper.SpikeRecordMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.MethodOrderer;
@@ -11,10 +8,12 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -26,32 +25,48 @@ import static org.junit.jupiter.api.Assertions.*;
  * SPIKE-002 ONLY. Real MySQL integration test for MyBatis-Plus BaseMapper.
  * Requires a running MySQL 8.x reachable at DB_URL (see deploy/local/mysql/).
  *
- * <h3>BUSINESS-001-FIX-02: context isolation</h3>
+ * <h3>Profile responsibility</h3>
  *
- * <p>Since BUSINESS-001 added the production
- * {@code com.aistudy.server.space.mapper.LearningSpaceMapper} and its
- * consuming {@code LearningSpaceService}, every full-context
- * {@code @SpringBootTest} must be able to construct that service.
- * Under the {@code it} profile, {@code SpikeMybatisConfig} only scans
- * {@code com.aistudy.server.spike.mysql.mapper} (deliberately: the
- * {@code it} profile is the old SPIKE-002 database environment and
- * must NOT be widened to scan the production business mapper — the
- * production mapper belongs to the {@code flyway-it} / real
- * deployment datasource, not to {@code aistudy_spike}).
+ * <p>The {@code it} profile is the legacy SPIKE-002 environment. It must NOT be
+ * confused with the formal business integration profile {@code flyway-it}.
+ * {@code SpikeMybatisConfig} intentionally scans ONLY
+ * {@code com.aistudy.server.spike.mysql.mapper}; it must NOT be widened to
+ * scan production business mappers.
  *
- * <p>This class only verifies {@link SpikeRecordMapper} against real
- * MySQL 8 + utf8mb4; it has nothing to do with LearningSpace. The
- * {@code @MockitoBean LearningSpaceMapper} below replaces ONLY the
- * unrelated business mapper bean so the context can boot.
+ * <h3>LEGACY-SPIKE-002-TEST-CONTEXT-FIX: minimal context</h3>
  *
- * <p>{@link SpikeRecordMapper} itself is deliberately NOT mocked —
- * the whole point of this test is the real MyBatis-Plus → real MySQL
- * insert/select/delete round trip through the real mapper bean.
+ * <p>Previously this test used a full {@code AiStudyApplication} context.
+ * After BUSINESS-008~016 added production services/mappers that are NOT
+ * scanned under the {@code it} profile, the full-context bootstrap failed
+ * with missing-business-mapper errors (e.g. {@code ExamAttemptService} ->
+ * {@code ExamAttemptMapper}).
+ *
+ * <p>This test now boots a MINIMAL Spring Boot context that contains ONLY:
+ *
+ * <ul>
+ *   <li>DataSource auto-configuration (real MySQL via DB_URL / DB_USERNAME / DB_PASSWORD)</li>
+ *   <li>MyBatis-Plus / MyBatis auto-configuration</li>
+ *   <li>{@link SpikeMybatisConfig} (scans {@code com.aistudy.server.spike.mysql.mapper} only)</li>
+ *   <li>{@link SpikeRecordMapper} (real bean, NOT mocked)</li>
+ *   <li>{@link JdbcTemplate} / {@link org.springframework.jdbc.datasource.DataSourceUtils}</li>
+ * </ul>
+ *
+ * <p>It must NOT scan controllers, services, or production business mappers.
+ *
+ * <p>{@link SpikeRecordMapper} itself is deliberately NOT mocked — the whole
+ * point of this test is the real MyBatis-Plus -> real MySQL insert/select/delete
+ * round trip through the real mapper bean.
  */
-@SpringBootTest
+@SpringBootTest(classes = SpikeRecordMapperIntegrationTest.MinimalSpikeTestApplication.class)
 @ActiveProfiles("it")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class SpikeRecordMapperIntegrationTest {
+
+    @Configuration
+    @EnableAutoConfiguration
+    @Import(SpikeMybatisConfig.class)
+    static class MinimalSpikeTestApplication {
+    }
 
     private static final String CHINESE_NAME = "数据库系统工程师";
     private static final String CHINESE_DESC = "MyBatis-Plus 与 MySQL 中文写入验证";
@@ -61,40 +76,6 @@ class SpikeRecordMapperIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
-
-    /**
-     * BUSINESS-001-FIX-02: mock the production LearningSpace mapper so
-     * this SPIKE-002 context can boot without widening
-     * {@code SpikeMybatisConfig}'s {@code @MapperScan}. Not stubbed —
-     * this test never touches LearningSpace persistence.
-     */
-    @MockitoBean
-    private LearningSpaceMapper learningSpaceMapper;
-    /**
-     * BUSINESS-002: mock the production Source mapper so this
-     * full-context test keeps running without MyBatis-Plus /
-     * DataSource under this profile. Not stubbed — this test never
-     * touches Source persistence. The real SourceMapper is exercised
-     * by SourceVerticalSliceIntegrationTest (flyway-it profile).
-     */
-    @MockitoBean
-    private SourceMapper sourceMapper;
-
-    /**
-     * BUSINESS-003: mock the Knowledge mappers so this
-     * full-context test keeps running without MyBatis-Plus /
-     * DataSource under this profile. Not stubbed — this test
-     * never touches Knowledge persistence.
-     */
-    @MockitoBean
-    private KnowledgeCategoryMapper knowledgeCategoryMapper;
-
-    /**
-     * BUSINESS-003: mock the KnowledgePoint mapper (see above).
-     */
-    @MockitoBean
-    private KnowledgePointMapper knowledgePointMapper;
-
 
     private Long createdId;
 

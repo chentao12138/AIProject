@@ -20,6 +20,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/study-plan/tasks/{taskId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["complete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/study-plan/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["generate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces/{spaceId}/sources": {
         parameters: {
             query?: never;
@@ -36,7 +68,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/knowledge-points": {
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs": {
         parameters: {
             query?: never;
             header?: never;
@@ -52,7 +84,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/publish": {
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_3"];
+        put?: never;
+        post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/review-tasks/{taskId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["complete_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_4"];
+        put?: never;
+        post: operations["create_3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/questions/{questionId}/publish": {
         parameters: {
             query?: never;
             header?: never;
@@ -68,6 +148,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/practice-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_5"];
+        put?: never;
+        post: operations["create_4"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["finish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["answer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_6"];
+        put?: never;
+        post: operations["create_5"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_7"];
+        put?: never;
+        post: operations["link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publish_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces/{spaceId}/knowledge-categories": {
         parameters: {
             query?: never;
@@ -75,9 +267,121 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_3"];
+        get: operations["list_8"];
         put?: never;
-        post: operations["create_3"];
+        post: operations["create_6"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ingestion-jobs/{jobId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_9"];
+        put?: never;
+        post: operations["create_7"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exams/{examId}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["create_8"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exams/{examId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publish_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["start_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["answer_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -164,7 +468,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/sources/{sourceId}": {
+    "/api/v1/spaces/{spaceId}/wrong-questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_10"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/study-plan": {
         parameters: {
             query?: never;
             header?: never;
@@ -180,7 +500,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}": {
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -196,7 +516,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/knowledge-categories/{categoryId}": {
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_11"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/content-blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_12"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/{assetId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -204,6 +556,198 @@ export interface paths {
             cookie?: never;
         };
         get: operations["get_3"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/review-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_13"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/questions/{questionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_4"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/practice-sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_5"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/mastery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_14"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points/{kpId}/mastery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_6"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_7"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-categories/{categoryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_8"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ingestion-jobs/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_9"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exams/{examId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_10"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_11"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["result"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}/diagnosis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_12"];
         put?: never;
         post?: never;
         delete?: never;
@@ -231,6 +775,48 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        StudyTaskView: {
+            /** Format: int64 */
+            id?: number;
+            taskType?: string;
+            targetType?: string;
+            /** Format: int64 */
+            targetId?: number;
+            title?: string;
+            reason?: string;
+            /** Format: date-time */
+            dueAt?: string;
+            priority?: string;
+            status?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        GenerateStudyPlanRequest: {
+            name: string;
+            /** Format: date-time */
+            startDate?: string;
+            /** Format: date-time */
+            endDate?: string;
+            /** Format: int32 */
+            dailyItemLimit?: number;
+        };
+        StudyPlanView: {
+            /** Format: int64 */
+            id?: number;
+            name?: string;
+            /** Format: date-time */
+            startDate?: string;
+            /** Format: date-time */
+            endDate?: string;
+            status?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            tasks?: components["schemas"]["StudyTaskView"][];
+        };
         CreateSourceRequest: {
             title: string;
             sourceType: string;
@@ -247,6 +833,189 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        CreateIngestionJobRequest: {
+            /** Format: int64 */
+            assetId: number;
+        };
+        IngestionJobResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            assetId?: number;
+            status?: string;
+            stage?: string;
+            /** Format: int32 */
+            progressPercent?: number;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: int32 */
+            retryCount?: number;
+            errorCode?: string;
+            errorMessage?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        SourceAssetResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            assetRole?: string;
+            originalName?: string;
+            mimeType?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            sha256?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        CompleteReviewTaskRequest: {
+            result: string;
+            /** Format: int32 */
+            durationMs?: number;
+            notes?: string;
+        };
+        CompleteReviewTaskView: {
+            /** Format: int64 */
+            taskId?: number;
+            status?: string;
+            result?: string;
+            wrongQuestionStatus?: string;
+            /** Format: date-time */
+            nextDueAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+        };
+        CreateQuestionRequest: {
+            questionType: string;
+            stem: string;
+            explanation?: string;
+            difficulty?: string;
+            options?: components["schemas"]["QuestionOptionInput"][];
+            correctOptionKey?: string;
+            correctOptionKeys?: string[];
+            correctBoolean?: boolean;
+            referenceAnswer?: string;
+            knowledgePointIds?: number[];
+        };
+        QuestionOptionInput: {
+            optionKey: string;
+            content: string;
+            /** Format: int32 */
+            sortOrder?: number;
+        };
+        QuestionAnswerView: {
+            correctOptionKey?: string;
+            correctOptionKeys?: string[];
+            correctBoolean?: boolean;
+            referenceAnswer?: string;
+        };
+        QuestionAuthoringResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            questionType?: string;
+            stem?: string;
+            explanation?: string;
+            difficulty?: string;
+            originType?: string;
+            status?: string;
+            options?: components["schemas"]["QuestionOptionResponse"][];
+            answer?: components["schemas"]["QuestionAnswerView"];
+            knowledgePointIds?: number[];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: date-time */
+            publishedAt?: string;
+        };
+        QuestionOptionResponse: {
+            /** Format: int64 */
+            id?: number;
+            optionKey?: string;
+            content?: string;
+            /** Format: int32 */
+            sortOrder?: number;
+            isCorrect?: boolean;
+        };
+        CreatePracticeSessionRequest: {
+            questionIds?: number[];
+            /** Format: int64 */
+            knowledgePointId?: number;
+            /** Format: int32 */
+            count?: number;
+        };
+        PracticeSessionSummary: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            status?: string;
+            /** Format: int32 */
+            questionCount?: number;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        PracticeSubmitView: {
+            /** Format: int64 */
+            sessionId?: number;
+            status?: string;
+            /** Format: int32 */
+            questionCount?: number;
+            /** Format: int32 */
+            answeredCount?: number;
+            /** Format: int32 */
+            correctCount?: number;
+            /** Format: int32 */
+            score?: number;
+            /** Format: int32 */
+            maxScore?: number;
+        };
+        AnswerPayloadView: {
+            selectedOptionKeys?: string[];
+            booleanAnswer?: boolean;
+            textAnswer?: string;
+        };
+        PracticeAnswerRequest: {
+            /** Format: int64 */
+            practiceSessionQuestionId: number;
+            answer: components["schemas"]["AnswerPayloadView"];
+            /** Format: int32 */
+            durationMs?: number;
+        };
+        PracticeAnswerView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            practiceSessionQuestionId?: number;
+            /** Format: int64 */
+            questionId?: number;
+            isCorrect?: boolean;
+            correctAnswer?: string;
+            explanation?: string;
+            /** Format: int32 */
+            score?: number;
+            /** Format: date-time */
+            answeredAt?: string;
         };
         CreateKnowledgePointRequest: {
             title: string;
@@ -276,6 +1045,24 @@ export interface components {
             /** Format: date-time */
             publishedAt?: string;
         };
+        LinkKnowledgePointSourcesRequest: {
+            contentBlockIds: number[];
+        };
+        KnowledgePointSourceResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            knowledgePointId?: number;
+            /** Format: int64 */
+            contentBlockId?: number;
+            relationType?: string;
+            /** Format: double */
+            relevanceScore?: number;
+            /** Format: date-time */
+            createdAt?: string;
+        };
         CreateKnowledgeCategoryRequest: {
             name: string;
             description?: string;
@@ -300,6 +1087,138 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        CreateExamRequest: {
+            title: string;
+            description?: string;
+            /** Format: int32 */
+            durationMinutes?: number;
+            questions: components["schemas"]["ExamQuestionInput"][];
+        };
+        ExamQuestionInput: {
+            /** Format: int64 */
+            questionId: number;
+            /** Format: int32 */
+            score?: number;
+        };
+        ExamQuestionView: {
+            /** Format: int64 */
+            examQuestionId?: number;
+            /** Format: int64 */
+            questionId?: number;
+            /** Format: int32 */
+            sortOrder?: number;
+            /** Format: int32 */
+            score?: number;
+            questionType?: string;
+            stem?: string;
+            options?: components["schemas"]["OptionView"][];
+        };
+        ExamResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            title?: string;
+            description?: string;
+            examType?: string;
+            /** Format: int32 */
+            timeLimitMinutes?: number;
+            /** Format: int32 */
+            totalScore?: number;
+            status?: string;
+            /** Format: int32 */
+            paperVersion?: number;
+            questions?: components["schemas"]["ExamQuestionView"][];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: date-time */
+            publishedAt?: string;
+        };
+        OptionView: {
+            optionKey?: string;
+            content?: string;
+            /** Format: int32 */
+            sortOrder?: number;
+        };
+        AttemptQuestionView: {
+            /** Format: int64 */
+            examQuestionId?: number;
+            /** Format: int64 */
+            questionId?: number;
+            /** Format: int32 */
+            sortOrder?: number;
+            /** Format: int32 */
+            score?: number;
+            questionType?: string;
+            stem?: string;
+            options?: components["schemas"]["OptionView"][];
+        };
+        ExamAttemptView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            examId?: number;
+            /** Format: int64 */
+            examPaperId?: number;
+            status?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            deadlineAt?: string;
+            /** Format: date-time */
+            submittedAt?: string;
+            questions?: components["schemas"]["AttemptQuestionView"][];
+        };
+        ExamResultItemView: {
+            /** Format: int64 */
+            examQuestionId?: number;
+            /** Format: int64 */
+            questionId?: number;
+            /** Format: int32 */
+            score?: number;
+            /** Format: int32 */
+            maxScore?: number;
+            isCorrect?: boolean;
+            correctAnswer?: string;
+            explanation?: string;
+            answered?: boolean;
+        };
+        ExamResultView: {
+            /** Format: int64 */
+            attemptId?: number;
+            status?: string;
+            /** Format: int32 */
+            score?: number;
+            /** Format: int32 */
+            maxScore?: number;
+            /** Format: int32 */
+            correctCount?: number;
+            /** Format: int32 */
+            wrongCount?: number;
+            /** Format: int32 */
+            unansweredCount?: number;
+            /** Format: int32 */
+            durationMs?: number;
+            items?: components["schemas"]["ExamResultItemView"][];
+        };
+        ExamAnswerRequest: {
+            /** Format: int64 */
+            examQuestionId: number;
+            answer: components["schemas"]["AnswerPayloadView"];
+        };
+        ExamAnswerView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            examAttemptId?: number;
+            /** Format: int64 */
+            examQuestionId?: number;
+            gradingStatus?: string;
+            /** Format: date-time */
+            answeredAt?: string;
+        };
         SpikeHealthResponse: {
             status?: string;
             service?: string;
@@ -311,6 +1230,159 @@ export interface components {
         };
         SpikeStatusResponse: {
             status?: string;
+        };
+        WrongQuestionView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            questionId?: number;
+            /** Format: date-time */
+            firstWrongAt?: string;
+            /** Format: date-time */
+            lastWrongAt?: string;
+            /** Format: int32 */
+            wrongCount?: number;
+            /** Format: date-time */
+            lastCorrectAt?: string;
+            status?: string;
+        };
+        SourcePageResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            sourceAssetId?: number;
+            /** Format: int32 */
+            sourcePageNumber?: number;
+            /** Format: int32 */
+            pageOrder?: number;
+            /** Format: int32 */
+            printedPageNumber?: number;
+            pageType?: string;
+            /** Format: double */
+            orderConfidence?: number;
+            orderStatus?: string;
+            extractedText?: string;
+            /** Format: double */
+            extractionConfidence?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ContentBlockResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            sourcePageId?: number;
+            blockType?: string;
+            /** Format: int32 */
+            sortOrder?: number;
+            normalizedText?: string;
+            structuredDataJson?: string;
+            locatorJson?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ReviewTaskView: {
+            /** Format: int64 */
+            id?: number;
+            targetType?: string;
+            /** Format: int64 */
+            targetId?: number;
+            reason?: string;
+            /** Format: date-time */
+            dueAt?: string;
+            priority?: string;
+            status?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        PracticeQuestionView: {
+            /** Format: int64 */
+            practiceSessionQuestionId?: number;
+            /** Format: int64 */
+            questionId?: number;
+            /** Format: int32 */
+            sortOrder?: number;
+            questionType?: string;
+            stem?: string;
+            options?: components["schemas"]["OptionView"][];
+        };
+        PracticeSessionDetail: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            status?: string;
+            /** Format: int32 */
+            questionCount?: number;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            questions?: components["schemas"]["PracticeQuestionView"][];
+        };
+        MasteryResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            knowledgePointId?: number;
+            /** Format: double */
+            masteryScore?: number;
+            /** Format: double */
+            confidence?: number;
+            /** Format: int32 */
+            practiceEvidenceCount?: number;
+            /** Format: int32 */
+            examEvidenceCount?: number;
+            /** Format: int32 */
+            reviewEvidenceCount?: number;
+            /** Format: date-time */
+            lastEvidenceAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ExamDiagnosisView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            examAttemptId?: number;
+            summary?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            items?: components["schemas"]["ItemView"][];
+        };
+        ItemView: {
+            /** Format: int64 */
+            id?: number;
+            dimensionType?: string;
+            /** Format: int64 */
+            dimensionId?: number;
+            label?: string;
+            /** Format: int32 */
+            score?: number;
+            /** Format: int32 */
+            maxScore?: number;
+            /** Format: double */
+            accuracy?: number;
+            /** Format: int32 */
+            evidenceCount?: number;
+            severity?: string;
+            recommendation?: string;
         };
     };
     responses: never;
@@ -361,6 +1433,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LearningSpaceResponse"];
+                };
+            };
+        };
+    };
+    complete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyTaskView"];
+                };
+            };
+        };
+    };
+    generate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateStudyPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyPlanView"];
                 };
             };
         };
@@ -419,6 +1540,332 @@ export interface operations {
             header?: never;
             path: {
                 spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJobResponse"][];
+                };
+            };
+        };
+    };
+    create_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateIngestionJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJobResponse"];
+                };
+            };
+        };
+    };
+    list_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceAssetResponse"][];
+                };
+            };
+        };
+    };
+    upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceAssetResponse"];
+                };
+            };
+        };
+    };
+    complete_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteReviewTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompleteReviewTaskView"];
+                };
+            };
+        };
+    };
+    list_4: {
+        parameters: {
+            query?: {
+                status?: string;
+                questionType?: string;
+                knowledgePointId?: number;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionAuthoringResponse"][];
+                };
+            };
+        };
+    };
+    create_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateQuestionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionAuthoringResponse"];
+                };
+            };
+        };
+    };
+    publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionAuthoringResponse"];
+                };
+            };
+        };
+    };
+    list_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeSessionSummary"][];
+                };
+            };
+        };
+    };
+    create_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePracticeSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeSessionSummary"];
+                };
+            };
+        };
+    };
+    start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeSessionSummary"];
+                };
+            };
+        };
+    };
+    finish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeSubmitView"];
+                };
+            };
+        };
+    };
+    answer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PracticeAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeAnswerView"];
+                };
+            };
+        };
+    };
+    list_6: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
             };
             cookie?: never;
         };
@@ -435,7 +1882,7 @@ export interface operations {
             };
         };
     };
-    create_2: {
+    create_5: {
         parameters: {
             query?: never;
             header?: never;
@@ -461,7 +1908,57 @@ export interface operations {
             };
         };
     };
-    publish: {
+    list_7: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                knowledgePointId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgePointSourceResponse"][];
+                };
+            };
+        };
+    };
+    link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                knowledgePointId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkKnowledgePointSourcesRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgePointSourceResponse"][];
+                };
+            };
+        };
+    };
+    publish_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -484,7 +1981,7 @@ export interface operations {
             };
         };
     };
-    list_3: {
+    list_8: {
         parameters: {
             query?: never;
             header?: never;
@@ -506,7 +2003,7 @@ export interface operations {
             };
         };
     };
-    create_3: {
+    create_6: {
         parameters: {
             query?: never;
             header?: never;
@@ -528,6 +2025,196 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeCategoryResponse"];
+                };
+            };
+        };
+    };
+    retry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                jobId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJobResponse"];
+                };
+            };
+        };
+    };
+    list_9: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamResponse"][];
+                };
+            };
+        };
+    };
+    create_7: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateExamRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamResponse"];
+                };
+            };
+        };
+    };
+    create_8: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAttemptView"];
+                };
+            };
+        };
+    };
+    publish_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamResponse"];
+                };
+            };
+        };
+    };
+    submit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                attemptId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamResultView"];
+                };
+            };
+        };
+    };
+    start_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                attemptId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAttemptView"];
+                };
+            };
+        };
+    };
+    answer_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                attemptId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExamAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAnswerView"];
                 };
             };
         };
@@ -636,7 +2323,51 @@ export interface operations {
             };
         };
     };
+    list_10: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WrongQuestionView"][];
+                };
+            };
+        };
+    };
     get_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyPlanView"];
+                };
+            };
+        };
+    };
+    get_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -659,7 +2390,194 @@ export interface operations {
             };
         };
     };
-    get_2: {
+    list_11: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourcePageResponse"][];
+                };
+            };
+        };
+    };
+    list_12: {
+        parameters: {
+            query?: {
+                pageId?: number;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentBlockResponse"][];
+                };
+            };
+        };
+    };
+    get_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+                assetId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceAssetResponse"];
+                };
+            };
+        };
+    };
+    list_13: {
+        parameters: {
+            query?: {
+                dueBefore?: string;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewTaskView"][];
+                };
+            };
+        };
+    };
+    get_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionAuthoringResponse"];
+                };
+            };
+        };
+    };
+    get_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeSessionDetail"];
+                };
+            };
+        };
+    };
+    list_14: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasteryResponse"][];
+                };
+            };
+        };
+    };
+    get_6: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                kpId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasteryResponse"];
+                };
+            };
+        };
+    };
+    get_7: {
         parameters: {
             query?: never;
             header?: never;
@@ -682,7 +2600,7 @@ export interface operations {
             };
         };
     };
-    get_3: {
+    get_8: {
         parameters: {
             query?: never;
             header?: never;
@@ -701,6 +2619,121 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeCategoryResponse"];
+                };
+            };
+        };
+    };
+    get_9: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                jobId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionJobResponse"];
+                };
+            };
+        };
+    };
+    get_10: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamResponse"];
+                };
+            };
+        };
+    };
+    get_11: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                attemptId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAttemptView"];
+                };
+            };
+        };
+    };
+    result: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                attemptId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamResultView"];
+                };
+            };
+        };
+    };
+    get_12: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                attemptId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamDiagnosisView"];
                 };
             };
         };

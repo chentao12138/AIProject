@@ -38,6 +38,34 @@ type CreateKnowledgeCategoryRequest =
 type CreateKnowledgePointRequest =
   components['schemas']['CreateKnowledgePointRequest'];
 
+type CreateIngestionJobRequest =
+  components['schemas']['CreateIngestionJobRequest'];
+
+type LinkKnowledgePointSourcesRequest =
+  components['schemas']['LinkKnowledgePointSourcesRequest'];
+
+/**
+ * Multipart wire body for {@code uploadSourceAsset} (BUSINESS-004).
+ *
+ * <p>Extends the real {@link FormData} so openapi-fetch detects it at
+ * runtime ({@code instanceof FormData}) and passes it through WITHOUT
+ * JSON serialization and WITHOUT setting Content-Type — the browser
+ * then generates {@code multipart/form-data; boundary=...} itself.
+ *
+ * <p>The declared {@code file} property mirrors the generated
+ * contract's part shape: openapi-typescript approximates OpenAPI
+ * {@code format: binary} as {@code string}, so the generated
+ * requestBody type is {@code { file: string }}. Declaring the same
+ * shape on the FormData subclass lets the body satisfy openapi-fetch's
+ * body type without {@code any} / {@code @ts-ignore} / {@code as
+ * unknown as} — the actual bytes are appended at runtime via
+ * {@link FormData#append}. This is the single, documented bridge for
+ * the generator's binary approximation; no other endpoint uses it.
+ */
+class MultipartUploadBody extends FormData {
+  declare file: string;
+}
+
 /**
  * Token provider abstraction. The shared client NEVER decides where
  * the access token lives (no localStorage, no cookie strategy):
@@ -62,11 +90,14 @@ export interface TokenProvider {
  * @param tokenProvider supplies the Authorization: Bearer value per request
  */
 export function createApiClient(baseUrl: string, tokenProvider: TokenProvider) {
+  // NOTE (BUSINESS-004): NO global Content-Type is set on purpose.
+  // openapi-fetch sets `application/json` automatically for JSON
+  // request bodies, and multipart FormData bodies must NOT carry a
+  // fixed Content-Type — the browser/fetch generates
+  // `multipart/form-data; boundary=...` itself. A global
+  // application/json header would corrupt multipart uploads.
   const client = createClient<paths>({
     baseUrl,
-    headers: {
-      'Content-Type': 'application/json',
-    },
   });
 
   return {
@@ -181,6 +212,152 @@ export function createApiClient(baseUrl: string, tokenProvider: TokenProvider) {
     async publishKnowledgePoint(spaceId: number, knowledgePointId: number) {
       return client.POST(
         '/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/publish',
+        {
+          params: { path: { spaceId, knowledgePointId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * POST .../sources/{sourceId}/assets — upload one RAW file
+     * (multipart, part name "file"). The body is a FormData subclass
+     * so openapi-fetch skips JSON serialization and no Content-Type
+     * is set — the browser generates the multipart boundary.
+     */
+    async uploadSourceAsset(spaceId: number, sourceId: number, file: File | Blob) {
+      const body = new MultipartUploadBody();
+      body.append('file', file);
+      return client.POST('/api/v1/spaces/{spaceId}/sources/{sourceId}/assets', {
+        params: { path: { spaceId, sourceId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET .../sources/{sourceId}/assets — list assets of MY source (newest first) */
+    async listSourceAssets(spaceId: number, sourceId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/sources/{sourceId}/assets', {
+        params: { path: { spaceId, sourceId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET .../sources/{sourceId}/assets/{assetId} — one asset of MY source */
+    async getSourceAsset(spaceId: number, sourceId: number, assetId: number) {
+      return client.GET(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/{assetId}',
+        {
+          params: { path: { spaceId, sourceId, assetId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * POST .../sources/{sourceId}/ingestion-jobs — create an ingestion
+     * job for one asset of MY source (BUSINESS-005/006: ZIP safety
+     * gate / TXT-MD pipeline dispatch; 201 with the job, 422
+     * INGESTION_NOT_READY for formats without a pipeline, 409 for
+     * duplicate active/succeeded jobs). Response type comes from the
+     * generated IngestionJobResponse schema.
+     */
+    async createIngestionJob(spaceId: number, sourceId: number, assetId: number) {
+      const body: CreateIngestionJobRequest = { assetId };
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs',
+        {
+          params: { path: { spaceId, sourceId } },
+          body,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../sources/{sourceId}/ingestion-jobs — job history of MY source (newest first) */
+    async listIngestionJobs(spaceId: number, sourceId: number) {
+      return client.GET(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs',
+        {
+          params: { path: { spaceId, sourceId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../ingestion-jobs/{jobId} — one job of MY space (space-scoped) */
+    async getIngestionJob(spaceId: number, jobId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/ingestion-jobs/{jobId}', {
+        params: { path: { spaceId, jobId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** POST .../ingestion-jobs/{jobId}/retry — FAILED → PENDING (retryCount++), 409 if not FAILED */
+    async retryIngestionJob(spaceId: number, jobId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/ingestion-jobs/{jobId}/retry',
+        {
+          params: { path: { spaceId, jobId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../sources/{sourceId}/pages — EXTRACTED pages of MY source (page_order ASC) */
+    async listSourcePages(spaceId: number, sourceId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/sources/{sourceId}/pages', {
+        params: { path: { spaceId, sourceId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * GET .../sources/{sourceId}/content-blocks — EXTRACTED blocks of
+     * MY source in document order; optional pageId query filter.
+     * Response type comes from the generated ContentBlockResponse
+     * schema.
+     */
+    async listContentBlocks(spaceId: number, sourceId: number, pageId?: number) {
+      return client.GET(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/content-blocks',
+        {
+          params: {
+            path: { spaceId, sourceId },
+            query: pageId !== undefined ? { pageId } : undefined,
+          },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * POST .../knowledge-points/{knowledgePointId}/sources — link
+     * ContentBlocks to MY knowledge point (BUSINESS-007). Batch
+     * idempotent-add semantics live on the backend; any invalid id
+     * rejects the whole batch with 404. Response is the point's full
+     * current link list (generated KnowledgePointSourceResponse[]).
+     */
+    async addKnowledgePointSources(
+      spaceId: number,
+      knowledgePointId: number,
+      contentBlockIds: number[]
+    ) {
+      const body: LinkKnowledgePointSourcesRequest = { contentBlockIds };
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/sources',
+        {
+          params: { path: { spaceId, knowledgePointId } },
+          body,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../knowledge-points/{knowledgePointId}/sources — provenance links of MY point */
+    async listKnowledgePointSources(spaceId: number, knowledgePointId: number) {
+      return client.GET(
+        '/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/sources',
         {
           params: { path: { spaceId, knowledgePointId } },
           headers: await bearerHeaders(tokenProvider),

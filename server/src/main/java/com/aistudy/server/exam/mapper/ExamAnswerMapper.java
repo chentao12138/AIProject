@@ -1,0 +1,48 @@
+package com.aistudy.server.exam.mapper;
+
+import com.aistudy.server.exam.entity.ExamAnswer;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
+ * BUSINESS-013 — mapper for {@link ExamAnswer}.
+ *
+ * <p>Space-scoped; one row per (attempt, exam_question) — upsert.
+ */
+@Mapper
+public interface ExamAnswerMapper extends BaseMapper<ExamAnswer> {
+
+    /** Latest answer of one attempt slot (0..1). */
+    @Select("SELECT * FROM exam_answer "
+            + "WHERE space_id = #{spaceId} AND exam_attempt_id = #{attemptId} "
+            + "  AND exam_question_id = #{examQuestionId} LIMIT 1")
+    ExamAnswer selectByAttemptAndQuestion(@Param("spaceId") Long spaceId,
+                                          @Param("attemptId") Long attemptId,
+                                          @Param("examQuestionId") Long examQuestionId);
+
+    /** All answers of one attempt (submit + result). */
+    @Select("SELECT * FROM exam_answer "
+            + "WHERE space_id = #{spaceId} AND exam_attempt_id = #{attemptId}")
+    List<ExamAnswer> selectByAttemptId(@Param("spaceId") Long spaceId,
+                                       @Param("attemptId") Long attemptId);
+
+    /** Scoped upsert update. */
+    @Update("UPDATE exam_answer SET answer_data_json = #{answerDataJson}, "
+            + "score = #{score}, is_correct = #{isCorrect}, answered_at = #{answeredAt}, "
+            + "grading_status = #{gradingStatus}, updated_at = #{updatedAt} "
+            + "WHERE id = #{id} AND space_id = #{spaceId}")
+    int updateByIdAndSpace(@Param("id") Long id,
+                           @Param("spaceId") Long spaceId,
+                           @Param("answerDataJson") String answerDataJson,
+                           @Param("score") Integer score,
+                           @Param("isCorrect") Boolean isCorrect,
+                           @Param("answeredAt") LocalDateTime answeredAt,
+                           @Param("gradingStatus") String gradingStatus,
+                           @Param("updatedAt") LocalDateTime updatedAt);
+}
