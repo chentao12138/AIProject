@@ -8,6 +8,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
 import type { ApiClient } from '@aistudy/api-client';
 import { SpaceScopeGuard } from './SpaceScopeGuard';
@@ -69,4 +70,57 @@ describe('SpaceScopeGuard', () => {
 
     expect(await screen.findByText('GUARD_CHILD_VISIBLE')).toBeInTheDocument();
   });
+
+  it('shows a loading state while the space query is pending (PHASE 23)', async () => {
+    let resolveGet: (value: unknown) => void = () => undefined;
+    const apiClient = mockApiClient({
+      getLearningSpace: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveGet = resolve;
+          })
+      ),
+    });
+
+    renderGuard(apiClient, '/spaces/3');
+
+    expect(await screen.findByText('加载空间…')).toBeInTheDocument();
+    expect(screen.queryByText('GUARD_CHILD_VISIBLE')).not.toBeInTheDocument();
+
+    resolveGet({ data: { id: 3, name: 'Math', status: 'ACTIVE' }, response: { status: 200 } });
+    expect(await screen.findByText('GUARD_CHILD_VISIBLE')).toBeInTheDocument();
+  });
+
+  it('renders a network error state with a retry action (PHASE 23)', async () => {
+    const user = userEvent.setup();
+    const getLearningSpace = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValue({
+        data: { id: 3, name: 'Math', status: 'ACTIVE' },
+        response: { status: 200 },
+      });
+    const apiClient = mockApiClient({ getLearningSpace });
+
+    renderGuard(apiClient, '/spaces/3');
+
+    expect(
+      await screen.findByText('无法连接到后端服务。请确认服务已启动后重试。')
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '重试' }));
+    expect(await screen.findByText('GUARD_CHILD_VISIBLE')).toBeInTheDocument();
+  });
+
+  it.each(['/spaces/0', '/spaces/-3', '/spaces/3.5', '/spaces/0x10'])(
+    'rejects id %s before any API call (PHASE 23)',
+    async (entry) => {
+      const apiClient = mockApiClient();
+      renderGuard(apiClient, entry);
+      expect(
+        await screen.findByText('资源不存在或当前不可访问。')
+      ).toBeInTheDocument();
+      expect(apiClient.getLearningSpace).not.toHaveBeenCalled();
+    }
+  );
 });

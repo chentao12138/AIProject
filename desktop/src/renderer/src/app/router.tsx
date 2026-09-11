@@ -6,19 +6,11 @@
 import { createHashRouter, Navigate } from 'react-router-dom';
 import { AppShell } from './AppShell';
 import { SpaceScopeGuard } from './SpaceScopeGuard';
+import { NotFoundPage } from './NotFoundPage';
 import { SpacesPage } from '../features/spaces/SpacesPage';
 import { SourcesPage } from '../features/sources/SourcesPage';
 import { KnowledgePage } from '../features/knowledge/KnowledgePage';
 import { KnowledgePointDetailPage } from '../features/knowledge/KnowledgePointDetailPage';
-
-export function NotFoundPage() {
-  return (
-    <div className="page">
-      <h1 className="page__title">Not found</h1>
-      <p className="muted">The page you requested does not exist.</p>
-    </div>
-  );
-}
 
 export const router = createHashRouter([
   {

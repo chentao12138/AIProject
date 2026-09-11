@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Button } from './Button';
 
 interface ErrorStateProps {
   message: string;
@@ -13,9 +14,9 @@ export function ErrorState({ message, detail, onRetry, children }: ErrorStatePro
       <p className="error-state__message">{message}</p>
       {detail && <p className="error-state__detail">{detail}</p>}
       {onRetry && (
-        <button type="button" className="btn btn--secondary" onClick={onRetry}>
+        <Button variant="secondary" onClick={onRetry}>
           重试
-        </button>
+        </Button>
       )}
       {children}
     </div>

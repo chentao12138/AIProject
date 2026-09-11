@@ -20,6 +20,8 @@ import { app, BrowserWindow, net, protocol, session } from 'electron';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { cspFor } from './csp';
+import { isPermissionGranted } from './permissions';
+import { resolveApiBaseUrl } from '../shared/api-config';
 import {
   APP_ORIGIN,
   APP_SCHEME,
@@ -29,6 +31,14 @@ import {
 } from './app-protocol';
 
 const DEV_SERVER_URL = process.env['ELECTRON_RENDERER_URL'];
+
+// Single API base URL contract (FE-001.5 PRE-COMMIT REVIEW FIX-01):
+// the SAME VITE_API_BASE_URL resolution the renderer client uses
+// (electron-vite exposes VITE_* env vars to the main build too, and
+// tsconfig.node.json types import.meta.env via vite/client). The CSP
+// connect-src origin derives from it, so the policy always allows the
+// origin the renderer actually talks to — never a hardcoded duplicate.
+const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 // Must run BEFORE app ready. standard+secure gives app://aistudy a real,
 // non-opaque origin; supportFetchAPI lets the renderer fetch over it;
@@ -85,6 +95,11 @@ function createMainWindow(): BrowserWindow {
   // B1: deny all new-window requests (no external URL in FE-001).
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
+  // B1: no <webview> embedding is ever allowed.
+  mainWindow.webContents.on('will-attach-webview', (event) => {
+    event.preventDefault();
+  });
+
   // B1: block renderer navigation away from the application origin.
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (!isAllowedNavigation(url)) {
@@ -119,7 +134,7 @@ app.whenReady().then(() => {
     }
     const response = await net.fetch(pathToFileURL(filePath).toString());
     const headers = new Headers(response.headers);
-    headers.set('Content-Security-Policy', cspFor(false));
+    headers.set('Content-Security-Policy', cspFor(false, { apiBaseUrl: API_BASE_URL }));
     return new Response(response.body, {
       status: response.status,
       headers,
@@ -133,7 +148,10 @@ app.whenReady().then(() => {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            cspFor(true, DEV_SERVER_URL ?? undefined),
+            cspFor(true, {
+              devServerUrl: DEV_SERVER_URL ?? undefined,
+              apiBaseUrl: API_BASE_URL,
+            }),
           ],
         },
       });
@@ -141,6 +159,19 @@ app.whenReady().then(() => {
       callback({ responseHeaders: details.responseHeaders });
     }
   });
+
+  // Deny-by-default browser permissions (FE-001.5 PHASE 19): no feature
+  // needs camera/mic/geolocation/notifications/clipboard-read/etc.
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, permission, callback) => {
+      callback(isPermissionGranted(permission, ''));
+    }
+  );
+  session.defaultSession.setPermissionCheckHandler(
+    (_webContents, permission, requestingOrigin) => {
+      return isPermissionGranted(permission, requestingOrigin);
+    }
+  );
 
   createMainWindow();
 

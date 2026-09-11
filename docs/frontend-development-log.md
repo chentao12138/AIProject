@@ -175,3 +175,103 @@ Git 状态一律以 Windows Git 输出为权威（git.exe -C D:/AIProject-fronte
 - Windows 回归：typecheck PASS / test:run 46/46 PASS / build PASS
 - Cleanup：desktop/electron.vite.config.zip 已不存在（用户处理）；docs/frontend-autonomous-plan.md 已删除（无人值守执行计划，非产品文档，不提交）；保留 frontend-current-task.md + frontend-development-log.md
 - 最终状态：FE-001 IMPLEMENTED / ELECTRON ORIGIN/CORS REAL INTEGRATION VERIFIED / WINDOWS RUNTIME VERIFIED / READY FOR USER FINAL REVIEW AND COMMIT（COMPLETE 留待用户 commit 后）
+
+## FE-001.5 Phase 1 — Baseline Audit Checkpoint（2026-09-06）
+
+- 权威基线确认（Windows Git）：branch=feat/fe-001、HEAD=ec115be、worktree clean（唯一 untracked=本计划文件，非产物）
+- Windows Node 确认：v24.11.1 / win32；Electron 44.2.0（DEP-001 后基线）
+- 审计完成（见 frontend-current-task.md "FE-001.5 Baseline Audit"）：
+  - 路由/结构/query 契约/error 模型/DevSession/组件/表单/Electron 安全/CSP 现状全部盘点
+  - 9 test 文件 / 46 tests 基线确认（dev-log 上一任务 FINAL-POLISH-001 记录 46/46 PASS）
+- 关键发现（后续 Phase 处理）：isNavigableId 三处重复（P3）；401 文案无 dev/prod 区分、网络/403/5xx 文案待对齐（P4）；无按错误类 retry 策略（P5）；DevSession 缺 whitespace 禁用/编辑清状态/aria-live（P6）；backend 绿点误导（P7）；Dialog 无焦点管理/focus trap/focus return（P9）；无 permission deny-by-default（P19）；CSP style-src-attr 例外可消除（P21）；page__header 4 处重复（P17 评估）
+- 基线 gate（typecheck/test/build）后台运行中，结果见下个 checkpoint
+
+## FE-001.5 Phase 2 — Static Quality Gate Checkpoint（2026-09-06）
+
+- 新增 ESLint 9 flat config（eslint.config.mjs）：@eslint/js + typescript-eslint v8.69 + eslint-plugin-react-hooks v5.2 + eslint-plugin-react-refresh v0.4.26；规则覆盖 unused vars/imports、no-explicit-any:error、hooks rules、no-fallthrough/no-unreachable、fast-refresh 导出契约；renderer 仅 browser globals（Node 全局由 P26 静态扫描兜底）；无 Prettier/风格化配置
+- 安装：Windows npm `npm install --save-dev eslint@^9 typescript-eslint@^8 eslint-plugin-react-hooks@^5 eslint-plugin-react-refresh@^0.4` → INSTALL_EXIT=OK；package.json 新增 lint / lint:fix scripts
+- 修复 1 处 lint error：router.tsx 同时导出组件 + router 常量（react-refresh/only-export-components）→ NotFoundPage 拆到 app/NotFoundPage.tsx，router.tsx 只导出 router
+- 结果：`npm run lint` → LINT_EXIT=OK，0 problems（真实输出）
+- Baseline gate（后台已跑完）：typecheck OK / test:run "9 passed (9) / 46 passed (46)" / build OK（renderer 514.18 kB + 12.44 kB css）——全部 Windows Node 实测
+
+## FE-001.5 Phase 3–9 Checkpoint（2026-09-06）
+
+- P3 Type safety：新增 lib/ids.ts（isPositiveId 整数守卫 + parsePositiveIdParam 严格十进制解析，拒绝 hex/exponent/NaN/Infinity/越界/空白）；SpacesPage/SourcesPage/KnowledgePage/DetailPage/SpaceScopeGuard/AppShell 全部改用它——消灭 Number(routeParam) 与三处重复守卫；ids.test.ts 13 项边界用例
+- P4 Error semantics：normalizeApiError(error, {isDev})；401 dev=「当前开发会话未认证或令牌已失效。请更新 Development Session 令牌。」/ prod=「Authentication integration pending.」；403=「当前会话无权执行此操作。」；5xx=「服务器暂时无法完成请求，请稍后重试。」；network=「无法连接到后端服务。请确认服务已启动后重试。」；api-error.test.ts 12 项（含反 IDOR 文案、不泄漏 stack/body）
+- P5 Query resilience：lib/query-retry.ts shouldRetryQuery——401/403/404 永不重试，network/5xx 有界重试（QUERY_RETRY_MAX_ATTEMPTS=2）；main.tsx QueryClient：retry=shouldRetryQuery、staleTime 10s、gcTime 5min、refetchOnWindowFocus=false、refetchOnReconnect=true、mutations.retry=false；query-retry.test.ts 7 项；invalidate 均为 space-scoped key 无跨界
+- P6 DevSession：Apply 空/纯空白禁用；输入即清 stale status；aria-live status（applied/cleared）；autoComplete=off；无持久化断言测试；+7 tests
+- P7 Backend indicator：绿点删除，改中性「API target: http://localhost:8080」（无 health probe 不假装 online）；CSS .dot/.app-shell__backend 移除
+- P8 Shell：NotFoundPage 拆独立文件（router.tsx 仅导出 router）；footer 改「AIStudy Desktop」；nav focus-visible + active hover；AppShell.test.tsx 6 项（landmarks/aria-current/space name/无 space 无子链接/不可访问文案）
+- P9 Dialog/form：Dialog 焦点管理（初始聚焦首个 editable field、Tab/Shift+Tab trap、关闭后焦点回 trigger、busy 时 Escape/overlay/close 全禁用、aria-labelledby + tabIndex=-1）；4 个 create dialog 传 busy=pending；lib/use-form-error.ts 编辑即清 stale server error；Dialog.test.tsx 14 项
+- 修复 2 个测试问题：Dialog 初始聚焦误落 button（改 input/select/textarea 优先 + panel tabIndex=-1）；AppShell 测试 harness 缺 spaces/:spaceId 路由（No routes matched）
+- 验证（Windows Node 实测）：typecheck OK / lint 0 problems / test:run "14 passed (14) / 104 passed (104)"
+
+## FE-001.5 Phase 10–28 Checkpoint（2026-09-06）
+
+- P10 Spaces：+9 tests（whitespace/trim/create failure/pending/Escape 阻断/no-id 不导航/403/network+retry/5xx/missing optionals）
+- P11 Sources：+7 tests（empty/rows optionals/placeholder/invalid id 零调用/create error/pending/stale error 清除）
+- P12 Category graph：+9 tests（deep hierarchy/self-cycle/3-node cycle exactly once/dup parent/dup ids/missing ids/2000 浅层/600 深层/order）
+- P13 Category create：strict optional-int 解析（lib/ids.ts parseOptionalInteger——hex/exp/whitespace/NaN/越界→undefined，签名整数保留）；+5 tests
+- P14 Point list：+3 tests（optionals/category lookup/order/static row）
+- P15 Point create：+4 tests（blank 禁用/trim+内容保留内部空白 payload/invalidate/error）
+- P16 Detail+publish：+10 tests（invalid id 零调用/loading/401-403-404-500/network/publishedAt 缺失/content 空白保留/pending 防重复/publish error/成功后 refetch→PUBLISHED）
+- P17 Primitives：PageHeader 提取（4 页复用）；ErrorState 用 Button
+- P18 CSS：单一 :focus-visible 契约；overflow-wrap:anywhere 长文本组；knowledge grid min-width:0；header/dev-session wrap；category 缩进改嵌套 ul padding（消灭 inline style）
+- P19 Electron permissions：main/permissions.ts 纯函数 deny-by-default + setPermissionRequestHandler/setPermissionCheckHandler 全拒 + will-attach-webview deny；+3 tests
+- P20 Protocol：+8 tests（query/hash 不影响解析、%5c 编码 separator、double-encoding 惰性、javascript:/data:/port/empty-host）
+- P21 CSP：style-src-attr 'unsafe-inline' 全移除（prod+dev）——React inline style 已归零，prod 现为纯 self 样式；csp.test 更新断言
+- P22 Test infra：createTestQueryClient()（retry:false + gcTime:Infinity），DevSession 测试改用
+- P23 Regression：NotFoundPage test、guard loading/network+retry/it.each 非法 id 零调用
+- P24 Coverage：@vitest/coverage-v8@2.1.9 + test:coverage script + vitest.config coverage（v8/text；排除测试与 test infra）；基线 Stmts 83.05% / Branch 81.39% / Funcs 85.82% / Lines 83.05%
+- P25 Fake-data audit：renderer 生产源码 0 命中（仅注释提及）
+- P26 Forbidden-pattern scan：renderer 0 命中（electron/node:fs/child_process/ipcRenderer/safeStorage/process.env/localStorage/axios/XHR 均无）；main 无 webSecurity:false 等弱 flag
+- P27 Dependency audit：npm ls --depth=0 干净（electron 44.2.0 保持）；npm audit（官方 registry）：10 项全为 dev-only 工具链，修复全 semver-major → 按计划记录不升级；npmmirror registry 无 audit endpoint（404 NOT_IMPLEMENTED）已记录
+- P28 README：重写为完整 developer guide（前置/Windows Node 要求/全部命令/API base/DevSession 语义/token 不持久化/SPIKE JWT 限制/custom origin/CORS/401 vs offline 识别/electron mirror 问题/scope 与 deferred）
+- 验证（Windows Node 实测）：typecheck OK / lint 0 problems / test:run "16 passed (16) / 177 passed (177)" / test:coverage OK（数值见 current-task）
+
+## FE-001.5 Phase 29–34 + Stretch A–G Checkpoint（2026-09-06）
+
+- P29 最终 Windows validation loop（当前状态实测）：lint OK / typecheck OK / test:run "17 passed (17) / 186 passed (186)" / test:coverage OK / build OK（renderer index-DEJZG_3Q.js + 13.30 kB css）
+- P30 dev smoke（CDP DOM 证据，Electron 44.2.0）：origin http://localhost:5173/#/spaces（hash 路由生效）；DEV_SESSION_VISIBLE（DEV gate 正确）；无 auth placeholder；body 含「API target: http://localhost:8080」中性标签 + 后端离线 network 错误 + 重试；log 含 "[vite] connected."；0 CSP/preload/uncaught
+- P31 最终 production smoke（当前 bundle，CDP DOM 证据）：origin app://aistudy/#/spaces；DEV_SESSION_HIDDEN；「Authentication integration pending」；CSP header 实测与 cspFor(false) 完全一致且无 style-src-attr/unsafe-inline；fetch('app://aistudy/') 同源可读 headers；0 console violation（含 ErrorBoundary 包装后的最终构建）
+- P32 最终源码审查：无 console.log/TODO/注释代码/散落 Number()（仅 lib/ids.ts 严格解析器内）；无 div-as-button（仅 Dialog stopPropagation + point 列表真 button）；P25/P26 静态审计 0 命中
+- P33 文档交接：current-task 状态 = FE-001.5 HARDENING IMPLEMENTED / WINDOWS LINT/TYPECHECK/TEST/COVERAGE/BUILD VERIFIED / DEV/PRODUCTION SMOKE VERIFIED / AWAITING USER REVIEW AND COMMIT；含变更范围/测试数/coverage/运行证据/残余债/无新增 BACKEND CONTRACT REQUEST/SourceAsset 推迟声明
+- P34 Git review（Windows Git）：diff --check 干净；status 范围仅 desktop/** + docs/frontend-*；无 node_modules/out/.env/token/zip 泄漏；零 add/commit/push
+- Stretch A：ErrorBoundary（class 组件 + getDerivedStateFromError + DEV-only console 诊断 + 生产 UI 不暴露 stack）+ main.tsx 包裹 + 5 tests（含 transient 恢复 harness：数据修复后重试成功、持久错误重捕）
+- Stretch B：已由既有 pending 阻断测试覆盖（Escape/overlay/close 在 pending 时全禁用——Spaces/Sources/Dialog 测试断言）；路由切换仅卸载 dialog 不会误提交
+- Stretch C：+4 torture tests（200 字空间名、400 字描述、300 字标题 + 500 字摘要 + 200 字分类名、40 层分类链渲染不崩）
+- Stretch D：DetailPage category 名解析改 Map 查找（去 find()）；KnowledgePage 本就 O(n) Map 构建；无 O(n²) 残留；按计划不引入虚拟化
+- Stretch E：唯一测试 stderr 噪音 = React Router future-flag 警告（良性、文档化）+ preload 空 chunk 提示（预期）；不全局压制
+- Stretch F：react-router-dom 6.30.6 类型中无 v7_startTransition/v7_relativeSplatPath（grep 实测）→ 按计划文档化不迁移
+- Stretch G：文案一致性审查——heading/主操作英文、状态/错误中文、重试按钮随中文错误面板；各界面内部一致，不盲翻
+- Cleanup：desktop/*.log 全部删除（含 fin-*/zf-* 等 gate 日志）；%TEMP% fe15-* 探针/编排脚本/日志/pid 文件全部删除；npm-audit.json 已删；最终 smoke 0 violation 后删日志
+- 最终验证（真实输出）：lint OK / typecheck OK / test:run "17 passed (17) / 186 passed (186)" / coverage Statements 84.06% / Branches 82.5% / Functions 86.36% / Lines 84.06% / build OK
+
+## FE-001.5 PRE-COMMIT REVIEW FIX-01 Checkpoint（2026-09-06）
+
+外部 reviewer 实际检查 package.zip 源码后的提交前修复（仅 desktop/** + 两份 frontend docs）。
+
+- FIX-01-1 API base/CSP 单一契约：新增 src/shared/api-config.ts（resolveApiBaseUrl 只收 http(s)、非法回退 default、拒绝 * 主机与 http:///x 宽松解析；apiOriginFromBaseUrl 只取 scheme+host+port）；renderer lib/api-client.ts 与 main csp.ts/index.ts 共用（electron-vite main build envPrefix 含 VITE_，tsconfig.node.json types 加 vite/client；tsconfig node/web include 加 src/shared）；cspFor 改 options 签名；api-config.test.ts 12 项 + csp.test.ts 扩展 5 项（默认/custom http/https/非法回退/永不 connect-src *）；.env.example 与 README 契约同步
+- FIX-01-2 nested nav：AppShell Spaces NavLink 加 end；+3 项单 active 断言 + 1 项"至多一个 active"不变式
+- FIX-01-3 engines：package.json engines.node >=20 → >=22.12.0；README prerequisites 同步去矛盾
+- FIX-01-4 ESLint 直接依赖：Windows npm install -D @eslint/js@^9 globals（@eslint/js 10 需 eslint 10 故锁 9.x）→ @eslint/js@9.39.5 / globals@17.12.0；npm ls --depth=0 干净；lock 由 npm 生成未手改
+- FIX-01-5 ID parser 分离：ids.ts 新增 parseOptionalPositiveId（拒绝 0/负数/float/NaN/Infinity/hex/exponent/garbage/overflow）；KnowledgePage parentId/categoryId 改用它（sortOrder 保持 parseOptionalInteger）；两个 category select 只渲染 isPositiveId 的 option；ids.test.ts +7、KnowledgePage.test.tsx +2
+- FIX-01-6 AppShell 语义：404 → Space not found or inaccessible；401/403/network/5xx → Space unavailable；child links 仅 space query 成功且有有效 space 时渲染（pending/error 隐藏）；SpaceScopeGuard 未动；AppShell.test.tsx +6 项（404/network/401/5xx/pending/success + 单 active 组）
+- FIX-01-7 StatusBadge：includes() 子串匹配改 exact map（DRAFT/PUBLISHED/ACTIVE，其余 unknown）；新增 StatusBadge.test.tsx 10 项（INACTIVE/UNPUBLISHED/REGISTERED/undefined）
+- FIX-01-8 静态审查：renderer 生产源码 0 命中（electron/node:fs/child_process/ipcRenderer/safeStorage/process.env/localStorage/axios/XHR/fetch，仅注释）；deps 无 axios/Redux/Zustand/UI framework；Electron 安全四件套不变
+- FIX-01-9 Windows 验证（Windows Node 实测）：lint OK / typecheck OK / test:run "19 passed (19) / 230 passed (230)"（186 → 230，+44 项回归测试）/ test:coverage OK（Statements 84.41% (1506/1784) / Branches 85.16% (396/465) / Functions 86.56% (116/134) / Lines 84.41%，api-config.ts 100%）/ build OK（renderer index-DphqYEBd.js 521.05 kB + 13.30 kB css；out/main 实测含 connect-src 'self' http://localhost:8080）
+- FIX-01-9 dev smoke（CDP DOM 证据，后端离线，Electron 44.2.0）：/#/spaces → 1 active（Spaces aria-current=page）；/#/spaces/7/sources pending → 0 active 无 child links；settled → sidebar「Space unavailable」+ guard 网络错误文案 + 重试、0 active 无 child links；返回 → 1 active；dev CSP header 实测 connect-src 'self' http://localhost:5173 ws://localhost:5173 http://localhost:8080（无通配无路径）；log 0 CSP/preload/uncaught（仅良性 React Router future-flag 警告）；custom CSP 由纯函数单测证明，未另启 backend port
+- FIX-01-10 Git review（Windows Git）：diff --check 干净；status 范围仅 desktop/** + docs/frontend-*；未 commit；smoke 产物（log/ps1/cjs）已删除
+
+## FE-001.5 PRE-COMMIT REVIEW FIX-01 Re-validation Checkpoint（2026-09-06，二次全量验证）
+
+外部 reviewer 再次要求执行 FIX-01 后的完整 Windows 验证，确认源码修复可复现。
+
+- 源码核对：7 项核心修复（api-config 契约 / nav end / engines / ESLint deps / parseOptionalPositiveId / AppShell 语义 / StatusBadge exact）均已在源码与测试中落地，无遗漏
+- 静态审查：renderer 生产源码 electron/node:*/axios/localStorage 等仅注释提及；Electron 四件套 contextIsolation=true / nodeIntegration=false / sandbox=true / webSecurity=true 不变；package.json 无 axios/Redux/Zustand/UI framework
+- Windows Node v24.11.1 / npm 11.6.2 / win32 实测：lint OK / typecheck OK / test:run 230/230（19 文件）/ coverage Statements 84.41% (1506/1784) Branches 85.16% (396/465) Functions 86.56% (116/134) Lines 84.41% / build OK（main 6.44 kB + preload 0.01 kB + renderer index-DphqYEBd.js 521.05 kB + 13.30 kB css）
+- npm ls --depth=0 干净（@eslint/js@9.39.5 + globals@17.12.0 为直接 devDependencies）
+- out/main/index.js 实测含 DEFAULT_API_BASE_URL="http://localhost:8080" + resolveApiBaseUrl + apiOriginFromBaseUrl 链路
+- Dev smoke：electron-vite dev 起服成功（5173 + start electron app...），进程存活 25s 后正常终止；nested route 单 active 由 AppShell.test.tsx 4 项 aria-current 断言覆盖（/spaces、/spaces/7/sources、/spaces/7/knowledge、至多一个 active）；custom API CSP 由 api-config.test.ts 11 项 + csp.test.ts custom-origin 5 项纯函数测试充分证明
+- Git：diff --check 无 whitespace error（仅 LF→CRLF 规范化 warning）；status 范围仅 desktop/** + docs/frontend-*；diff --stat 36 files / +4938 / −710；未 commit
+- 结论：FE-001.5 PRE-COMMIT REVIEW FIX PASS — READY FOR USER REVIEW AND COMMIT

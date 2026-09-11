@@ -18,6 +18,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useApiClient } from '../lib/api-context';
 import { unwrap, normalizeApiError } from '../lib/api-error';
 import { queryKeys } from '../lib/query-keys';
+import { parsePositiveIdParam } from '../lib/ids';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 
@@ -25,12 +26,17 @@ export function SpaceScopeGuard() {
   const api = useApiClient();
   const { spaceId: spaceIdParam } = useParams();
 
-  const spaceId = Number(spaceIdParam);
-  const spaceIdValid = Number.isFinite(spaceId) && spaceId > 0;
+  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceIdValid = spaceId !== null;
 
   const spaceQuery = useQuery({
-    queryKey: queryKeys.space(spaceId),
-    queryFn: () => api.getLearningSpace(spaceId).then(unwrap),
+    queryKey: queryKeys.space(spaceId ?? 0),
+    queryFn: () => {
+      if (spaceId === null) {
+        return Promise.reject(new Error('invalid space id'));
+      }
+      return api.getLearningSpace(spaceId).then(unwrap);
+    },
     enabled: spaceIdValid,
   });
 

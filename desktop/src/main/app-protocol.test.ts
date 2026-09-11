@@ -52,6 +52,19 @@ describe('isAllowedAppNavigation', () => {
     expect(isAllowedAppNavigation('not-a-url')).toBe(false);
     expect(isAllowedAppNavigation('')).toBe(false);
   });
+
+  it('rejects javascript:, data:, and empty hosts (PHASE 20)', () => {
+    expect(isAllowedAppNavigation('javascript:alert(1)')).toBe(false);
+    expect(isAllowedAppNavigation('data:text/html,<script>1</script>')).toBe(
+      false
+    );
+    expect(isAllowedAppNavigation('app://')).toBe(false);
+    expect(isAllowedAppNavigation('app:///path')).toBe(false);
+  });
+
+  it('rejects the app host with a port (PHASE 20)', () => {
+    expect(isAllowedAppNavigation('app://aistudy:8080/')).toBe(false);
+  });
 });
 
 describe('resolveAppUrlPath', () => {
@@ -109,5 +122,65 @@ describe('resolveAppUrlPath', () => {
     expect(resolveAppUrlPath(`${APP_ORIGIN}/assets/../../etc/passwd`, root)).toBe(
       join(root, 'etc', 'passwd')
     );
+  });
+
+  it('ignores query strings for filesystem resolution (PHASE 20)', () => {
+    // Query strings can never alter the resolved path.
+    expect(resolveAppUrlPath(`${APP_ORIGIN}/assets/x.js?v=1&x=2`, root)).toBe(
+      join(root, 'assets', 'x.js')
+    );
+    expect(resolveAppUrlPath(`${APP_ORIGIN}/?next=..%2f..%2fetc`, root)).toBe(
+      join(root, 'index.html')
+    );
+  });
+
+  it('ignores hash fragments for resource resolution (PHASE 20)', () => {
+    expect(resolveAppUrlPath(`${APP_ORIGIN}/#/spaces`, root)).toBe(
+      join(root, 'index.html')
+    );
+    expect(resolveAppUrlPath(`${APP_ORIGIN}/#/spaces/1/knowledge/5`, root)).toBe(
+      join(root, 'index.html')
+    );
+    expect(resolveAppUrlPath(`${APP_ORIGIN}/assets/x.js#frag`, root)).toBe(
+      join(root, 'assets', 'x.js')
+    );
+  });
+
+  it('rejects encoded separators that hide traversal (PHASE 20)', () => {
+    // %5c decodes to the Windows path separator; a decoded ".." + "\"
+    // sequence must not escape the renderer root.
+    expect(
+      resolveAppUrlPath(`${APP_ORIGIN}/..%5c..%5csecret.txt`, root)
+    ).toBeNull();
+    expect(
+      resolveAppUrlPath(`${APP_ORIGIN}/%2e%2e%5csecret.txt`, root)
+    ).toBeNull();
+    expect(
+      resolveAppUrlPath(`${APP_ORIGIN}/a%2f..%2f..%2fsecret.txt`, root)
+    ).toBeNull();
+  });
+
+  it('keeps double-encoded traversal inert (single decode contract, PHASE 20)', () => {
+    // After ONE decodeURIComponent the string is still fully encoded:
+    // "%2e%2e%2f" is just a literal filename, never a path segment.
+    const result = resolveAppUrlPath(
+      `${APP_ORIGIN}/%252e%252e%252fsecret.txt`,
+      root
+    );
+    expect(result).not.toBeNull();
+    expect(result?.startsWith(root)).toBe(true);
+  });
+
+  it('rejects javascript:/data:/file:/http(s) in resource resolution (PHASE 20)', () => {
+    expect(resolveAppUrlPath('javascript:alert(1)', root)).toBeNull();
+    expect(resolveAppUrlPath('data:text/html,<b>x</b>', root)).toBeNull();
+    expect(resolveAppUrlPath('file:///C:/secret.txt', root)).toBeNull();
+    expect(resolveAppUrlPath('https://example.com/secret.txt', root)).toBeNull();
+    expect(resolveAppUrlPath('http://localhost:9999/secret.txt', root)).toBeNull();
+  });
+
+  it('rejects empty-host and ported app URLs in resource resolution (PHASE 20)', () => {
+    expect(resolveAppUrlPath('app:///index.html', root)).toBeNull();
+    expect(resolveAppUrlPath('app://aistudy:8080/index.html', root)).toBeNull();
   });
 });

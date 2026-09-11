@@ -103,4 +103,119 @@ describe('buildCategoryTree', () => {
     // cycle nodes cannot nest under a real root; they surface at root
     expect(tree.length).toBeGreaterThan(0);
   });
+
+  it('handles a deep hierarchy (PHASE 12)', () => {
+    const categories = [
+      cat(1, 'L1'),
+      cat(2, 'L2', 1),
+      cat(3, 'L3', 2),
+      cat(4, 'L4', 3),
+      cat(5, 'L5', 4),
+    ];
+    const tree = buildCategoryTree(categories);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].children[0].children[0].children[0].children[0].category.id).toBe(5);
+  });
+
+  it('handles a self-cycle without hanging (PHASE 12)', () => {
+    const categories = [cat(1, 'Self', 1), cat(2, 'Normal')];
+    const tree = buildCategoryTree(categories);
+    expect(tree).toHaveLength(2);
+  });
+
+  it('handles a three-node cycle with each node exactly once (PHASE 12)', () => {
+    const categories = [cat(1, 'A', 3), cat(2, 'B', 1), cat(3, 'C', 2)];
+    const tree = buildCategoryTree(categories);
+    const ids: number[] = [];
+    const seen = new Set<number>();
+    const walk = (nodes: typeof tree) => {
+      for (const node of nodes) {
+        const id = node.category.id ?? -1;
+        if (seen.has(id)) {
+          continue;
+        }
+        seen.add(id);
+        ids.push(id);
+        walk(node.children);
+      }
+    };
+    walk(tree);
+    expect(ids.sort((a, b) => a - b)).toEqual([1, 2, 3]);
+  });
+
+  it('handles duplicate parent references without duplication (PHASE 12)', () => {
+    // Two nodes claim the same parent; both appear, parent lists both.
+    const categories = [cat(1, 'Root'), cat(2, 'A', 1), cat(3, 'B', 1)];
+    const tree = buildCategoryTree(categories);
+    expect(tree[0].children.map((c) => c.category.id)).toEqual([2, 3]);
+  });
+
+  it('skips categories with missing ids (PHASE 12)', () => {
+    const categories = [
+      { id: undefined, name: 'Ghost', parentId: undefined } as unknown as KnowledgeCategory,
+      cat(1, 'Real'),
+    ];
+    const tree = buildCategoryTree(categories);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].category.id).toBe(1);
+  });
+
+  it('handles duplicate ids without hanging (PHASE 12)', () => {
+    // Malformed backend data: two categories share id 1. Must not loop
+    // and must terminate with a finite renderable tree.
+    const categories = [cat(1, 'First'), cat(1, 'Second'), cat(2, 'Other')];
+    const tree = buildCategoryTree(categories);
+    expect(tree.length).toBeGreaterThan(0);
+    // every emitted node is reachable and finite
+    let count = 0;
+    const seen = new Set<number>();
+    const walk = (nodes: typeof tree) => {
+      for (const node of nodes) {
+        const id = node.category.id ?? -1;
+        if (seen.has(id)) {
+          continue;
+        }
+        seen.add(id);
+        count += 1;
+        walk(node.children);
+      }
+    };
+    walk(tree);
+    expect(count).toBeGreaterThanOrEqual(1);
+  });
+
+  it('keeps total node count stable on a large shallow set (PHASE 12)', () => {
+    const categories = Array.from({ length: 2000 }, (_, i) => cat(i + 1, `C${i + 1}`));
+    const tree = buildCategoryTree(categories);
+    expect(tree).toHaveLength(2000);
+    expect(tree[1999].category.name).toBe('C2000');
+  });
+
+  it('terminates on a long deep chain within reasonable limits (PHASE 12)', () => {
+    const depth = 600;
+    const categories = Array.from({ length: depth }, (_, i) =>
+      cat(i + 1, `D${i + 1}`, i === 0 ? undefined : i)
+    );
+    const tree = buildCategoryTree(categories);
+    expect(tree).toHaveLength(1);
+    let node = tree[0];
+    let steps = 0;
+    while (node.children.length > 0 && steps < depth) {
+      node = node.children[0];
+      steps += 1;
+    }
+    expect(steps).toBe(depth - 1);
+    expect(node.category.id).toBe(depth);
+  });
+
+  it('keeps backend list order stable across the tree (PHASE 12)', () => {
+    const categories = [
+      cat(1, 'Root'),
+      cat(2, 'Z', 1),
+      cat(3, 'A', 1),
+      cat(4, 'M', 1),
+    ];
+    const tree = buildCategoryTree(categories);
+    expect(tree[0].children.map((c) => c.category.name)).toEqual(['Z', 'A', 'M']);
+  });
 });

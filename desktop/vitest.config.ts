@@ -17,6 +17,25 @@ export default defineConfig({
     include: [
       'src/renderer/src/**/*.test.{ts,tsx}',
       'src/main/**/*.test.ts',
+      'src/shared/**/*.test.ts',
     ],
+    coverage: {
+      // FE-001.5 PHASE 24: real coverage baseline for renderer app logic
+      // + pure main-process helpers. Test files, test infra, build
+      // configs and shared-client code are excluded by definition.
+      provider: 'v8',
+      reporter: ['text', 'text-summary'],
+      include: [
+        'src/renderer/src/**/*.{ts,tsx}',
+        'src/main/**/*.ts',
+        'src/shared/**/*.ts',
+      ],
+      exclude: [
+        '**/*.test.{ts,tsx}',
+        'src/renderer/src/test/**',
+        'src/renderer/src/**/*.test.tsx',
+        'src/shared/**/*.test.ts',
+      ],
+    },
   },
 });

@@ -13,9 +13,11 @@ import { useApiClient } from '../../lib/api-context';
 import { unwrap, normalizeApiError } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
 import { formatDateTime } from '../../lib/format';
+import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
+import { PageHeader } from '../../components/PageHeader';
 import { StatusBadge } from '../../components/StatusBadge';
 
 export function KnowledgePointDetailPage() {
@@ -23,17 +25,18 @@ export function KnowledgePointDetailPage() {
   const queryClient = useQueryClient();
   const { spaceId: spaceIdParam, knowledgePointId: pointIdParam } = useParams();
 
-  const spaceId = Number(spaceIdParam);
-  const knowledgePointId = Number(pointIdParam);
-  const idsValid =
-    Number.isFinite(spaceId) &&
-    spaceId > 0 &&
-    Number.isFinite(knowledgePointId) &&
-    knowledgePointId > 0;
+  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const knowledgePointId = parsePositiveIdParam(pointIdParam);
+  const idsValid = spaceId !== null && knowledgePointId !== null;
 
   const pointQuery = useQuery({
-    queryKey: queryKeys.knowledgePoint(spaceId, knowledgePointId),
-    queryFn: () => api.getKnowledgePoint(spaceId, knowledgePointId).then(unwrap),
+    queryKey: queryKeys.knowledgePoint(spaceId ?? 0, knowledgePointId ?? 0),
+    queryFn: () => {
+      if (spaceId === null || knowledgePointId === null) {
+        return Promise.reject(new Error('invalid ids'));
+      }
+      return api.getKnowledgePoint(spaceId, knowledgePointId).then(unwrap);
+    },
     enabled: idsValid,
   });
 
@@ -42,19 +45,29 @@ export function KnowledgePointDetailPage() {
   // failing category query must never take the detail page down —
   // resolution degrades to "#<id>" instead.
   const categoriesQuery = useQuery({
-    queryKey: queryKeys.knowledgeCategories(spaceId),
-    queryFn: () => api.listKnowledgeCategories(spaceId).then(unwrap),
+    queryKey: queryKeys.knowledgeCategories(spaceId ?? 0),
+    queryFn: () => {
+      if (spaceId === null) {
+        return Promise.reject(new Error('invalid space id'));
+      }
+      return api.listKnowledgeCategories(spaceId).then(unwrap);
+    },
     enabled: idsValid,
   });
 
   const publish = useMutation({
-    mutationFn: () => api.publishKnowledgePoint(spaceId, knowledgePointId).then(unwrap),
+    mutationFn: () => {
+      if (spaceId === null || knowledgePointId === null) {
+        return Promise.reject(new Error('invalid ids'));
+      }
+      return api.publishKnowledgePoint(spaceId, knowledgePointId).then(unwrap);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgePoint(spaceId, knowledgePointId),
+        queryKey: queryKeys.knowledgePoint(spaceId ?? 0, knowledgePointId ?? 0),
       });
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgePoints(spaceId),
+        queryKey: queryKeys.knowledgePoints(spaceId ?? 0),
       });
     },
   });
@@ -84,33 +97,36 @@ export function KnowledgePointDetailPage() {
   const isDraft = point.status === 'DRAFT';
   const isPublished = point.status === 'PUBLISHED';
 
-  /** Generated ids are optional — only finite positive ids resolve. */
-  const isPositiveId = (value: unknown): value is number =>
-    typeof value === 'number' && Number.isFinite(value) && value > 0;
-
-  const categoryNameFor = (categoryId: number): string => {
-    const categories = categoriesQuery.data ?? [];
-    const found = categories.find((category) => category.id === categoryId);
-    return found?.name ?? `#${categoryId}`;
-  };
+  // Category name resolution (STRETCH D): a Map lookup instead of an
+  // array find() per render — degrades to "#<id>" when unresolved.
+  const categoryNameById = new Map<number, string>();
+  for (const category of categoriesQuery.data ?? []) {
+    if (category.id !== undefined && category.name) {
+      categoryNameById.set(category.id, category.name);
+    }
+  }
+  const categoryNameFor = (categoryId: number): string =>
+    categoryNameById.get(categoryId) ?? `#${categoryId}`;
 
   return (
     <div className="page">
-      <div className="page__header">
-        <h1 className="page__title">{point.title ?? 'Untitled'}</h1>
-        <div className="page__actions">
-          <StatusBadge status={point.status} />
-          {isDraft && (
-            <Button
-              variant="primary"
-              disabled={publish.isPending}
-              onClick={() => publish.mutate()}
-            >
-              {publish.isPending ? 'Publishing…' : 'Publish'}
-            </Button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title={point.title ?? 'Untitled'}
+        actions={
+          <>
+            <StatusBadge status={point.status} />
+            {isDraft && (
+              <Button
+                variant="primary"
+                disabled={publish.isPending}
+                onClick={() => publish.mutate()}
+              >
+                {publish.isPending ? 'Publishing…' : 'Publish'}
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {publish.isError && (
         <p className="form__error" role="alert">

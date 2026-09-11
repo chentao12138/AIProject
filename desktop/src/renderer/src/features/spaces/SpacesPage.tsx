@@ -14,6 +14,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useApiClient } from '../../lib/api-context';
 import { unwrap, normalizeApiError } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
+import { isPositiveId } from '../../lib/ids';
+import { useFormError } from '../../lib/use-form-error';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Dialog } from '../../components/Dialog';
@@ -21,12 +23,11 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Input } from '../../components/Input';
 import { LoadingState } from '../../components/LoadingState';
+import { PageHeader } from '../../components/PageHeader';
 import { StatusBadge } from '../../components/StatusBadge';
 
-/** Generated ids are optional — only finite positive ids are navigable. */
-function isNavigableId(id: unknown): id is number {
-  return typeof id === 'number' && Number.isFinite(id) && id > 0;
-}
+/** Generated ids are optional — only finite positive integer ids are
+ * navigable (guard lives in lib/ids.ts). */
 
 export function SpacesPage() {
   const api = useApiClient();
@@ -47,7 +48,7 @@ export function SpacesPage() {
       setCreating(false);
       // Only navigate when the response carries a finite positive id —
       // never build /spaces/undefined.
-      if (isNavigableId(created?.id)) {
+      if (isPositiveId(created?.id)) {
         void navigate(`/spaces/${created.id}/sources`);
       }
     },
@@ -57,12 +58,14 @@ export function SpacesPage() {
 
   return (
     <div className="page">
-      <div className="page__header">
-        <h1 className="page__title">Learning Spaces</h1>
-        <Button variant="primary" onClick={() => setCreating(true)}>
-          Create Learning Space
-        </Button>
-      </div>
+      <PageHeader
+        title="Learning Spaces"
+        actions={
+          <Button variant="primary" onClick={() => setCreating(true)}>
+            Create Learning Space
+          </Button>
+        }
+      />
 
       {spacesQuery.isPending && <LoadingState text="加载空间列表…" />}
 
@@ -99,7 +102,7 @@ export function SpacesPage() {
                 </p>
               </Card>
             );
-            return isNavigableId(spaceId) ? (
+            return isPositiveId(spaceId) ? (
               <Link
                 key={spaceId}
                 to={`/spaces/${spaceId}/sources`}
@@ -141,9 +144,10 @@ function CreateSpaceDialog({
 }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const formError = useFormError(error);
 
   return (
-    <Dialog title="Create Learning Space" onClose={onClose}>
+    <Dialog title="Create Learning Space" onClose={onClose} busy={pending}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -161,15 +165,23 @@ function CreateSpaceDialog({
           label="Name"
           required
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            setName(event.target.value);
+            formError.clear();
+          }}
           placeholder="e.g. Math 101"
         />
         <Input
           label="Description (optional)"
           value={description}
-          onChange={(event) => setDescription(event.target.value)}
+          onChange={(event) => {
+            setDescription(event.target.value);
+            formError.clear();
+          }}
         />
-        {error && <p className="form__error" role="alert">{error.message}</p>}
+        {formError.message && (
+          <p className="form__error" role="alert">{formError.message}</p>
+        )}
         <div className="form__actions">
           <Button type="submit" variant="primary" disabled={pending || !name.trim()}>
             {pending ? 'Creating…' : 'Create'}

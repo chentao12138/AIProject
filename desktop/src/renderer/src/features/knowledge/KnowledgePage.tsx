@@ -14,6 +14,13 @@ import { useApiClient } from '../../lib/api-context';
 import { unwrap, normalizeApiError } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
 import { buildCategoryTree } from '../../lib/category-tree';
+import {
+  parsePositiveIdParam,
+  isPositiveId,
+  parseOptionalInteger,
+  parseOptionalPositiveId,
+} from '../../lib/ids';
+import { useFormError } from '../../lib/use-form-error';
 import type { CategoryNode } from '../../lib/category-tree';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -21,6 +28,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Input } from '../../components/Input';
 import { LoadingState } from '../../components/LoadingState';
+import { PageHeader } from '../../components/PageHeader';
 import { Select } from '../../components/Select';
 import { StatusBadge } from '../../components/StatusBadge';
 import { TextArea } from '../../components/TextArea';
@@ -33,19 +41,28 @@ export function KnowledgePage() {
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [creatingPoint, setCreatingPoint] = useState(false);
 
-  const spaceId = Number(spaceIdParam);
-  const spaceIdValid = Number.isFinite(spaceId) && spaceId > 0;
+  const spaceId = parsePositiveIdParam(spaceIdParam);
 
   const categoriesQuery = useQuery({
-    queryKey: queryKeys.knowledgeCategories(spaceId),
-    queryFn: () => api.listKnowledgeCategories(spaceId).then(unwrap),
-    enabled: spaceIdValid,
+    queryKey: queryKeys.knowledgeCategories(spaceId ?? 0),
+    queryFn: () => {
+      if (spaceId === null) {
+        return Promise.reject(new Error('invalid space id'));
+      }
+      return api.listKnowledgeCategories(spaceId).then(unwrap);
+    },
+    enabled: spaceId !== null,
   });
 
   const pointsQuery = useQuery({
-    queryKey: queryKeys.knowledgePoints(spaceId),
-    queryFn: () => api.listKnowledgePoints(spaceId).then(unwrap),
-    enabled: spaceIdValid,
+    queryKey: queryKeys.knowledgePoints(spaceId ?? 0),
+    queryFn: () => {
+      if (spaceId === null) {
+        return Promise.reject(new Error('invalid space id'));
+      }
+      return api.listKnowledgePoints(spaceId).then(unwrap);
+    },
+    enabled: spaceId !== null,
   });
 
   const createCategory = useMutation({
@@ -54,10 +71,15 @@ export function KnowledgePage() {
       description?: string;
       parentId?: number;
       sortOrder?: number;
-    }) => api.createKnowledgeCategory(spaceId, body).then(unwrap),
+    }) => {
+      if (spaceId === null) {
+        return Promise.reject(new Error('invalid space id'));
+      }
+      return api.createKnowledgeCategory(spaceId, body).then(unwrap);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgeCategories(spaceId),
+        queryKey: queryKeys.knowledgeCategories(spaceId ?? 0),
       });
       setCreatingCategory(false);
     },
@@ -70,16 +92,21 @@ export function KnowledgePage() {
       content: string;
       categoryId?: number;
       difficulty?: string;
-    }) => api.createKnowledgePoint(spaceId, body).then(unwrap),
+    }) => {
+      if (spaceId === null) {
+        return Promise.reject(new Error('invalid space id'));
+      }
+      return api.createKnowledgePoint(spaceId, body).then(unwrap);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgePoints(spaceId),
+        queryKey: queryKeys.knowledgePoints(spaceId ?? 0),
       });
       setCreatingPoint(false);
     },
   });
 
-  if (!spaceIdValid) {
+  if (spaceId === null) {
     return <ErrorState message="资源不存在或当前不可访问。" />;
   }
 
@@ -102,17 +129,19 @@ export function KnowledgePage() {
 
   return (
     <div className="page">
-      <div className="page__header">
-        <h1 className="page__title">Knowledge</h1>
-        <div className="page__actions">
-          <Button onClick={() => setCreatingCategory(true)}>
-            Create Category
-          </Button>
-          <Button variant="primary" onClick={() => setCreatingPoint(true)}>
-            Create Knowledge Point
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Knowledge"
+        actions={
+          <>
+            <Button onClick={() => setCreatingCategory(true)}>
+              Create Category
+            </Button>
+            <Button variant="primary" onClick={() => setCreatingPoint(true)}>
+              Create Knowledge Point
+            </Button>
+          </>
+        }
+      />
 
       {loading && <LoadingState text="加载知识库…" />}
 
@@ -153,10 +182,7 @@ export function KnowledgePage() {
               <ul className="point-list">
                 {points.map((point, index) => {
                   const pointId = point.id;
-                  const navigable =
-                    typeof pointId === 'number' &&
-                    Number.isFinite(pointId) &&
-                    pointId > 0;
+                  const navigable = isPositiveId(pointId);
                   const content = (
                     <>
                       <span className="point-list__title">
@@ -249,20 +275,17 @@ function CategoryTree({ nodes }: { nodes: CategoryNode[] }) {
   return (
     <ul className="category-tree">
       {nodes.map((node) => (
-        <CategoryTreeItem key={node.category.id ?? 'orphan'} node={node} depth={0} />
+        <CategoryTreeItem key={node.category.id ?? 'orphan'} node={node} />
       ))}
     </ul>
   );
 }
 
-function CategoryTreeItem({ node, depth }: { node: CategoryNode; depth: number }) {
+function CategoryTreeItem({ node }: { node: CategoryNode }) {
   const hasChildren = node.children.length > 0;
   return (
     <li className="category-tree__item">
-      <span
-        className="category-tree__label"
-        style={{ paddingLeft: `${depth * 14}px` }}
-      >
+      <span className="category-tree__label">
         {hasChildren ? '▾' : '·'} {node.category.name ?? 'Untitled'}
         {node.category.description && (
           <span className="category-tree__desc"> — {node.category.description}</span>
@@ -274,7 +297,6 @@ function CategoryTreeItem({ node, depth }: { node: CategoryNode; depth: number }
             <CategoryTreeItem
               key={child.category.id ?? 'orphan'}
               node={child}
-              depth={depth + 1}
             />
           ))}
         </ul>
@@ -305,9 +327,10 @@ function CreateCategoryDialog({
   const [description, setDescription] = useState('');
   const [parentId, setParentId] = useState('');
   const [sortOrder, setSortOrder] = useState('');
+  const formError = useFormError(error);
 
   return (
-    <Dialog title="Create Category" onClose={onClose}>
+    <Dialog title="Create Category" onClose={onClose} busy={pending}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -318,14 +341,8 @@ function CreateCategoryDialog({
           onSubmit({
             name: name.trim(),
             description: description.trim() || undefined,
-            parentId:
-              parentId !== '' && Number.isFinite(Number(parentId))
-                ? Number(parentId)
-                : undefined,
-            sortOrder:
-              sortOrder !== '' && Number.isFinite(Number(sortOrder))
-                ? Number(sortOrder)
-                : undefined,
+            parentId: parseOptionalPositiveId(parentId),
+            sortOrder: parseOptionalInteger(sortOrder),
           });
         }}
       >
@@ -333,35 +350,48 @@ function CreateCategoryDialog({
           label="Name"
           required
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            setName(event.target.value);
+            formError.clear();
+          }}
         />
         <Input
           label="Description (optional)"
           value={description}
-          onChange={(event) => setDescription(event.target.value)}
+          onChange={(event) => {
+            setDescription(event.target.value);
+            formError.clear();
+          }}
         />
         <Select
           label="Parent category (optional)"
           value={parentId}
-          onChange={(event) => setParentId(event.target.value)}
+          onChange={(event) => {
+            setParentId(event.target.value);
+            formError.clear();
+          }}
         >
           <option value="">(none — root category)</option>
-          {categories.map((category, index) => (
-            <option
-              key={category.id ?? `cat-${index}`}
-              value={category.id ?? ''}
-            >
-              {category.name ?? `#${category.id ?? 'unknown'}`}
-            </option>
-          ))}
+          {categories
+            .filter((category) => isPositiveId(category.id))
+            .map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name ?? `#${category.id}`}
+              </option>
+            ))}
         </Select>
         <Input
           label="Sort order (optional)"
           type="number"
           value={sortOrder}
-          onChange={(event) => setSortOrder(event.target.value)}
+          onChange={(event) => {
+            setSortOrder(event.target.value);
+            formError.clear();
+          }}
         />
-        {error && <p className="form__error" role="alert">{error.message}</p>}
+        {formError.message && (
+          <p className="form__error" role="alert">{formError.message}</p>
+        )}
         <div className="form__actions">
           <Button type="submit" variant="primary" disabled={pending || !name.trim()}>
             {pending ? 'Creating…' : 'Create'}
@@ -399,9 +429,10 @@ function CreatePointDialog({
   const [content, setContent] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [difficulty, setDifficulty] = useState('');
+  const formError = useFormError(error);
 
   return (
-    <Dialog title="Create Knowledge Point" onClose={onClose}>
+    <Dialog title="Create Knowledge Point" onClose={onClose} busy={pending}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -413,10 +444,7 @@ function CreatePointDialog({
             title: title.trim(),
             summary: summary.trim() || undefined,
             content: content.trim(),
-            categoryId:
-              categoryId !== '' && Number.isFinite(Number(categoryId))
-                ? Number(categoryId)
-                : undefined,
+            categoryId: parseOptionalPositiveId(categoryId),
             difficulty: difficulty.trim() || undefined,
           });
         }}
@@ -425,41 +453,57 @@ function CreatePointDialog({
           label="Title"
           required
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            setTitle(event.target.value);
+            formError.clear();
+          }}
         />
         <Input
           label="Summary (optional)"
           value={summary}
-          onChange={(event) => setSummary(event.target.value)}
+          onChange={(event) => {
+            setSummary(event.target.value);
+            formError.clear();
+          }}
         />
         <TextArea
           label="Content"
           required
           rows={6}
           value={content}
-          onChange={(event) => setContent(event.target.value)}
+          onChange={(event) => {
+            setContent(event.target.value);
+            formError.clear();
+          }}
         />
         <Select
           label="Category (optional)"
           value={categoryId}
-          onChange={(event) => setCategoryId(event.target.value)}
+          onChange={(event) => {
+            setCategoryId(event.target.value);
+            formError.clear();
+          }}
         >
           <option value="">(none)</option>
-          {categories.map((category, index) => (
-            <option
-              key={category.id ?? `cat-${index}`}
-              value={category.id ?? ''}
-            >
-              {category.name ?? `#${category.id ?? 'unknown'}`}
-            </option>
-          ))}
+          {categories
+            .filter((category) => isPositiveId(category.id))
+            .map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name ?? `#${category.id}`}
+              </option>
+            ))}
         </Select>
         <Input
           label="Difficulty (optional free text)"
           value={difficulty}
-          onChange={(event) => setDifficulty(event.target.value)}
+          onChange={(event) => {
+            setDifficulty(event.target.value);
+            formError.clear();
+          }}
         />
-        {error && <p className="form__error" role="alert">{error.message}</p>}
+        {formError.message && (
+          <p className="form__error" role="alert">{formError.message}</p>
+        )}
         <div className="form__actions">
           <Button
             type="submit"

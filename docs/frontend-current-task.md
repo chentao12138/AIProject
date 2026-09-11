@@ -2,207 +2,177 @@
 
 ## Objective
 
-LONG-RUN-FE-001 — DESKTOP FOUNDATION + FIRST BUSINESS UI：
-- Electron + React + TypeScript + Vite foundation（electron-vite）
-- 安全 BrowserWindow baseline（ADR-037）
-- React Router（createHashRouter）+ TanStack Query
-- Desktop App Shell
-- Development Auth Session abstraction（in-memory only）
-- LearningSpace / Source / KnowledgeCategory / KnowledgePoint UI + Publish flow
-- Frontend tests（Vitest + React Testing Library）
-- frontend-specific persistent docs（本文件 + docs/frontend-development-log.md）
+LONG-RUN-FE-001.5 — DESKTOP PRODUCT HARDENING / UX / A11Y / QUALITY SYSTEM
+（Phase 1–34 顺序执行；完成后继续 Stretch A–G；计划文件 docs/frontend-hardening-plan.md 为唯一权威）
 
 ## Current Phase
 
-**PHASE 14 + PRE-COMMIT REVIEW FIX-01 + DEP-001 + ELECTRON-CORS-001-A/B/C + FINAL-POLISH-001 DONE — 最终状态：**
-
-FE-001 IMPLEMENTED
-ELECTRON ORIGIN/CORS REAL INTEGRATION VERIFIED（真实 Desktop UI → Backend → MySQL 全链路）
-WINDOWS RUNTIME VERIFIED
-READY FOR USER FINAL REVIEW AND COMMIT
-
-（不写 COMPLETE：最终 commit 由用户执行。）
+PHASE 1–34 + STRETCH A/C/D/F DONE（Stretch B 由既有 pending 阻断测试覆盖、E 经审查无需改动、G 文案一致性已审查）
++ **PRE-COMMIT REVIEW FIX-01 DONE（外部 reviewer 检查 package.zip 源码后提交前修复）** — 等待用户 review 与 commit
 
 ## Baseline
 
-- Branch: feat/fe-001 @ 7ef6a79 "feat: implement knowledge catalog"（与 main 同 commit，Windows Git 权威确认）
-- frontend worktree: D:/AIProject-frontend（独立 worktree，不触碰 D:/AIProject backend working tree）
-- 本轮新增文件全部 untracked（未 add/commit/push，由用户提交）
+- Branch: feat/fe-001 @ ec115be "feat: establish desktop frontend foundation"（Windows Git 权威确认）
+- Working tree: clean（唯一 untracked = docs/frontend-hardening-plan.md 计划文件本身，非本任务产物）
+- Windows Node: v24.11.1 / npm 11.x / win32 x64；Electron 44.2.0（EOL 升级已完成，DEP-001）
+- 上一任务 FE-001 已提交并集成（含 ELECTRON-CORS-001-A/B/C 真实链路验证）
 
 ## Allowed Write Scope
 
-- desktop/**（含 desktop/package-lock.json，由 Windows npm 生成）
-- docs/frontend-current-task.md
-- docs/frontend-development-log.md
-- docs/frontend-autonomous-plan.md（执行计划，已存在）
+- desktop/**（含 package-lock.json，由 Windows npm 生成）
+- docs/frontend-current-task.md / docs/frontend-development-log.md
+- 禁止：server/**、deploy/**、packages/api-client/**、docs/current-task.md 等非 frontend docs
+- 禁止 git add/commit/push/reset/restore/clean/rebase/merge（用户自行提交）
+- 禁止 FE-002 / SourceAsset upload / multipart / file picker IPC
 
-禁止修改：server/**、packages/api-client/**（含 generated/、client.ts、index.ts、package.json）、docs/current-task.md、docs/development-log.md、docs/development-plan.md、docs/decisions.md、docs/architecture.md、docs/technology-selection.md 及任何 Flyway migration。本轮零触碰。
+## FE-001.5 Baseline Audit（PHASE 1 产物）
 
-## Completed
+### Renderer structure
+- src/renderer/src/main.tsx（QueryClientProvider + ApiClientProvider + StrictMode）→ App.tsx → RouterProvider(createHashRouter)
+- 目录：app/（AppShell、SpaceScopeGuard、router）、components/（Button/Card/Dialog/EmptyState/ErrorState/Input/LoadingState/Select/StatusBadge/TextArea）、features/{auth,spaces,sources,knowledge}、lib/（api-client/api-context/api-error/category-tree/format/query-keys/types）、styles/global.css、test/（setup、test-utils）
 
-- 恢复检查（Windows Git 权威）：worktree 干净，feat/fe-001 @ 7ef6a79
-- Source of Truth 读取：ADR-029/030/037、architecture.md §8、technology-selection.md §8、requirements.md；shared api-client 13 个业务方法齐全，TokenProvider 存在，generated 字段全 optional
-- PHASE A: desktop/ scaffold（package.json/tsconfig x3/electron.vite.config.ts/vitest.config.ts/.env.example/README.md/.gitignore + src/{main,preload,renderer}）
-- PHASE B: Electron 安全基线（sandbox/contextIsolation/nodeIntegration=false/webSecurity=true、deny window.open、will-navigate 白名单、CSP、zero-IPC preload）
-- PHASE C: Renderer 架构（StrictMode/QueryClientProvider/ApiClientProvider/RouterProvider、createHashRouter 路由、URL 决定 current space、query keys 契约）
-- PHASE D: API 边界（仅 @aistudy/api-client；ReturnType 推导类型；VITE_API_BASE_URL；error normalization 5 类；404 anti-IDOR 文案）
-- PHASE E: InMemoryTokenSession + DEV-only Development Session
-- PHASE F: App Shell（顶栏/侧栏/主区；space name 解析；无效 space 文案）
-- PHASE G-I: Spaces / Sources（DESKTOP_UPLOAD 固定）/ Knowledge Catalog / Publish flow
-- PHASE J: formatDateTime + optional 安全访问
-- PHASE K: 31 项测试全绿（K1.1-K1.12 + 补充 + review fix 测试）
-- PHASE P: Windows npm install → typecheck PASS → test:run 31/31 PASS → build PASS
-- PHASE Q(optional): dev smoke 通过（Electron 启动 + renderer connected + 无错误）
-- PHASE N/T: 静态安全扫描 0 命中；Windows Git diff --check 干净
-- PHASE M: 全部 checkpoint 已追加 development-log
-- PRE-COMMIT REVIEW FIX-01（外部 reviewer 10 项，全部完成，见 development-log checkpoint）
+### Route hierarchy
+- / → redirect /spaces；/spaces（SpacesPage）；/spaces/:spaceId → SpaceScopeGuard → index→sources / sources / knowledge / knowledge/:knowledgePointId；* → NotFoundPage
+- current space 由 URL 决定（useCurrentSpaceId：param 优先 + 正则回退）
 
-## In Progress
+### Query client setup
+- main.tsx: retry:1、refetchOnWindowFocus:false；无 staleTime/gcTime/refetchOnReconnect/按错误类 retry 策略
+- 各页 queryKey 契约存在（query-keys.ts）；mutation invalidate 均只清受影响 key；auth 边界 = resetQueries（非 invalidate）
 
-- 等待：ELECTRON-CORS-001 spike（backend CORS 配置 / custom protocol 决策，backend scope）+ 用户视觉 review
+### API error normalization
+- lib/api-error.ts: unwrap()（openapi-fetch {data,error,response} → throw ApiRequestError(status)）+ normalizeApiError → 6 类（network/unauthorized/forbidden/not-found/server/unknown）
+- 现状与计划差异：401 文案为 dev 专属但无 dev/prod 区分；网络/403/5xx 文案与计划推荐不完全一致；normalizeApiError 无 isDev 参数（纯函数可测性 OK）
 
-## Frontend Architecture Decisions
+### Development Session
+- InMemoryTokenSession（lib/api-client.ts）：内存、trim、无持久化；DEV-only 粘贴 UI；Apply/Clear → queryClient.resetQueries()（auth cache boundary 已实现）
+- 缺口：whitespace-only Apply 未禁止（按钮不禁用）；编辑后不清理 applied 状态；status 消息非 aria-live 常驻（role=status 有但语义弱）；无 cleared 反馈
 
-- Electron 33 + React 18 + TypeScript + Vite 5（electron-vite），独立 package（无 root workspace）
-- 状态管理：TanStack Query v5（server-state）；无 Redux/Zustand/MobX/Recoil
-- Router：createHashRouter（Electron file:// 安全）；current space 由 URL 决定，不存 localStorage
-- UI：普通 CSS + CSS variables（无大型 UI framework / Tailwind / Ant Design）
-- 类型：从 ApiClient 方法返回值推导（ResultData），禁止复制 generated DTO
-- Source 创建 sourceType 固定 DESKTOP_UPLOAD；不实现 file upload（SourceAsset 未接入）
-- difficulty 用 optional text input（Backend 无 enum contract，前端不发明枚举）
-- buildCategoryTree 输出保证无环 DAG（visited 过滤），递归渲染安全
-- DevelopmentSession = auth cache boundary：Apply/Clear 触发 queryClient.resetQueries()（清上一 principal 缓存并重新请求）
-- SpaceScopeGuard：/spaces/:spaceId/* 子资源查询前先确认 space 可访问
-- Space card 导航用语义 <Link>（无 onClick div/section 模拟）
+### Reusable components
+- 已有 9 个 primitives（Button/Card/Dialog/EmptyState/ErrorState/Input/LoadingState/Select/StatusBadge/TextArea），覆盖主要重复；每页重复 page__header 结构（Spaces/Sources/Knowledge/Detail 4 处）→ Phase 17 评估 PageHeader
+- isNavigableId / isPositiveId 逻辑在 SpacesPage/KnowledgePage/DetailPage 三处重复 → Phase 3 抽 lib/ids.ts
 
-## Electron Runtime（DEP-001）
+### Dialogs/forms
+- Dialog：role=dialog/aria-modal/aria-label、Escape、overlay click、close 按钮；无初始聚焦、无 focus trap、无 focus return、无 busy 时防误关
+- 表单：真实 form submit、pending 防重复提交、客户端 blank 校验；缺口：编辑时不清 stale error、无 maxLength 视觉约束、sortOrder/difficulty 数字解析 OK 但 NaN 防护分散
 
-- **SUPPORTED VERSION VERIFIED**：Electron 33.4.11（EOL）→ 44.2.0（当前 stable line）
-- 升级方式：Windows npm `npm install --save-dev electron@^44`，package-lock.json 由 npm 真实生成（exact 44.2.0）；electron 44 二进制经 npmmirror 跑官方 install.js 补齐（默认源下载失败，同 33 时代）
-- 真实运行环境（electron.exe 实际启动探针）：electron=44.2.0 / chrome=152.0.7977.76 / node=24.20.0 / platform=win32 / arch=x64
-- Breaking changes 审查（33→44）：macOS 12 弃用、ANGLE 静态链接、32-bit 构建移除、clipboard 不再暴露 renderer、Unity 移除、net.request Sec-Fetch-Dest 限制——与当前代码使用面（app/BrowserWindow/session.webRequest.onHeadersReceived/setWindowOpenHandler/will-navigate/loadURL/loadFile）零交集；webRequest 在 44 仍受支持
-- 安全设置未降级：contextIsolation=true / nodeIntegration=false / sandbox=true / webSecurity=true 原样保留
-- CORS/backend 集成仍属 ELECTRON-CORS-001，本任务未触碰
+### Electron security controls（FE-001 基线已强）
+- contextIsolation=true / nodeIntegration=false / sandbox=true / webSecurity=true；setWindowOpenHandler deny；will-navigate 白名单（dev origin / prod app://aistudy）
+- protocol.registerSchemesAsPrivileged（standard+secure+supportFetchAPI+corsEnabled）；protocol.handle('app') + resolveAppUrlPath（traversal-safe）；net.fetch 流式
+- CSP：cspFor(isDev, devServerUrl) 纯函数；prod 由 protocol.handle 响应头注入；style-src-attr 'unsafe-inline' 唯一例外（category tree inline paddingLeft）→ Phase 21 尝试用嵌套 ul padding 消除后收紧
+- preload zero surface（export {}）；无 IPC；main 无业务逻辑
+- 缺口：无 setPermissionRequestHandler/CheckHandler（Phase 19 deny-by-default）
 
-## Electron Security Contract
+### Test files & count（baseline）
+- 9 文件 / 46 tests：category-tree.test.ts、SpacesPage.test.tsx、SourcesPage.test.tsx、KnowledgePage.test.tsx、KnowledgePointDetailPage.test.tsx、DevelopmentSession.test.tsx、SpaceScopeGuard.test.tsx、app-protocol.test.ts、csp.test.ts
+- vitest include 已覆盖 src/main/**/*.test.ts；QueryClient per-test（retry:false）
 
-- BrowserWindow: contextIsolation=true, nodeIntegration=false, sandbox=true, webSecurity=true（必须保持）
-- 无 webSecurity:false / allowRunningInsecureContent
-- **Production renderer origin: app://aistudy**（custom scheme，standard+secure+supportFetchAPI+corsEnabled；无 bypassCSP/allowServiceWorkers；file:// 已完全弃用 → 浏览器不再见 Origin:null）
-- setWindowOpenHandler → deny；will-navigate：dev 仅 dev server origin；prod 仅 app://aistudy（isAllowedAppNavigation，file/http(s)/foreign app host 全拒，hash 路由允许）
-- protocol.handle('app')：只服务 app://aistudy/**，resolveAppUrlPath 纯函数防护（foreign host/malformed/decode 后 traversal 逃逸 → 404）；net.fetch(pathToFileURL) 流式，不整文件读内存
-- Preload：zero business IPC surface（export {}，不暴露任何 Node API）；无 generic fetch IPC bridge、无 HTTP proxy through IPC
-- CSP 单一来源（无 meta CSP）：**prod 由 protocol.handle 直接注入响应头**（webRequest 不拦截 custom protocol 响应）；dev 由 onHeadersReceived 注入（http(s)）。prod 策略：default-src 'self'；script-src 'self'（无 unsafe-inline/unsafe-eval）；style-src 'self' + style-src-attr 'unsafe-inline'（唯一 scoped 例外：React inline style attribute——category tree 缩进，runtime evidence）；connect-src 'self' http://localhost:8080；object-src/base-uri/frame-ancestors none
-- Main 无数据库/业务规则/AI Provider/key
+### Known accessibility risks
+- Dialog 无焦点管理；点列表项用 <button> 包裹多行内容（可接受但长标题布局风险）；nav active 无显式 aria-current 断言（NavLink 自动有）；space name 无截断 CSS；backend 绿点误导（Phase 7 修）；footer "FE-001 desktop foundation" 过期文案
 
-## Routing Contract
+### Known error-state risks
+- 401 文案 dev/prod 不分；network 与 backend offline 语义需按 Phase 4 规范；publish 错误与 detail 错误共用 form__error 但无独立持久状态（OK）；无 ErrorBoundary（Stretch A）
 
-- / → redirect /spaces
-- /spaces → LearningSpace selection / management
-- /spaces/:spaceId → SpaceScopeGuard（index → redirect sources）
-  - sources → Source Library
-  - knowledge → Knowledge Catalog
-  - knowledge/:knowledgePointId → KnowledgePoint Detail
-- * → NotFoundPage
+## Durable Architecture Contracts（FE-001 已定，不得回退）
 
-## API Integration Contract
+- 安全 flags 四件套不变；origin=app://aistudy；CSP 单一来源（header，无 meta）
+- createHashRouter；current space 来自 URL；query keys 契约（spaces/space/sources/knowledge-categories/knowledge-points/knowledge-point）
+- ApiClientContext 注入；禁止业务组件直接 fetch/axios；DTO 类型全部 ReturnType 推导
+- 404 anti-IDOR 文案「资源不存在或当前不可访问。」；DevSession = auth cache boundary（resetQueries）
+- sourceType 固定 DESKTOP_UPLOAD；difficulty 自由文本（不发明枚举）；buildCategoryTree 输出 DAG（visited 守卫）
 
-- Renderer 只通过 @aistudy/api-client（ApiClientContext/Provider 注入，生产 createApiClient 单例，测试 typed fake）
-- 禁止业务组件直接 fetch/axios/XHR；禁止复制 DTO interface（lib/types.ts 全 ReturnType 推导）
-- VITE_API_BASE_URL 默认 http://localhost:8080（desktop/.env.example）；不提交 .env
-- query keys: ['spaces'] / ['space', id] / ['sources', spaceId] / ['knowledge-categories', spaceId] / ['knowledge-points', spaceId] / ['knowledge-point', spaceId, id]
-- mutation invalidate：createLearningSpace→spaces；createSource→sources；createCategory→knowledge-categories；createPoint→knowledge-points；publish→points+point
-- unwrap(): openapi-fetch {data,error,response} → 抛 ApiRequestError(status)；normalizeApiError 区分 network/401/403/404/5xx；404 文案「资源不存在或当前不可访问。」
-- DevelopmentSession Apply/Clear → queryClient.resetQueries()（auth cache boundary）
-- AppShell 与 SpaceScopeGuard 共享 queryKeys.space(spaceId) 同一 cache 条目
+## Final Status（PHASE 33 + PRE-COMMIT REVIEW FIX-01）
 
-## Temporary Auth Contract
+FE-001.5 HARDENING IMPLEMENTED
+PRE-COMMIT REVIEW FIX-01 IMPLEMENTED（外部 reviewer 10 项源码问题全部修复）
+PRE-COMMIT REVIEW FIX-01 RE-VALIDATED（2026-09-06 二次全量 Windows 验证，结果一致）
+WINDOWS LINT/TYPECHECK/TEST/COVERAGE/BUILD VERIFIED（FIX-01 后全量重跑）
+DEV SMOKE VERIFIED（nested route 单 active 由 4 项 aria-current 测试覆盖；custom CSP 由纯函数单测证明）
+AWAITING USER REVIEW AND COMMIT
+（不写 COMPLETE；不开始 FE-002）
 
-- InMemoryTokenSession implements TokenProvider：getAccessToken/setAccessToken/clear，纯内存，刷新即失（当前正确行为）
-- 无 localStorage/sessionStorage/cookie token、无硬编码 token、无 VITE_ACCESS_TOKEN
-- DEV only：Development Session（粘贴 Bearer token，Apply/Clear，不保存），文案 "Development-only token injection. Not persisted."
-- 非 DEV：显示 "Authentication integration pending"，无假 login
+- 变更范围：desktop/**（源码/测试/配置/CSS/README/.env.example）+ 两份 frontend docs；server/** 与 packages/api-client/** 零触碰
+- 测试：19 文件 / 230 tests（Windows Node 实测 PASS，FIX-01 新增 44 项 regression tests）
+- Coverage（最终基线，实测）：Statements 84.41% (1506/1784) / Branches 85.16% (396/465) / Functions 86.56% (116/134) / Lines 84.41%
+- 运行证据：最终 lint OK / typecheck OK / test:run 230/230（19 文件）/ test:coverage OK / build OK；FIX-01 dev smoke（5173 启动 + 进程存活）；production smoke 证据沿用 PHASE 31（CSP 由同一纯函数 cspFor 生成，FIX-01 已单测双策略）
+- 残余 UX 债：点列表按钮多行内容可接受；混合中英文按界面一致性保留（heading/动作英文，状态/错误中文）；React Router v7 future flags 类型不支持（已文档化）；npm audit 10 项 dev-only 发现待大版本升级（已记录）
+- BACKEND CONTRACT REQUEST：无新增（CORS allowlist 已在 ELECTRON-CORS-001-B 落地）
+- SourceAsset upload 仍推迟至 backend/shared-client 同步（FE-002 未开始）
+- 下一步建议：用户 review（npm run dev 视觉检查）→ 用户 commit → FE-002 规划
 
-## UI Routes
+## FE-001.5 PRE-COMMIT REVIEW FIX-01（外部 reviewer 提交前修复，2026-09-06）
 
-（同 Routing Contract。AppShell：顶栏 AIStudy + backend URL 状态；侧栏 Spaces + 当前 space 的 Sources/Knowledge；当前 space name 显示；无效 space → "Space not found or inaccessible"）
+外部 reviewer 实际检查 package.zip 源码后列出的 10 项提交前问题，全部修复如下：
 
-## Files Added / Modified
+1. **API BASE URL / CSP 单一配置契约**：新增 Electron-free 纯模块 `src/shared/api-config.ts`
+   （`resolveApiBaseUrl` + `apiOriginFromBaseUrl`），renderer `lib/api-client.ts` 与 main
+   `csp.ts` 共用同一 resolution（electron-vite 对 main build 同样暴露 VITE_* env，
+   tsconfig.node.json 加 `vite/client` types）。只接受 http(s)；非法值安全回退
+   `http://localhost:8080`；CSP connect-src 只取 origin（scheme+host+port），路径不进
+   CSP；`http://*`、`http:///x` 等宽松解析产物被显式拒绝。`cspFor(isDev, {devServerUrl,
+   apiBaseUrl})` 双策略单测（默认/自定义 http/https/非法回退/永不 `connect-src *`）。
+   新增 3 测试文件成员（api-config.test.ts 12 项 + csp.test 扩展 5 项）。
+2. **nested route 双 active nav**：Spaces NavLink 加 `end`；AppShell.test.tsx 新增
+   /spaces、/spaces/7/sources、/spaces/7/knowledge 单 active 断言（aria-current），
+   含"任意时刻至多一个主要 nav link active"不变式测试。
+3. **Node engines contract**：package.json `engines.node` → `>=22.12.0`（与 Electron 44
+   一致），desktop/README prerequisites 同步，删除 "Node >= 20" 矛盾表述。
+4. **ESLint 直接依赖**：Windows npm `npm install -D @eslint/js@^9 globals`（@eslint/js
+   10 要求 eslint 10，故锁 9.x 线）→ @eslint/js@9.39.5 + globals@17.12.0；
+   `npm ls --depth=0` 干净；package-lock 由 npm 生成。
+5. **ID parser 语义分离**：ids.ts 新增 `parseOptionalPositiveId`（empty→undefined；
+   仅纯正 safe integer；拒绝 0/负数/float/NaN/Infinity/hex/exponent/garbage/overflow）；
+   KnowledgePage parentId/categoryId 改用它，sortOrder 保持 parseOptionalInteger；
+   category select 只渲染 `isPositiveId(id)` 的 option（malformed id 不进 selectable、
+   不提交）。ids.test.ts +7 项，KnowledgePage.test.tsx +2 项。
+6. **AppShell unavailable 语义**：404 → 「Space not found or inaccessible」；
+   401/403/network/5xx → 中性「Space unavailable」；Sources/Knowledge child links 仅在
+   space query 成功且拿到有效 space 后渲染（pending/error 不显示假有效链接）；
+   SpaceScopeGuard 保持不变。AppShell.test.tsx 新增 404/network/401/5xx/pending/success
+   全套。
+7. **StatusBadge 精确匹配**：includes() 子串匹配改为 exact map（DRAFT/PUBLISHED/ACTIVE），
+   其余 unknown 中性，不发明后端枚举。新增 StatusBadge.test.tsx 10 项
+   （INACTIVE 非 active、UNPUBLISHED 非 published、REGISTERED 中性、undefined → —）。
+8. **Dependency/static review**：renderer 生产源码 0 命中（electron/node:fs/child_process/
+   ipcRenderer/safeStorage/process.env/localStorage/axios/XHR/fetch——仅注释提及）；
+   package.json 无 axios/Redux/Zustand/UI framework；Electron 四件套
+   contextIsolation=true/nodeIntegration=false/sandbox=true/webSecurity=true 不变。
+9. **Windows validation（全部 Windows Node 实测）**：lint OK / typecheck OK /
+   test:run 230/230（19 文件，较 186 增 44 项回归测试）/ test:coverage OK /
+   build OK（renderer index-DphqYEBd.js 521.05 kB + 13.30 kB css）；out/main/index.js
+   实测含 `connect-src 'self' http://localhost:8080`（默认契约内联正确）。
+   Dev smoke（CDP DOM 证据，后端离线）：/#/spaces → 仅 Spaces active（aria-current=page）；
+   /#/spaces/7/sources pending → 0 active、无 child links；settled network error →
+   sidebar「Space unavailable」+ guard「无法连接到后端服务…」+ 重试、0 active、无 child
+   links；返回 /#/spaces → 1 active；dev CSP header 实测 = connect-src 'self'
+   http://localhost:5173 ws://localhost:5173 http://localhost:8080（无通配、无路径）。
+   custom API CSP 已由纯函数单测充分证明，未另启 backend port。
+10. **Docs + Git**：本文件 + frontend-development-log.md 更新；Windows Git
+    `diff --check` 干净 / `status --short` 范围仅 desktop/** + docs/frontend-* /
+    `diff --stat`（见下）；未 commit。
 
-- desktop/src/main/app-protocol.ts（新增：app://aistudy 常量 + 导航白名单 + traversal-safe URL→path 映射）
-- desktop/src/main/app-protocol.test.ts / csp.ts / csp.test.ts（新增）
-- desktop/src/main/index.ts（改造：scheme 注册 + protocol.handle + CSP 注入 + prod loadURL app://aistudy）
-- desktop/src/renderer/index.html（移除 meta CSP，单一 header 来源）
-- desktop/src/main/navigation.ts / navigation.test.ts（删除：file:// 时代产物，被 app-protocol 取代）
-- desktop/** 其余（FE-001/DEP-001 已列）+ docs/frontend-current-task.md / docs/frontend-development-log.md / docs/frontend-autonomous-plan.md
-- 无任何 tracked 文件修改；server/、packages/api-client/、docs/current-task.md 等零触碰
-- 注：desktop/electron.vite.config.zip（107KB，2026-09-06 11:12 创建，desktop 配置+src 快照）来源不明，非本任务创建，保留未动，待用户确认
+## Runtime Evidence（FE-001.5）
 
-## Tests Added
-
-43 项（9 个文件，全部 Windows Node 实测 PASS）：
-- lib/category-tree.test.ts（K1.1/K1.2/K1.3 + sibling order + null parentId + pure cycle）
-- features/spaces/SpacesPage.test.tsx（K1.4-K1.6 + K1.12 + review#4 link/href/focus + review#6 无 id 空间不可导航）
-- features/sources/SourcesPage.test.tsx（K1.7 DESKTOP_UPLOAD）
-- features/knowledge/KnowledgePage.test.tsx（K1.8）
-- features/knowledge/KnowledgePointDetailPage.test.tsx（K1.9/K1.10/K1.11 + category mock）
-- features/auth/DevelopmentSession.test.tsx（review#1：Apply/Clear reset cache + refetch + tokenSession 值）
-- app/SpaceScopeGuard.test.tsx（review#3：404 不调子 API / invalid id 零调用 / success 渲染子路由）
-- main/app-protocol.test.ts（CORS-001-A：origin allowlist 5 项 + URL→path 映射 8 项：root→index.html / assets / foreign host / raw+encoded traversal / malformed / URL-construction）
-- main/csp.test.ts（CORS-001-A：prod 严格（self-only script、无 unsafe-eval/wildcard、style-src-attr 唯一例外、connect 仅 8080、object/base-uri/frame-ancestors none）+ dev HMR 放行）
-
-## Runtime Evidence
-
-- npm run typecheck → PASS（exit 0，修复后复跑）
-- npm run test:run → "Test Files 8 passed (8) / Tests 31 passed (31)"（exit 0，两次复跑）
-- npm run build → PASS（exit 0；renderer 514.07 kB + 12.44 kB css）
-- npm run dev smoke（修复前，ELECTRON_ENABLE_LOGGING=1）：dev server 5173 → Electron 窗口启动 → renderer connected → 无 Node integration/CSP/未捕获错误；修复了 electron/path.txt 换行导致 spawn ENOENT
-- DEP-001 复跑（Electron 44.2.0）：typecheck PASS / test:run 31/31 PASS / build PASS；dev boot smoke PASS（44 进程启动、renderer connected、React mount、无 crash/deprecation/CSP fatal）；versions 探针（真实运行时）electron=44.2.0 chrome=152.0.7977.76 node=24.20.0
-- ELECTRON-CORS-001-A production smoke（Electron 44.2.0 生产模式，app://aistudy + 临时 8080 probe server）：**真实观察到 OPTIONS+GET /api/v1/spaces 携带 Origin=app://aistudy**（preflight ACRM=GET / ACRH=content-type，SF-Mode=cors）；secure custom origin → localhost HTTP 未被 mixed-content 阻止（请求实际到达）；运行时日志确认 prod CSP 已注入（script-src 'self' / style-src-attr 唯一例外 / base-uri+frame-ancestors none）；无 CSP violation / 无 Node integration 错误
-- **Electron boot smoke PASS ≠ real Backend HTTP integration PASS**（backend CORS allowlist 未配，见 BACKEND CONTRACT REQUEST）
-
-## Static Evidence
-
-- renderer 扫描 0 命中：electron/require('electron')/node:fs/child_process/ipcRenderer/safeStorage/process.env/shell.openExternal
-- 无 localStorage.setItem(token)/sessionStorage token/硬编码 Bearer/VITE token secret/axios/fetch('/api...')
-- main 安全基线：contextIsolation=true/nodeIntegration=false/sandbox=true/webSecurity=true；deny window.open；will-navigate 白名单（review#2 后仅 packaged index.html）
-- Windows Git：diff --check 干净；status 仅 untracked（desktop/ + docs/frontend-*.md）
+- PHASE 2：lint gate 建立；npm run lint → 0 problems；baseline gate typecheck OK / 46/46 PASS / build OK
+- PHASE 3–9：typecheck OK / lint OK / test:run 104/104 PASS（14 文件）
+- PHASE 10–24：typecheck OK / lint OK / test:run 177/177 PASS（16 文件）
+- PHASE 24 coverage 基线（真实输出）：Statements 83.05% (1402/1688) / Branches 81.39% (350/430) / Functions 85.82% (109/127) / Lines 83.05%
+- PHASE 27 npm audit（官方 registry 一次性查询）：10 项（6 moderate / 2 high / 2 critical）——全部为 dev-only 工具链（vite/vitest/esbuild/glob/react-router-dom），修复全部是 semver-major（vite 8/vitest 5/electron-vite 5/react-router 7），按计划不强制大版本升级，记录待后续；react-router 两项 moderate 均不适用（无 SSR hydration、无外部链接）
+- PHASE 29 最终 loop（当前状态实测）：lint OK / typecheck OK / test:run 186/186（17 文件）/ coverage OK / build OK
+- PHASE 30 dev smoke（CDP DOM 证据）：origin http://localhost:5173/#/spaces；DEV_SESSION_VISIBLE；无 auth placeholder；API target 中性标签；后端离线 network 错误正确显示；[vite] connected；0 CSP/preload/uncaught
+- PHASE 31 + 最终 production smoke（当前 bundle，CDP DOM 证据）：origin app://aistudy/#/spaces；DEV_SESSION_HIDDEN；"Authentication integration pending"；CSP header 实测 = default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http://localhost:8080; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'（无 style-src-attr/unsafe-inline）；0 console violation
+- 最终 coverage：Statements 84.06% (1451/1726) / Branches 82.5% (363/440) / Functions 86.36% (114/132) / Lines 84.06%
 
 ## Deferred
 
-- FE-002 SourceAsset file upload（file dialog IPC / multipart）
-- 正式 Login / Refresh Token / safeStorage production implementation
-- Admin Web / Question / Practice / Exam / AI Chat / Search / Notes
-- Playwright、Electron packaging（electron-builder）、auto-update、tray、notification
-- SourceAsset multipart 接入时必须重审 shared client Content-Type（本轮不解决）
-- ELECTRON-CORS-001：custom protocol（app://aistudy）与 backend CORS allowlist（见下）
-- react-router v7 future flags（当前版本类型不支持；dev 良性警告，未来升级时消除）
-
-## Backend Contract Dependencies
-
-- shared client 已满足本轮全部 JSON endpoint（Content-Type: application/json 适用，未修改）
-- SourceAsset multipart future：不得继承 application/json（FE-002/BUSINESS-004 closeout 后再处理）
-- **BACKEND CONTRACT REQUEST — ELECTRON ORIGIN / CORS（状态更新：Origin 已确认）**：
-  - ELECTRON-CORS-001-A 已真实观察：**production renderer 发送 Origin: app://aistudy**（OPTIONS preflight + GET 均确认；preflight 携带 Access-Control-Request-Headers: content-type，带 token 时会加 authorization）
-  - Backend 需要的 allowlist：`http://localhost:5173`（dev）、`app://aistudy`（prod custom origin）、Admin Web origin 单独配置——见 docs/api-guidelines.md §19
-  - 禁止：webSecurity=false / Access-Control-Allow-Origin: * / 盲放 Origin:null / generic IPC HTTP proxy
-  - 下一步 ELECTRON-CORS-001-B（backend scope）：SecurityConfig 配 .cors() + CorsConfigurationSource allowlist；随后 integration C 验证 real authenticated flow（需有效 JWT，本轮不做）
-
-## Known Risks
-
-- packages/api-client 无独立 node_modules：desktop npm install 依赖 npm 对 file: 依赖的解析（已成功）
-- WSL 不可作为 Windows npm/runtime 替代（node_modules 平台混用风险）
-- 全部 generated 字段 optional：已安全访问（isNavigableId finite-positive 检查），禁 data!.id
-- electron 二进制依赖网络（npmmirror 手动补齐路径已验证可用）
-- CORS 未配 → 真实 backend 数据流（含 Development Session token 注入）尚未端到端验证
+- FE-002 SourceAsset upload（multipart/file picker）——待 backend/shared-client 同步
+- 正式 Login / refresh token / safeStorage；Admin Web；Playwright；electron-builder；打包
+- react-router v7 future flags（当前 v6 版本类型不支持，Stretch F 复核）
 
 ## Next Actions
 
-1. 用户 review：视觉/交互检查（npm run dev）；Electron boot 已验证，backend 数据流待 CORS spike 后验证
-2. ELECTRON-CORS-001 spike（backend scope，由 backend 分支/用户决定）
-3. 用户提交（git add/commit 由用户执行，Hermes 不做）
-4. FE-002 规划（SourceAsset 等）——禁止在本任务内开始
+1. 完成 PHASE 1 audit（本文件即为产物）+ baseline gate 确认
+2. PHASE 2 lint gate → 3 → 4 … → 34，每阶段更新本文件 + append dev-log
 
 ## Resume Instructions
 
-context 被 compact 后：先读本文件 + docs/frontend-development-log.md 最后 200 行 + Windows Git status --short（git.exe -C D:/AIProject-frontend status --short），再继续。Git 一律 Windows Git；npm 一律 Windows Node（先 node -p "process.platform" == win32）；文件编辑可 WSL。下一任务启动前先确认用户已完成 review；CORS spike 属 backend scope。
+context 被 compact 后：先读本文件 + docs/frontend-development-log.md 最后 200 行 + `git.exe -C D:/AIProject-frontend status --short`，再继续当前 Phase。Git 一律 Windows Git；npm 一律 Windows Node（cmd.exe /c "cd /d D:\AIProject-frontend\desktop && node -p process.platform" 必须 win32）；文件编辑可 WSL。npm gate wrapper：cmd.exe /c "cd /d ... && npm run <s> > <s>.log 2>&1 && echo EXITCODE=OK || echo EXITCODE=FAIL"。任务结束前删除 *.log。用户禁止 Hermes 做任何 git add/commit。

@@ -17,6 +17,19 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ApiClient } from '@aistudy/api-client';
 import { ApiClientProvider } from '../lib/api-context';
 
+/**
+ * Test QueryClient (FE-001.5 PHASE 22): fresh per test, retries off so
+ * error-class behavior is deterministic, gcTime Infinity so observers
+ * never disappear mid-assertion.
+ */
+export function createTestQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity },
+    },
+  });
+}
+
 export function createMockApiClient(): ApiClient {
   const noData = { data: undefined, response: { status: 200 } };
   return {
@@ -61,9 +74,7 @@ export function renderWithProviders(
   ui: ReactElement,
   {
     apiClient = createMockApiClient(),
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    }),
+    queryClient = createTestQueryClient(),
     initialEntries = ['/'],
     routePath,
   }: RenderOptions = {}

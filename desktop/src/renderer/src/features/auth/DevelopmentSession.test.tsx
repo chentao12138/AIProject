@@ -13,11 +13,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
 import { DevelopmentSession } from './DevelopmentSession';
 import { tokenSession } from '../../lib/api-client';
-import { renderWithProviders } from '../../test/test-utils';
+import {
+  createTestQueryClient,
+  renderWithProviders,
+} from '../../test/test-utils';
 
 /** Renders a real useQuery so cache reset / refetch is observable. */
 function Probe({
@@ -38,9 +41,7 @@ describe('DevelopmentSession', () => {
 
   it('Apply sets the token and resets the query cache (review #1)', async () => {
     const user = userEvent.setup();
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const queryClient = createTestQueryClient();
     // First call resolves v1; the reset-triggered refetch resolves v2.
     const queryFn = vi
       .fn()
@@ -73,9 +74,7 @@ describe('DevelopmentSession', () => {
   it('Clear resets the query cache and clears the token (review #1)', async () => {
     tokenSession.setAccessToken('token-A');
     const user = userEvent.setup();
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const queryClient = createTestQueryClient();
     const queryFn = vi
       .fn()
       .mockResolvedValueOnce('data-v1')
@@ -108,5 +107,92 @@ describe('DevelopmentSession', () => {
 
     tokenSession.clear();
     expect(tokenSession.getAccessToken()).toBeNull();
+  });
+
+  it('Apply is disabled for empty input (PHASE 6)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<DevelopmentSession />);
+
+    const applyButton = screen.getByRole('button', { name: 'Apply' });
+    expect(applyButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Development access token'), 'abc');
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeEnabled();
+  });
+
+  it('Apply is disabled for whitespace-only input (PHASE 6)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<DevelopmentSession />);
+
+    await user.type(screen.getByLabelText('Development access token'), '   ');
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled();
+  });
+
+  it('Apply trims the token and announces an applied status (PHASE 6)', async () => {
+    tokenSession.clear();
+    const user = userEvent.setup();
+    const queryClient = createTestQueryClient();
+
+    renderWithProviders(<DevelopmentSession />, { queryClient });
+
+    await user.type(
+      screen.getByLabelText('Development access token'),
+      '  token-trimmed  '
+    );
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+
+    expect(tokenSession.getAccessToken()).toBe('token-trimmed');
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('Token applied (in-memory only).');
+  });
+
+  it('Clear announces a cleared status (PHASE 6)', async () => {
+    tokenSession.setAccessToken('token-A');
+    const user = userEvent.setup();
+
+    renderWithProviders(<DevelopmentSession />);
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(tokenSession.getAccessToken()).toBeNull();
+    expect(await screen.findByText('Token cleared.')).toBeInTheDocument();
+  });
+
+  it('editing the input clears the stale applied status (PHASE 6)', async () => {
+    tokenSession.clear();
+    const user = userEvent.setup();
+
+    renderWithProviders(<DevelopmentSession />);
+
+    await user.type(screen.getByLabelText('Development access token'), 'tok');
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(await screen.findByText(/Token applied/)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Development access token'), '-more');
+    expect(screen.queryByText(/Token applied/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Token cleared/)).not.toBeInTheDocument();
+  });
+
+  it('the token value never appears in the document (password masking, PHASE 6)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<DevelopmentSession />);
+
+    const input = screen.getByLabelText('Development access token');
+    await user.type(input, 'super-secret-token-value');
+    expect(input).toHaveAttribute('type', 'password');
+    expect(document.body.textContent).not.toContain('super-secret-token-value');
+  });
+
+  it('never touches persistence APIs (PHASE 6)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<DevelopmentSession />);
+
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    await user.type(screen.getByLabelText('Development access token'), 'tok');
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
   });
 });

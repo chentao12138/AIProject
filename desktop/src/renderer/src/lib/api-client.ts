@@ -12,8 +12,7 @@
 
 import { createApiClient } from '@aistudy/api-client';
 import type { TokenProvider } from '@aistudy/api-client';
-
-export const DEFAULT_API_BASE_URL = 'http://localhost:8080';
+import { resolveApiBaseUrl } from '../../../shared/api-config';
 
 /**
  * In-memory token session (FE-001 PHASE E1).
@@ -43,14 +42,6 @@ export class InMemoryTokenSession implements TokenProvider {
 
 export const tokenSession = new InMemoryTokenSession();
 
-function resolveBaseUrl(): string {
-  const fromEnv = import.meta.env.VITE_API_BASE_URL;
-  if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
-    return fromEnv.trim().replace(/\/+$/, '');
-  }
-  return DEFAULT_API_BASE_URL;
-}
-
-export const apiBaseUrl = resolveBaseUrl();
+export const apiBaseUrl = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 export const apiClient = createApiClient(apiBaseUrl, tokenSession);

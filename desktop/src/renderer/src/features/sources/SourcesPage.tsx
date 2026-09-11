@@ -17,12 +17,15 @@ import { useApiClient } from '../../lib/api-context';
 import { unwrap, normalizeApiError } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
 import { formatDateTime } from '../../lib/format';
+import { parsePositiveIdParam } from '../../lib/ids';
+import { useFormError } from '../../lib/use-form-error';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Input } from '../../components/Input';
 import { LoadingState } from '../../components/LoadingState';
+import { PageHeader } from '../../components/PageHeader';
 import { StatusBadge } from '../../components/StatusBadge';
 
 const DESKTOP_SOURCE_TYPE = 'DESKTOP_UPLOAD';
@@ -33,27 +36,35 @@ export function SourcesPage() {
   const { spaceId: spaceIdParam } = useParams();
   const [creating, setCreating] = useState(false);
 
-  const spaceId = Number(spaceIdParam);
-  const spaceIdValid = Number.isFinite(spaceId) && spaceId > 0;
+  const spaceId = parsePositiveIdParam(spaceIdParam);
 
   const sourcesQuery = useQuery({
-    queryKey: queryKeys.sources(spaceId),
-    queryFn: () => api.listSources(spaceId).then(unwrap),
-    enabled: spaceIdValid,
+    queryKey: queryKeys.sources(spaceId ?? 0),
+    queryFn: () => {
+      if (spaceId === null) {
+        return Promise.reject(new Error('invalid space id'));
+      }
+      return api.listSources(spaceId).then(unwrap);
+    },
+    enabled: spaceId !== null,
   });
 
   const createSource = useMutation({
-    mutationFn: (title: string) =>
-      api
+    mutationFn: (title: string) => {
+      if (spaceId === null) {
+        return Promise.reject(new Error('invalid space id'));
+      }
+      return api
         .createSource(spaceId, { title, sourceType: DESKTOP_SOURCE_TYPE })
-        .then(unwrap),
+        .then(unwrap);
+    },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sources(spaceId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sources(spaceId ?? 0) });
       setCreating(false);
     },
   });
 
-  if (!spaceIdValid) {
+  if (spaceId === null) {
     return <ErrorState message="资源不存在或当前不可访问。" />;
   }
 
@@ -61,12 +72,14 @@ export function SourcesPage() {
 
   return (
     <div className="page">
-      <div className="page__header">
-        <h1 className="page__title">Sources</h1>
-        <Button variant="primary" onClick={() => setCreating(true)}>
-          Create Source
-        </Button>
-      </div>
+      <PageHeader
+        title="Sources"
+        actions={
+          <Button variant="primary" onClick={() => setCreating(true)}>
+            Create Source
+          </Button>
+        }
+      />
 
       <p className="page__note">
         File upload will become available when SourceAsset contract is
@@ -143,9 +156,10 @@ function CreateSourceDialog({
   error: { message: string } | null;
 }) {
   const [title, setTitle] = useState('');
+  const formError = useFormError(error);
 
   return (
-    <Dialog title="Create Source" onClose={onClose}>
+    <Dialog title="Create Source" onClose={onClose} busy={pending}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -160,13 +174,18 @@ function CreateSourceDialog({
           label="Title"
           required
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            setTitle(event.target.value);
+            formError.clear();
+          }}
           placeholder="e.g. Chapter 3 notes"
         />
         <p className="form__note">
           Source type is fixed to DESKTOP_UPLOAD for this client.
         </p>
-        {error && <p className="form__error" role="alert">{error.message}</p>}
+        {formError.message && (
+          <p className="form__error" role="alert">{formError.message}</p>
+        )}
         <div className="form__actions">
           <Button type="submit" variant="primary" disabled={pending || !title.trim()}>
             {pending ? 'Creating…' : 'Create'}
