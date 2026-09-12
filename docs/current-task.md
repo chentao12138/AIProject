@@ -1,97 +1,47 @@
 # Current Task
 
 ## Objective
-
-AIProject 后端业务块（AUTORUN-CONTINUE-014_016）：BUSINESS-014 Mastery 收口（证据契约修复 + hook + 测试）、BUSINESS-015 结构化 ExamDiagnosis（V020）、BUSINESS-016 StudyPlan/StudyTask（V021）、008~016 cross-phase 静态审计。已全部 COMPLETE + RUNTIME VERIFIED。
+Backend Batch C final frontend handoff for FE-002B.
 
 ## Current Phase
+**BATCH C FRONTEND HANDOFF READY**
 
-**BUSINESS-008-016 FINAL BACKEND CLOSEOUT**
+## Status Board
 
-## Final Status Board
+- Batch C functional verification: PASS
+- Full Maven clean test: PASS (603 run, 0 failures, 0 errors, 2 skipped)
+- Real backend boot (flyway-it): PASS
+- Live `/v3/api-docs`: PASS (OpenAPI 3.1.0, 61 paths)
+- Regenerated `packages/api-client` from live contract: PASS
+- `packages/api-client` typecheck + typecheck:generated: PASS
+- Stable backend + generated-client commit: done on `batch-c-frontend-handoff`
 
-- BUSINESS-008 COMPLETE — RUNTIME VERIFIED
-- BUSINESS-009 COMPLETE — RUNTIME VERIFIED
-- BUSINESS-010 COMPLETE — RUNTIME VERIFIED
-- BUSINESS-011 COMPLETE — RUNTIME VERIFIED
-- BUSINESS-012 COMPLETE — RUNTIME VERIFIED
-- BUSINESS-013 COMPLETE — RUNTIME VERIFIED
-- BUSINESS-014 COMPLETE — RUNTIME VERIFIED
-- BUSINESS-015 COMPLETE — RUNTIME VERIFIED
-- BUSINESS-016 COMPLETE — RUNTIME VERIFIED
-- LEGACY-SPIKE-002-TEST-CONTEXT-FIX — verified by full clean 442/442
+## Verified scope (already stable for FE)
 
-## Final acceptance evidence
+- Storage / SourceAsset upload
+- IngestionJob lifecycle + retry
+- TXT / Markdown regression
+- PDF ingestion (SourcePage + ContentBlock)
+- PNG / JPEG ingestion (SourcePage only, no OCR)
+- SourcePage / ContentBlock read APIs
+- Ops / runtime / deployment foundation
+- AI-001 ~ AI-004 implementation (runtime-verified in this gate via full suite)
 
-### Focused runtime（用户真实输出）
-```
-Tests run: 168   Failures: 0   Errors: 0   Skipped: 0   BUILD SUCCESS
-```
+## Frontend handoff contract (summary)
 
-### Full clean（用户真实输出）
-```
-Tests run: 442   Failures: 0   Errors: 0   Skipped: 0   BUILD SUCCESS
-```
+See `BACKEND BATCH C FINAL FRONTEND HANDOFF REPORT` in the release notes /
+handoff conversation. Key FE pointers:
 
-### Live OpenAPI（用户真实输出）
-```
-GET http://localhost:8080/v3/api-docs
-REACHABLE
-```
-
-### Shared API generation（用户真实输出）
-```
-npm run api:generate
-openapi-typescript 7.13.0
-src/generated/openapi.json -> src/generated/api.d.ts
-DONE
-```
-
-### Shared client typecheck（用户真实输出）
-```
-npm run typecheck
-tsc --noEmit
-PASS
-```
-
-## Regression protection still in place
-
-- Mastery LocalDateTime conversion: `asLocalDateTime` / `latestEvidenceAt` in MasteryService
-- ReviewTaskMapper: `AND rt.status = 'PENDING'` x2
-- WrongReview Jackson JSON helper
-- Exam deadline test helper (untimed = null)
-- OpenAPI simple schema refs: `schemas/...$...` residual 0
-- exam_diagnosis_item cleanup: 14 places via parent id cascade
-- ResourceLock: 20 flyway-it classes uniform lock name
-- StudyPlan JsonPath filtered collection assertions (`contains(...)` on `.taskType/.reason`)
-
-## Production / business logic change status
-
-BUSINESS-008~016 production code:
-- No new business logic changes in final closeout.
-- Final validation only.
-
-Legacy SPIKE-002:
-- Test-only context narrowing already completed.
-
-## Docs / generated artifacts
-
-- docs/current-task.md: updated to FINAL BACKEND CLOSEOUT
-- docs/development-log.md: appended full acceptance chain + SPIKE-002 final verification
-- docs/development-plan.md: BUSINESS-008~016 marked COMPLETE / VERIFIED
-- packages/api-client/src/generated/openapi.json: live-generated contract artifact
-- packages/api-client/src/generated/api.d.ts: live-generated TS client artifact
+- Upload allowlist extensions: zip, pdf, jpg, jpeg, png, md, markdown, txt
+- PDF MIME: `application/pdf` (fallback `application/octet-stream`)
+- Image MIME: `image/png`, `image/jpeg`
+- IngestionJob status: PENDING | RUNNING | SUCCEEDED | FAILED
+- IngestionJob stage (V1): QUEUED | IMPORTING | PUBLISHED
+- Retry only on FAILED (409 otherwise)
+- Image pages: `pageType=IMAGE`, `extractedText=null`, no ContentBlocks
+- OCR fields exposed but always null in V1
 
 ## Next Actions
-
-1. Git review / commit (user manual):
-   - docs/current-task.md
-   - docs/development-log.md
-   - docs/development-plan.md
-   - server/src/... (business test/production code from BUSINESS-008~016)
-   - packages/api-client/src/generated/* (if repo policy accepts generated contract files)
-2. Next business block not started: Formal Auth / Admin / AI / PDF/Search
-
-## Resume Instructions
-
-Repository + docs authoritative。禁止 git add/commit/push/reset/restore；禁止伪造 runtime PASS。下一块业务未获用户指令不得开始。
+1. FE-002B may start from this stable commit.
+2. Do not regenerate the client from a dirty worktree.
+3. Remaining limitations listed in the handoff report.

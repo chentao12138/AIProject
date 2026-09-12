@@ -1,8 +1,10 @@
 package com.aistudy.server.storage;
 
+import com.aistudy.server.config.properties.StorageProperties;
+import com.aistudy.server.config.properties.UploadProperties;
+import com.aistudy.server.operations.LocalStorageOperations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -10,6 +12,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
@@ -19,8 +22,8 @@ import java.util.HexFormat;
 import java.util.UUID;
 
 /**
- * BUSINESS-004 — local-filesystem implementation of {@link StorageService}
- * (ADR-033 first implementation).
+ * BUSINESS-004 / BUSINESS-023 — local-filesystem implementation of
+ * {@link StorageService} (ADR-033 first implementation).
  *
  * <h3>Root</h3>
  *
@@ -48,7 +51,7 @@ import java.util.UUID;
  * ({@code readAllBytes} / {@code MultipartFile.getBytes()} are not used
  * on the production path).
  *
- * <h3>Path traversal defense (two layers)</h3>
+ * <h3>Path / symlink defense (four layers)</h3>
  *
  * <p>Every {@code load}/{@code delete} (and the internal resolution
  * used by {@code store}) defends in depth:
@@ -56,10 +59,10 @@ import java.util.UUID;
  * <ol>
  *   <li><b>Lexical validation</b> of the raw key text BEFORE any
  *       filesystem resolution: {@code null}/blank, absolute paths,
- *       Windows drive prefixes ({@code C:\...} / {@code C:/...}),
+ *       Windows drive prefixes ({@code C:\\...} / {@code C:/...}),
  *       rooted/UNC paths, and any {@code .} / {@code ..} segment —
- *       with BOTH {@code /} and {@code \} treated as separators —
- *       are rejected with {@link IllegalArgumentException}. This
+ *       with BOTH {@code /} and {@code \\} treated as separators —
+ *       are rejected with {@link StorageInvalidKeyException}. This
  *       catches keys like {@code 2026/09/../../secret.txt} whose
  *       normalized form still sits inside the root (a plain
  *       {@code resolve().normalize() + startsWith(root)} check
@@ -68,26 +71,48 @@ import java.util.UUID;
  *       start with the normalized root after
  *       {@code resolve().normalize()} — the second defense for any
  *       case the lexical check misses.</li>
+ *   <li><b>Symlink / special-file check</b>:
+ *       {@link Files#readAttributes} with {@link LinkOption#NOFOLLOW_LINKS}
+ *       rejects symlinks and non-regular files before any stream
+ *       open or delete.</li>
+ *   <li><b>Bounded write</b>: the storage layer enforces an
+ *       independent byte ceiling during stream copy, so a misreported
+ *       or chunked upload never exceeds the configured limit.</li>
  * </ol>
  *
- * <p>Rejected keys throw {@link IllegalArgumentException} and are
- * never wrapped into {@link IllegalStateException}; only legitimate
- * keys reaching real IO failure get the IO wrapper.</li>
+ * <p>Rejected keys throw {@link StorageInvalidKeyException} and are
+ * never wrapped into storage IO exceptions; only legitimate keys
+ * reaching real IO failure get the IO wrapper.
  */
 @Service
-public class LocalStorageService implements StorageService {
+public class LocalStorageService implements StorageService, LocalStorageOperations {
 
     private static final Logger log = LoggerFactory.getLogger(LocalStorageService.class);
 
     private final Path root;
+    private final long maxStorageBytes;
 
-    public LocalStorageService(
-            @Value("${aistudy.storage.local.root:${user.home}/.aistudy/resources}") String root) {
-        this.root = Path.of(root).toAbsolutePath().normalize();
+    public LocalStorageService(StorageProperties storageProperties,
+                               UploadProperties uploadProperties) {
+        String configuredRoot = storageProperties.getLocal().getRoot();
+        if (configuredRoot == null || configuredRoot.isBlank()) {
+            throw new IllegalStateException(
+                    "aistudy.storage.local.root must be configured");
+        }
+        this.root = Path.of(configuredRoot).toAbsolutePath().normalize();
+        this.maxStorageBytes = uploadProperties.getMaxFileSize().toBytes();
         try {
             Files.createDirectories(this.root);
+            if (!Files.isDirectory(this.root, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IllegalStateException(
+                        "storage root is not a directory: " + this.root);
+            }
+            if (!Files.isWritable(this.root)) {
+                throw new IllegalStateException(
+                        "storage root is not writable: " + this.root);
+            }
         } catch (IOException e) {
-            throw new IllegalStateException("cannot create storage root: " + this.root, e);
+            throw new IllegalStateException("cannot initialize storage root: " + this.root, e);
         }
     }
 
@@ -104,36 +129,42 @@ public class LocalStorageService implements StorageService {
             try (OutputStream out = Files.newOutputStream(part)) {
                 int n;
                 while ((n = input.read(buf)) != -1) {
+                    size += n;
+                    if (size > maxStorageBytes) {
+                        throw new StorageLimitExceededException(maxStorageBytes, size);
+                    }
                     out.write(buf, 0, n);
                     digest.update(buf, 0, n);
-                    size += n;
                 }
             }
             moveAtomic(part, target);
             return new StorageResult(storageKey, size, HexFormat.of().formatHex(digest.digest()));
+        } catch (StorageLimitExceededException e) {
+            deleteQuietly(part);
+            throw e;
         } catch (IOException | NoSuchAlgorithmException e) {
             deleteQuietly(part);
-            throw new IllegalStateException("failed to store object '" + storageKey + "'", e);
+            throw new StorageWriteException("failed to store object", e);
         }
     }
 
     @Override
     public InputStream load(String storageKey) {
-        Path target = resolveWithinRoot(storageKey);
+        Path target = resolveWithinRoot(storageKey, true);
         try {
             return Files.newInputStream(target);
         } catch (IOException e) {
-            throw new IllegalStateException("failed to load object '" + storageKey + "'", e);
+            throw new StorageWriteException("failed to load object", e);
         }
     }
 
     @Override
     public void delete(String storageKey) {
-        Path target = resolveWithinRoot(storageKey);
+        Path target = resolveWithinRoot(storageKey, true);
         try {
             Files.deleteIfExists(target);
         } catch (IOException e) {
-            throw new IllegalStateException("failed to delete object '" + storageKey + "'", e);
+            throw new StorageWriteException("failed to delete object", e);
         }
     }
 
@@ -144,28 +175,34 @@ public class LocalStorageService implements StorageService {
         return YearMonth.now().toString().replace('-', '/') + "/" + UUID.randomUUID();
     }
 
-    /**
-     * Resolves {@code storageKey} under the root with TWO defenses
-     * (see class Javadoc): first a lexical validation of the raw key
-     * text (traversal segments, absolute / drive-qualified keys
-     * rejected on either separator), then the normalized containment
-     * check. Both must pass; the filesystem is never touched for
-     * rejected keys.
-     */
     private Path resolveWithinRoot(String storageKey) {
+        return resolveWithinRoot(storageKey, false);
+    }
+
+    /**
+     * Resolves {@code storageKey} under the root with four defenses
+     * (see class Javadoc): lexical validation, normalized containment,
+     * symlink / special-file check, and bounded write enforcement.
+     *
+     * <p>For {@code load}/{@code delete} the target must exist and be a
+     * regular file (not a symlink / directory / special file). For
+     * {@code store} the target is freshly generated and does not yet
+     * exist, so only the first two defenses apply.
+     */
+    private Path resolveWithinRoot(String storageKey, boolean requireRegularFile) {
         if (storageKey == null || storageKey.isBlank()) {
-            throw new IllegalArgumentException("storageKey must not be blank");
+            throw new StorageInvalidKeyException("storageKey must not be blank");
         }
-        // A. Lexical validation BEFORE any filesystem resolution.
-        //    "2026/09/../../secret.txt" normalizes to <root>/secret.txt,
-        //    so a plain startsWith(root) check cannot reject it — the
-        //    traversal syntax must be rejected on the raw text.
         validateStorageKeyLexically(storageKey);
-        // B. Normalized root containment (second defense).
         Path target = root.resolve(storageKey).normalize();
         if (!target.startsWith(root)) {
-            throw new IllegalArgumentException(
-                    "storageKey escapes the storage root: '" + storageKey + "'");
+            throw new StorageInvalidKeyException(
+                    "storageKey escapes the storage root");
+        }
+        if (requireRegularFile) {
+            if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+                throw new StorageNotFoundException(storageKey);
+            }
         }
         return target;
     }
@@ -173,39 +210,38 @@ public class LocalStorageService implements StorageService {
     /**
      * Rejects traversal segments and absolute / drive-qualified keys
      * on the RAW TEXT of the key, treating BOTH {@code /} and
-     * {@code \} as path separators. Server-generated keys are
+     * {@code \\} as path separators. Server-generated keys are
      * {@code yyyy/MM/<uuid>}, so {@code .} / {@code ..} segments,
      * drive prefixes and rooted paths are never legitimate.
      */
     private void validateStorageKeyLexically(String storageKey) {
-        // Windows drive absolute: C:\secret.txt or C:/secret.txt.
         if (storageKey.length() >= 2
                 && Character.isLetter(storageKey.charAt(0))
                 && storageKey.charAt(1) == ':') {
-            throw new IllegalArgumentException(
-                    "storageKey must not be drive-qualified: '" + storageKey + "'");
+            throw new StorageInvalidKeyException(
+                    "storageKey must not be drive-qualified");
         }
-        // POSIX absolute path or UNC / rooted path.
         if (storageKey.startsWith("/") || storageKey.startsWith("\\")) {
-            throw new IllegalArgumentException(
-                    "storageKey must be relative: '" + storageKey + "'");
+            throw new StorageInvalidKeyException(
+                    "storageKey must be relative");
         }
-        // '.' / '..' segments on either separator (e.g.
-        // "2026/09/../../secret.txt" and "2026\09\..\..\secret.txt").
         for (String segment : storageKey.split("[/\\\\]+")) {
             if (".".equals(segment) || "..".equals(segment)) {
-                throw new IllegalArgumentException(
-                        "storageKey must not contain '.' or '..' path segments: '"
-                                + storageKey + "'");
+                throw new StorageInvalidKeyException(
+                        "storageKey must not contain '.' or '..' path segments");
             }
         }
+    }
+
+    // package-private for operations/health indicators
+    public Path getRoot() {
+        return this.root;
     }
 
     private void moveAtomic(Path from, Path to) throws IOException {
         try {
             Files.move(from, to, StandardCopyOption.ATOMIC_MOVE);
         } catch (AtomicMoveNotSupportedException e) {
-            // Safe fallback for filesystems without atomic rename.
             Files.move(from, to);
         }
     }
@@ -214,7 +250,7 @@ public class LocalStorageService implements StorageService {
         try {
             Files.deleteIfExists(path);
         } catch (IOException e) {
-            log.warn("failed to remove partial storage file {}", path, e);
+            log.warn("failed to remove partial storage file", e);
         }
     }
 }

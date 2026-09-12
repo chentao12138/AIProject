@@ -164,7 +164,27 @@ class SourceOpenApiContractTest {
     @MockitoBean
     private com.aistudy.server.studyplan.mapper.StudyTaskMapper studyTaskMapper;
 
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountRoleMapper userAccountRoleMapper;
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.RefreshSessionMapper refreshSessionMapper;
+
+    @MockitoBean
+    private com.aistudy.server.search.mapper.SearchMapper searchMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiConversationMapper aiConversationMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageMapper aiMessageMapper;
+
+
     /** The three Source paths must be present in the contract. */
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountMapper userAccountMapper;
+
     @Test
     void sourcePathsAreExposedInOpenApi() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))

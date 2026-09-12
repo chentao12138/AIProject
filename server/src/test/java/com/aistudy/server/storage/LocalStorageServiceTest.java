@@ -35,7 +35,13 @@ class LocalStorageServiceTest {
     Path tempRoot;
 
     private LocalStorageService newService() {
-        return new LocalStorageService(tempRoot.toString());
+        com.aistudy.server.config.properties.StorageProperties storageProperties = new com.aistudy.server.config.properties.StorageProperties();
+        storageProperties.getLocal().setRoot(tempRoot.toString());
+
+        com.aistudy.server.config.properties.UploadProperties uploadProperties = new com.aistudy.server.config.properties.UploadProperties();
+        uploadProperties.setMaxFileSize(org.springframework.util.unit.DataSize.ofMegabytes(1024));
+
+        return new LocalStorageService(storageProperties, uploadProperties);
     }
 
     private static final byte[] SAMPLE =
@@ -117,9 +123,98 @@ class LocalStorageServiceTest {
                 new ByteArrayInputStream(SAMPLE), new StorageMetadata());
 
         service.delete(result.storageKey());
-        assertThrows(IllegalStateException.class,
+        assertThrows(StorageNotFoundException.class,
                 () -> service.load(result.storageKey()),
-                "load after delete must fail");
+                "load after delete must fail with StorageNotFoundException");
+    }
+
+    /** (6b) delete of a missing key throws StorageNotFoundException (requireRegularFile). */
+    @Test
+    void deleteMissingKeyThrowsNotFound() {
+        LocalStorageService service = newService();
+        assertThrows(StorageNotFoundException.class,
+                () -> service.delete("2026/09/00000000-0000-0000-0000-000000000000"),
+                "delete of a missing key must throw StorageNotFoundException");
+    }
+
+    /** (6c) load of a never-stored key fails with StorageNotFoundException. */
+    @Test
+    void loadMissingKeyThrowsNotFound() {
+        LocalStorageService service = newService();
+        assertThrows(StorageNotFoundException.class,
+                () -> service.load("2026/09/00000000-0000-0000-0000-000000000000"));
+    }
+
+    /** (6d) two stores never collide on the same storageKey. */
+    @Test
+    void storeGeneratesDistinctKeys() {
+        LocalStorageService service = newService();
+        StorageResult a = service.store(new ByteArrayInputStream(SAMPLE), new StorageMetadata());
+        StorageResult b = service.store(new ByteArrayInputStream(SAMPLE), new StorageMetadata());
+        assertFalse(a.storageKey().equals(b.storageKey()),
+                "each store must generate a unique storageKey");
+    }
+
+    /** (6e) UNC / rooted Windows-style keys are rejected. */
+    @Test
+    void loadRejectsUncAndRootedKeys() {
+        LocalStorageService service = newService();
+        assertThrows(IllegalArgumentException.class,
+                () -> service.load("\\\\server\\share\\secret.txt"),
+                "load must reject UNC keys");
+        assertThrows(IllegalArgumentException.class,
+                () -> service.load("//server/share/secret.txt"),
+                "load must reject forward-slash UNC-like keys");
+    }
+
+    /** (6f) store enforces the configured byte ceiling. */
+    @Test
+    void storeEnforcesByteCeiling() throws Exception {
+        com.aistudy.server.config.properties.StorageProperties storageProperties =
+                new com.aistudy.server.config.properties.StorageProperties();
+        storageProperties.getLocal().setRoot(tempRoot.toString());
+        com.aistudy.server.config.properties.UploadProperties uploadProperties =
+                new com.aistudy.server.config.properties.UploadProperties();
+        uploadProperties.setMaxFileSize(org.springframework.util.unit.DataSize.ofBytes(8));
+        LocalStorageService service = new LocalStorageService(storageProperties, uploadProperties);
+
+        byte[] oversized = "0123456789ABCDEF".getBytes(StandardCharsets.UTF_8);
+        assertThrows(StorageLimitExceededException.class,
+                () -> service.store(new ByteArrayInputStream(oversized), new StorageMetadata()));
+        try (var walk = Files.walk(tempRoot)) {
+            assertEquals(0, walk.filter(Files::isRegularFile).count(),
+                    "oversized store must leave no files under root");
+        }
+    }
+
+    /**
+     * (6g) symlink escape: when the platform allows creating a symlink
+     * that points outside the root, load/delete must reject it.
+     * Skipped (assumption) when symlink creation is unavailable.
+     */
+    @Test
+    void loadRejectsSymlinkEscapeWhenSupported() throws Exception {
+        LocalStorageService service = newService();
+        Path outside = tempRoot.resolveSibling("outside-secret.txt");
+        Files.writeString(outside, "top secret");
+        Path linkDir = tempRoot.resolve("2026").resolve("09");
+        Files.createDirectories(linkDir);
+        Path link = linkDir.resolve("escape-link");
+        try {
+            Files.createSymbolicLink(link, outside);
+        } catch (IOException | UnsupportedOperationException e) {
+            org.junit.jupiter.api.Assumptions.assumeTrue(false,
+                    "symlink creation unavailable on this platform: " + e);
+            return;
+        }
+        try {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.load("2026/09/escape-link"),
+                    "load must reject a symlink pointing outside the root");
+        } finally {
+            Files.deleteIfExists(link);
+            Files.deleteIfExists(outside);
+        }
     }
 
     /** (7) load("../...") is rejected BEFORE touching the filesystem. */
@@ -186,9 +281,9 @@ class LocalStorageServiceTest {
             }
         };
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(StorageWriteException.class,
                 () -> service.store(failing, new StorageMetadata()),
-                "store must propagate the stream failure");
+                "store must propagate the stream failure as StorageWriteException");
 
         // No .part temp files and no stray files anywhere under root.
         try (var walk = Files.walk(tempRoot)) {

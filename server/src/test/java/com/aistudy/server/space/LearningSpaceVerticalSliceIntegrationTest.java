@@ -1,6 +1,6 @@
 package com.aistudy.server.space;
 
-import com.aistudy.server.spike.auth.SpikeJwtTokenService;
+import com.aistudy.server.auth.service.JwtAccessTokenService;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -34,11 +34,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>Proves the production LearningSpace API end-to-end against a
  * real MySQL database (aistudy_flyway_test), with real Flyway
  * migrations (V004 included), real Spring Security, real HS256 JWTs
- * issued by {@link SpikeJwtTokenService}, and NO mocks anywhere in
+ * issued by {@link JwtAccessTokenService}, and NO mocks anywhere in
  * the path:
  *
  * <pre>
- *   SpikeJwtTokenService.issueAccessToken(...)   (subject → JWT sub)
+ *   JwtAccessTokenService.issueAccessToken(...)   (subject → JWT sub)
  *       ↓
  *   HTTP /api/v1/spaces[ /{spaceId}]
  *       Authorization: Bearer ***
@@ -120,7 +120,7 @@ class LearningSpaceVerticalSliceIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private SpikeJwtTokenService spikeJwtTokenService;
+    private JwtAccessTokenService jwtAccessTokenService;
 
     @BeforeAll
     void guardTargetDatabase() {
@@ -148,7 +148,7 @@ class LearningSpaceVerticalSliceIntegrationTest {
     // ==================== helpers ====================
 
     private String tokenFor(String subject) {
-        String token = spikeJwtTokenService.issueAccessToken(subject);
+        String token = jwtAccessTokenService.issueAccessToken(subject);
         assertNotNull(token, "token must not be null");
         return token;
     }

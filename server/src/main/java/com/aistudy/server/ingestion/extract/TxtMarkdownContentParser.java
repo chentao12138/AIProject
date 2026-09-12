@@ -155,7 +155,7 @@ public final class TxtMarkdownContentParser {
         }
     }
 
-    private static String normalize(String text) {
+    static String normalize(String text) {
         String s = text;
         if (!s.isEmpty() && s.charAt(0) == '\uFEFF') {
             s = s.substring(1); // UTF-8 BOM
@@ -264,7 +264,7 @@ public final class TxtMarkdownContentParser {
 
     // ==================== bounded emission (UTF-8 BYTES) ====================
 
-    private static boolean isBlank(String line) {
+    static boolean isBlank(String line) {
         return line.trim().isEmpty();
     }
 
@@ -279,7 +279,7 @@ public final class TxtMarkdownContentParser {
      * {@code locEnd} are the 0-based locator range (usually the
      * content lines themselves; fence-to-fence for CODE).
      */
-    private static void emitBounded(List<ParsedBlock> blocks, String type,
+    static void emitBounded(List<ParsedBlock> blocks, String type,
                                     String[] lines, int start, int end,
                                     int locStart, int locEnd) {
         if (start > end) {

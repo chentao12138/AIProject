@@ -8,13 +8,12 @@ import com.aistudy.server.storage.StorageResult;
 import com.aistudy.server.storage.StorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import com.aistudy.server.config.properties.UploadProperties;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.util.unit.DataSize;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -105,7 +104,6 @@ public class SourceAssetService {
             "jpg", Set.of("image/jpeg", "application/octet-stream"),
             "jpeg", Set.of("image/jpeg", "application/octet-stream"),
             "png", Set.of("image/png", "application/octet-stream"),
-            "webp", Set.of("image/webp", "application/octet-stream"),
             "md", Set.of("text/markdown", "text/plain", "application/octet-stream"),
             "markdown", Set.of("text/markdown", "text/plain", "application/octet-stream"),
             "txt", Set.of("text/plain", "application/octet-stream")
@@ -121,11 +119,11 @@ public class SourceAssetService {
     public SourceAssetService(SourceAssetMapper sourceAssetMapper,
                               SourceService sourceService,
                               StorageService storageService,
-                              @Value("${aistudy.upload.max-file-size:1024MB}") DataSize maxUploadSize) {
+                              UploadProperties uploadProperties) {
         this.sourceAssetMapper = sourceAssetMapper;
         this.sourceService = sourceService;
         this.storageService = storageService;
-        this.maxUploadBytes = maxUploadSize.toBytes();
+        this.maxUploadBytes = uploadProperties.getMaxFileSize().toBytes();
     }
 
     /**
@@ -264,6 +262,7 @@ public class SourceAssetService {
         if (lastSlash >= 0) {
             base = base.substring(lastSlash + 1);
         }
+        base = base.replaceAll("[\\p{Cntrl}]", "");
         if (base.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "original filename must not be blank");
@@ -285,7 +284,7 @@ public class SourceAssetService {
         if (dot < 0 || dot == originalName.length() - 1) {
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
                     "file must have an allowed extension "
-                            + "(zip, pdf, jpg, jpeg, png, webp, md, markdown, txt)");
+                            + "(zip, pdf, jpg, jpeg, png, md, markdown, txt)");
         }
         String extension = originalName.substring(dot + 1).toLowerCase(Locale.ROOT);
         if (!ALLOWED_MIME_BY_EXTENSION.containsKey(extension)) {

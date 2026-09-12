@@ -4,6 +4,7 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.nimbusds.jose.proc.SecurityContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -24,145 +25,23 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.security.NoSuchAlgorithmException;
 
-/**
- * SPIKE-004 MICRO-02 + MICRO-03A + MICRO-04B-A(FIX) + MICRO-05B-A — API
+import org.springframework.core.annotation.Order;
+
+/** SPIKE-004 MICRO-02 + MICRO-03A + MICRO-04B-A(FIX) + MICRO-05B-A — API
  * auth boundary, BCrypt PasswordEncoder, minimal JWT Access Token issuance,
  * and Bearer Token authentication via Resource Server.
- *
- * Purpose (MICRO-02): prove that Spring Security can enforce a per-endpoint
- * auth boundary on this project:
- *   - GET /health              → anonymous 200 (public)
- *   - any other request        → anonymous 401 (protected)
- *
- * MICRO-03A added a BCrypt-based {@link PasswordEncoder} bean so that later
- * MICROs (real login API, UserDetailsService, refresh token) can encode and
- * verify passwords without re-deciding the algorithm here.
- *
- * MICRO-04B-A(FIX) provides minimal JWT Access Token <em>issuance</em>
- * capability. No Bearer authentication, no login endpoint, no refresh token,
- * no User or Role, no database. Just the ability to mint a JWT from a subject
- * string with HS256, and a service class that later MICROs can call.
- *
- * MICRO-05B-A wires the existing {@link JwtDecoder} bean into the Spring
- * Security Resource Server so that a request carrying
- * {@code Authorization: Bearer <JWT>} authenticates as an
- * {@code authenticated()} caller against the same {@code anyRequest()}
- * rule. No User / Role / UserDetailsService / AuthenticationProvider /
- * login API / session policy / CSRF change is introduced — the default
- * Resource Server configuration is used, which relies only on the
- * {@link JwtDecoder} bean already configured by this class.
- *
- * Scope:
- *   - /health → permitAll()
- *   - any other request → authenticated()
- *   - Unauthenticated access to a protected request returns HTTP 401
- *     (explicit {@link AuthenticationEntryPoint}).
- *   - Valid Bearer JWT accepted by the Resource Server authenticates the
- *     request as authenticated.
- *   - PasswordEncoder bean uses BCryptPasswordEncoder with library defaults
- *     (BCrypt does the salting and work-factor configuration itself; we do
- *     NOT pass a custom salt or strength).
- *   - A {@link SecretKey} bean is generated at Spring context startup by the
- *     JDK's {@link KeyGenerator} using the {@code HmacSHA256} algorithm with
- *     {@link KeyGenerator#init(int)} explicitly set to 256 bits. The key is
- *     only valid for the current application context lifetime — no
- *     persistence, no config file, no environment variable, no log output.
- *     SPIKE ONLY, NOT production key management.
- *   - A {@link JwtEncoder} bean wraps the SecretKey via Nimbus
- *     {@link ImmutableSecret<SecurityContext>} so that the encoder can
- *     retrieve the key lazily during signing. HS256 is selected per-encode at
- *     the {@code JwsHeader} level (see {@link SpikeJwtTokenService}), not at
- *     the encoder bean level.
- *   - A {@link JwtDecoder} bean shares the SAME SecretKey so that the
- *     Resource Server can verify HS256 tokens issued by the encoder.
- *   - No custom Bearer filter, no Login, no UserDetailsService, no
- *     session policy change, no CSRF disable, no Role / spaceId / permission
- *     claim mapping.
- *
- * Why HS256 and no production key strategy?
- *   HS256 uses a single shared secret and is appropriate for a SPIKE that
- *   only demonstrates the encode pipeline. Production-grade JWT typically
- *   uses RS256/ES256 with a public/private key pair or a JWKS endpoint;
- *   that decision is deferred to a future ADR. Hard-coding a secret string
- *   here would bake a security-incorrect assumption into the codebase from
- *   the very first JWT MICRO, which we want to avoid.
- *
- * Why an explicit AuthenticationEntryPoint?
- *   Without it, Spring Security might produce a 403 for unauthenticated access
- *   (which is reserved for authenticated-but-not-authorized). We want a stable
- *   contract for the SPIKE: anonymous callers always get 401. This is kept
- *   during MICRO-05B-A: with the Resource Server now in the pipeline, the
- *   anonymous case still takes the same path and returns 401. Invalid or
- *   expired Bearer tokens are not covered in this MICRO — that is deferred to
- * a future MICRO which will decide whether invalid Bearer stays 401 or
- * moves to another handler.
- *
- * MICRO-06A enables Spring Method Security via {@code @EnableMethodSecurity}
- * on this class so that a request that has already authenticated (e.g. via
- * a valid Bearer JWT) can still be subject to method-level authorization.
- * A future MICRO will swap the placeholder {@code @PreAuthorize("denyAll()")}
- * on {@link SpikeProtectedController#methodDeniedEndpoint()} for real
- * Space / membership / role authorization rules.
- *
- * SPIKE-005 MICRO-01B additionally permits anonymous access to the OpenAPI
- * contract endpoint. The springdoc auto-configuration exposes
- * {@code /v3/api-docs} as the JSON contract, but under the previous
- * {@code anyRequest().authenticated()} rule that endpoint returned 401,
- * making the contract unreachable for anonymous callers (which is what
- * a code generator would use). MICRO-01B adds exactly two request
- * matchers to the filter chain:
- *   - {@code /v3/api-docs}
- *   - {@code /v3/api-docs/**}
- * Both are {@code permitAll()}; every other request still requires
- * authentication. No other endpoint is touched, no bearer security
- * scheme is added here, and no OpenAPI bean / title / version is defined
- * in this class. A later MICRO will decide how the Bearer requirement
- * is reflected in the contract (via {@code springdoc} {@code
- * securitySchemes} configuration).
- *
- * BUSINESS-001-FIX-01 / BUSINESS-002 adds PATH-SCOPED CSRF exceptions
- * for the Bearer-only business APIs:
- *   - {@code /api/v1/spaces}
- *   - {@code /api/v1/spaces/**}
- *   - {@code /api/v1/spaces/&#42;/sources}
- *   - {@code /api/v1/spaces/&#42;/sources/&#42;&#42;}
- * The LearningSpace and Source APIs authenticate exclusively via
- * {@code Authorization: Bearer <JWT>} (no cookies, no sessions), so the
- * CSRF filter — whose purpose is defending cookie-based session
- * authentication — must not run before the authentication boundary for
- * these paths. Without this exception, an anonymous
- * {@code POST /api/v1/spaces} is rejected with 403 by the CSRF filter
- * instead of the contractually correct 401 from
- * {@link Anonymous401EntryPoint}, because the CSRF filter sits earlier
- * in the chain than the authentication entry point for unprotected
- * POST requests.
- *
- * This is deliberately NOT a global {@code csrf.disable()} and NOT a
- * blanket ignore of {@code /api/v1/**}: future cookie-dependent
- * endpoints (Refresh / Logout per ADR-026) must handle CSRF / Origin /
- * SameSite individually for their own paths. Every other request still
- * goes through the default CSRF protection. The rest of the chain —
- * {@code /health} permitAll, {@code /v3/api-docs} permitAll,
- * {@code anyRequest().authenticated()}, OAuth2 Resource Server JWT,
- * and the 401 {@link AuthenticationEntryPoint} — is unchanged.
  */
 @EnableMethodSecurity
 @Configuration
 public class SpikeSecurityConfig {
 
     @Bean
-    public SecurityFilterChain spikeSecurityFilterChain(HttpSecurity http) throws Exception {
-        http.authorizeHttpRequests(auth -> auth
+    @Order(1)
+    public SecurityFilterChain spikeSecurityFilterChain(HttpSecurity http,
+                                                       @Qualifier("jwtDecoder") JwtDecoder spikeJwtDecoder) throws Exception {
+        http.securityMatcher("/health", "/v3/api-docs", "/v3/api-docs/**", "/api/v1/spike/**")
+                .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/health").permitAll()
-                        // SPIKE-005 MICRO-01B: anonymous access to the
-                        // OpenAPI contract endpoint. springdoc exposes
-                        // /v3/api-docs as the JSON contract; generators
-                        // and anonymous callers need it without auth.
-                        // The wildcard covers nested paths under /v3/api-docs
-                        // so a future /v3/api-docs/swagger-config or
-                        // similar endpoint is also anonymous (if springdoc
-                        // ever exposes one under this prefix). No other
-                        // endpoint is added here.
                         .requestMatchers("/v3/api-docs", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated())
                 // BUSINESS-001-FIX-01 / BUSINESS-002: the LearningSpace and
@@ -186,7 +65,13 @@ public class SpikeSecurityConfig {
                 // while real GET/POST still require Bearer JWT below.
                 // No permitAll("/api/**"), no csrf.disable().
                 .cors(Customizer.withDefaults())
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+                // Explicit SPIKE decoder binding: two JwtDecoder beans now
+                // exist (spike "jwtDecoder" + production "authJwtDecoder"),
+                // so oauth2ResourceServer must never type-resolve JwtDecoder.
+                // @Qualifier("jwtDecoder") keeps the SPIKE trust domain
+                // strictly separate from the production auth chain.
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.decoder(spikeJwtDecoder)))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new Anonymous401EntryPoint()));
         return http.build();
     }
@@ -278,9 +163,10 @@ public class SpikeSecurityConfig {
      * test in {@code SpikeJwtTokenServiceTest} exercises that failure path
      * by mutating the payload segment.
      *
-     * Scope: this decoder exists ONLY for the SPIKE to prove that the issued
-     * JWT can round-trip through the same SecretKey. It is NOT wired into
-     * Bearer authentication; that is a future MICRO.
+     * Scope: this decoder exists ONLY for the SPIKE trust domain. It is
+     * explicitly wired into the SPIKE Bearer chain
+     * ({@code spikeSecurityFilterChain} via {@code @Qualifier("jwtDecoder")}),
+     * keeping SPIKE and production ({@code authJwtDecoder}) secrets separate.
      */
     @Bean
     public JwtDecoder jwtDecoder(SecretKey spikeJwtSecretKey) {
