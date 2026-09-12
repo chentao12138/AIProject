@@ -1,6 +1,6 @@
 package com.aistudy.server.knowledge;
 
-import com.aistudy.server.spike.auth.SpikeJwtTokenService;
+import com.aistudy.server.auth.service.JwtAccessTokenService;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Security, real HS256 JWTs, and NO mocks:
  *
  * <pre>
- *   SpikeJwtTokenService.issueAccessToken(subject)   (JWT sub)
+ *   JwtAccessTokenService.issueAccessToken(subject)   (JWT sub)
  *       ↓
  *   HTTP /api/v1/spaces/{spaceId}/knowledge-categories[...]
  *       HTTP /api/v1/spaces/{spaceId}/knowledge-points[...]
@@ -112,7 +112,7 @@ class KnowledgeCatalogVerticalSliceIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private SpikeJwtTokenService spikeJwtTokenService;
+    private JwtAccessTokenService jwtAccessTokenService;
 
     @BeforeAll
     void guardTargetDatabase() {
@@ -140,7 +140,7 @@ class KnowledgeCatalogVerticalSliceIntegrationTest {
     // ==================== helpers ====================
 
     private String tokenFor(String subject) {
-        String token = spikeJwtTokenService.issueAccessToken(subject);
+        String token = jwtAccessTokenService.issueAccessToken(subject);
         assertNotNull(token, "token must not be null");
         return token;
     }

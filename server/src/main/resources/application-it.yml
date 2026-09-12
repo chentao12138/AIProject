@@ -30,6 +30,14 @@ spring:
   flyway:
     enabled: false
 
+# Minimal SPIKE it-profile apps may not load StorageHealthIndicator.
+management:
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState,db
+
 logging:
   level:
     com.aistudy.server.spike.mysql: DEBUG

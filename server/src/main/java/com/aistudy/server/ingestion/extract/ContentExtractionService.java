@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -145,6 +146,31 @@ public class ContentExtractionService {
         log.debug("persisted source_page {} with {} content blocks for asset {}",
                 page.getId(), blocks.size(), asset.getId());
         return page;
+    }
+
+    /**
+     * Parses one page of plain text into paragraph blocks.
+     *
+     * <p>This is a best-effort page-level chunker for PDF-extracted
+     * text. It does not perform markdown interpretation.
+     */
+    public static ParsedDocument parsePageText(String text) {
+        String normalized = TxtMarkdownContentParser.normalize(text);
+        String[] lines = normalized.split("\n", -1);
+        List<ParsedBlock> blocks = new ArrayList<>();
+        int i = 0;
+        while (i < lines.length) {
+            if (TxtMarkdownContentParser.isBlank(lines[i])) {
+                i++;
+                continue;
+            }
+            int start = i;
+            while (i < lines.length && !TxtMarkdownContentParser.isBlank(lines[i])) {
+                i++;
+            }
+            TxtMarkdownContentParser.emitBounded(blocks, TxtMarkdownContentParser.TYPE_PARAGRAPH, lines, start, i - 1, start, i - 1);
+        }
+        return new ParsedDocument(normalized, List.copyOf(blocks));
     }
 
     // ==================== helpers ====================

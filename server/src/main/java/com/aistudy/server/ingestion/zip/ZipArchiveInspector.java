@@ -233,6 +233,11 @@ public final class ZipArchiveInspector {
         }
         try (InputStream ignored = zip.getInputStream(entry)) {
             // open + close only — no data read, no decompression
+        } catch (IOException e) {
+            // Encrypted or corrupt entry streams are normal ZIP failure
+            // modes. Bubble up as a checked IO so the caller can emit a
+            // safe verdict without logging internal message text here.
+            throw e;
         }
     }
 

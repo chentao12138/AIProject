@@ -2,6 +2,7 @@ package com.aistudy.server.source.content.mapper;
 
 import com.aistudy.server.source.content.entity.ContentBlock;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -67,6 +68,24 @@ public interface ContentBlockMapper extends BaseMapper<ContentBlock> {
                                                     @Param("sourceId") Long sourceId,
                                                     @Param("pageId") Long pageId,
                                                     @Param("ownerSubject") String ownerSubject);
+
+    /**
+     * Deletes all blocks of one source asset. Used by PDF ingestion
+     * to replace derived content atomically on retry.
+     */
+    @Delete("DELETE FROM content_block "
+            + "WHERE space_id = #{spaceId} "
+            + "  AND source_id = #{sourceId} "
+            + "  AND source_page_id IN ("
+            + "        SELECT sp.id "
+            + "          FROM source_page sp "
+            + "         WHERE sp.space_id = #{spaceId} "
+            + "           AND sp.source_id = #{sourceId} "
+            + "           AND sp.source_asset_id = #{assetId}"
+            + "      )")
+    void deleteBySpaceSourceAsset(@Param("spaceId") Long spaceId,
+                                  @Param("sourceId") Long sourceId,
+                                  @Param("assetId") Long assetId);
 
     /**
      * Returns ONE block iff ALL of: it exists, belongs to

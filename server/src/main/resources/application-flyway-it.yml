@@ -30,3 +30,11 @@ spring:
     # STEP-03 drives migrations manually; disable Spring Boot auto-migrate.
     enabled: false
     locations: classpath:db/migration
+
+# BUSINESS-017: deterministic test secret for formal flyway-it auth/integration
+# tests. Production default application.yml still requires AUTH_JWT_SECRET.
+app:
+  auth:
+    jwt:
+      secret: ${AUTH_JWT_SECRET:dGVzdF81MjNiYXJibGVyX3Rlc3Rfc2VjcmV0X2hlcmVfZm9yX2F1dGhcMTIzdA==}
+      access-token-ttl-seconds: ${AUTH_JWT_ACCESS_TOKEN_TTL_SECONDS:900}

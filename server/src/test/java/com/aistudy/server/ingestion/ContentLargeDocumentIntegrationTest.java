@@ -1,6 +1,6 @@
 package com.aistudy.server.ingestion;
 
-import com.aistudy.server.spike.auth.SpikeJwtTokenService;
+import com.aistudy.server.auth.service.JwtAccessTokenService;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -98,7 +98,7 @@ class ContentLargeDocumentIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private SpikeJwtTokenService spikeJwtTokenService;
+    private JwtAccessTokenService jwtAccessTokenService;
 
     @DynamicPropertySource
     static void storageProps(DynamicPropertyRegistry registry) {
@@ -149,7 +149,7 @@ class ContentLargeDocumentIntegrationTest {
     // ==================== helpers ====================
 
     private String tokenFor(String subject) {
-        String token = spikeJwtTokenService.issueAccessToken(subject);
+        String token = jwtAccessTokenService.issueAccessToken(subject);
         assertNotNull(token, "token must not be null");
         return token;
     }

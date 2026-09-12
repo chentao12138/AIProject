@@ -2,6 +2,7 @@ package com.aistudy.server.source.page.mapper;
 
 import com.aistudy.server.source.page.entity.SourcePage;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -41,4 +42,16 @@ public interface SourcePageMapper extends BaseMapper<SourcePage> {
     List<SourcePage> selectBySpaceSourceOwner(@Param("spaceId") Long spaceId,
                                               @Param("sourceId") Long sourceId,
                                               @Param("ownerSubject") String ownerSubject);
+
+    /**
+     * Deletes all pages of one source asset. Used by PDF ingestion
+     * to replace derived content atomically on retry.
+     */
+    @Delete("DELETE FROM source_page "
+            + "WHERE space_id = #{spaceId} "
+            + "  AND source_id = #{sourceId} "
+            + "  AND source_asset_id = #{assetId}")
+    void deleteBySpaceSourceAsset(@Param("spaceId") Long spaceId,
+                                 @Param("sourceId") Long sourceId,
+                                 @Param("assetId") Long assetId);
 }

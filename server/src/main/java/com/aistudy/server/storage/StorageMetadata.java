@@ -1,7 +1,8 @@
 package com.aistudy.server.storage;
 
 /**
- * BUSINESS-004 — storage-layer metadata for {@link StorageService#store}.
+ * BUSINESS-004 / BUSINESS-023 — storage-layer metadata for
+ * {@link StorageService#store}.
  *
  * <p>Deliberately minimal: it carries ONLY what the storage layer
  * needs. The first implementation ({@link LocalStorageService})
@@ -10,6 +11,8 @@ package com.aistudy.server.storage;
  * original filename, sha256, size) lives in the business table
  * ({@code source_asset}), not in storage. Future implementations
  * (object storage lifecycle hints, etc.) extend this record.
+ *
+ * @since BUSINESS-023
  */
 public record StorageMetadata() {
 }

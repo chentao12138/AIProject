@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   2. target V001 -> migrate()
  *   3. seed "V001升级前保留数据"
  *   4. record V001 checksum from flyway_schema_history (dynamic, not hardcoded)
- *   5. target latest -> migrate() -> V002..V012 applied
+ *   5. target latest -> migrate() -> V002..latest applied
  *   6. verify V001 checksum unchanged
  *   7. verify old data preserved
  *   8. verify both SPIKE tables exist (flyway_spike_record AND
@@ -53,7 +53,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *  14. verify production source_asset table (V008, BUSINESS-004):
  *      columns, indexes, unique storage_key, FKs, charset
  *  15. migrate again -> migrationsExecuted == 0
- *  16. history still V001..V012 only
+ *  16. history still one row per migration
+ *  17. AUTH (V022–V025): user_account / auth_refresh_session /
+ *      user_account_role exist
+ *  18. AUTH: token_hash capacity >= 68 after V025 (metadata + 68-char
+ *      insert probe; no real credentials)
+ *  19. AUTH: role CHECK accepts USER/ADMIN (rejects others when enforced)
+ *  20. AUTH: refresh/role FK and index sanity
+ *
+ * TEST D (V024 -> V025 upgrade path for the token_hash width fix):
+ *   schema at V024 (token_hash still VARCHAR(64))
+ *   -> 68-char hash insert fails (production defect)
+ *   -> migrate to latest (V025)
+ *   -> token_hash capacity >= 68 and 68-char hash accepted
  *
  * Schema isolation (CRITICAL):
  *   - The test MUST run against aistudy_flyway_test ONLY.
@@ -1222,6 +1234,144 @@ class FlywayMigrationIntegrationTest {
                 "fk_study_task_plan must reference study_plan");
         assertEquals("learning_space", studyTaskFkTables.get("fk_study_task_space"),
                 "fk_study_task_space must reference learning_space");
+
+        // (38) AUTH SCHEMA — V022/V023/V024/V025 (BUSINESS-017/018/019 + token_hash fix).
+        assertAuthTablesExist();
+        assertTokenHashCapacityAtLeast68();
+        assertRepresentativeTokenHashAccepted();
+        assertRoleCheckContract();
+        assertAuthForeignKeyAndIndexSanity();
+
+        // (39) AI SCHEMA — V026/V027 (AI-002).
+        assertAiTablesExist();
+        assertAiSchemaShape();
+        assertAiRoleCheckContract();
+        assertAiIndexSanity();
+    }
+
+    // ==================== TEST E — V025 -> LATEST (AI tables) ====================
+
+    /**
+     * Upgrade path for AI tables: schema at V025 must accept V026/V027
+     * cleanly without editing historical migrations.
+     */
+    @Test
+    void v025DatabaseUpgradesWithAiConversationAndMessage() {
+        MigrateResult toV025 = flyway("025").migrate();
+        assertTrue(toV025.migrationsExecuted >= 1);
+
+        Integer hasV026 = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '026'",
+                Integer.class);
+        assertEquals(0, hasV026, "V026 must not exist at target=025");
+
+        List<String> after025 = expectedMigrationVersions().stream()
+                .filter(v -> Integer.parseInt(v) > 25)
+                .toList();
+        assertTrue(after025.contains("026") && after025.contains("027"),
+                "classpath must contain V026 and V027 (actual: " + after025 + ")");
+
+        MigrateResult upgrade = flyway().migrate();
+        assertEquals(after025.size(), upgrade.migrationsExecuted,
+                "upgrade from V025 must apply V026+ only");
+
+        assertAiTablesExist();
+        assertAiSchemaShape();
+        assertAiRoleCheckContract();
+    }
+
+    // ==================== TEST D — V024 -> V025 UPGRADE ====================
+
+    /**
+     * Upgrade path for the V025 token_hash width correction.
+     *
+     * <p>This is the high-value path for V025: a database already at V024
+     * (with {@code token_hash VARCHAR(64)} from V023) must upgrade cleanly
+     * to latest and accept a 68-character hash. A fresh empty-DB migrate
+     * alone cannot prove the ALTER works on an already-created column.
+     */
+    @Test
+    void v024DatabaseUpgradesTokenHashCapacityToV025() {
+        // (1) Migrate to V024 only (includes V022 user_account, V023
+        // auth_refresh_session with VARCHAR(64), V024 user_account_role).
+        MigrateResult toV024 = flyway("024").migrate();
+        assertTrue(toV024.migrationsExecuted >= 1,
+                "target=024 must apply at least one migration");
+
+        Integer atV024 = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '024'",
+                Integer.class);
+        assertEquals(1, atV024, "V024 must be present after target=024 migrate");
+        Integer hasV025 = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '025'",
+                Integer.class);
+        assertEquals(0, hasV025, "V025 must NOT be applied yet after target=024 migrate");
+
+        // (2) Pre-upgrade shape: token_hash is still VARCHAR(64) from V023.
+        Integer preLength = jdbc.queryForObject(
+                "SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'auth_refresh_session' "
+                        + "  AND COLUMN_NAME = 'token_hash'",
+                Integer.class);
+        assertNotNull(preLength, "token_hash column must exist at V024");
+        assertEquals(64, preLength,
+                "token_hash must still be VARCHAR(64) at V024 (V023 shape)");
+
+        // (3) A representative "hex:" + 64-hex value (68 chars) must be
+        // rejected at V024 — this is the production defect V025 fixes.
+        // Parent user_account row is required for the FK.
+        jdbc.update("INSERT INTO user_account "
+                        + "(id, subject, username, password_hash, status, created_at, updated_at) "
+                        + "VALUES (1, ?, ?, ?, 'ACTIVE', NOW(6), NOW(6))",
+                "batch-b-upgrade-probe",
+                "batch-b-upgrade-user",
+                "not-a-real-password-hash");
+        String sixtyEightCharHash = "hex:" + "a".repeat(64);
+        assertEquals(68, sixtyEightCharHash.length());
+        String insert68Sql =
+                "INSERT INTO auth_refresh_session "
+                        + "(user_account_id, family_id, token_hash, issued_at, expires_at, created_at, updated_at) "
+                        + "VALUES (1, 1, ?, NOW(6), NOW(6), NOW(6), NOW(6))";
+        try {
+            jdbc.update(insert68Sql, sixtyEightCharHash);
+            // If the insert unexpectedly succeeded, roll back that row so
+            // the upgrade step below still sees a clean V024 schema.
+            jdbc.update("DELETE FROM auth_refresh_session WHERE token_hash = ?", sixtyEightCharHash);
+            // MySQL 8 may silently truncate in non-strict mode; treat
+            // "inserted but truncated" as a failure too by re-checking length.
+            throw new AssertionError(
+                    "68-char token_hash insert must fail at V024 (VARCHAR(64) defect)");
+        } catch (org.springframework.dao.DataIntegrityViolationException
+                 | org.springframework.jdbc.BadSqlGrammarException expected) {
+            // expected: Data too long / truncation under strict mode
+        }
+
+        // (4) Migrate to latest — applies V025 (and any later migrations).
+        List<String> after024 = expectedMigrationVersions().stream()
+                .filter(v -> Integer.parseInt(v) > 24)
+                .toList();
+        assertTrue(after024.contains("025"),
+                "classpath must contain V025 after V024 (actual: " + after024 + ")");
+        MigrateResult upgrade = flyway().migrate();
+        assertEquals(after024.size(), upgrade.migrationsExecuted,
+                "target=latest on V024 db must apply V025+ (actual: "
+                        + upgrade.migrationsExecuted + ", expected " + after024 + ")");
+
+        Integer hasV025After = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '025'",
+                Integer.class);
+        assertEquals(1, hasV025After, "V025 must be applied after upgrade");
+
+        // (5) Post-upgrade metadata: capacity >= 68 characters.
+        assertTokenHashCapacityAtLeast68();
+
+        // (6) The same 68-char representative value is now accepted.
+        assertRepresentativeTokenHashAccepted();
+
+        // Cleanup the probe row so the next @BeforeEach clean() is not
+        // the only barrier (defensive; clean() already resets the schema).
+        jdbc.update("DELETE FROM auth_refresh_session WHERE token_hash = ?", sixtyEightCharHash);
     }
 
     // ==================== TEST B ====================
@@ -1542,6 +1692,334 @@ class FlywayMigrationIntegrationTest {
         } catch (Exception e) {
             throw new IllegalStateException("cannot enumerate migration files", e);
         }
+    }
+
+    // ==================== AUTH SCHEMA HELPERS (V022–V025) ====================
+
+    /** V022/V023/V024 tables must exist after a complete migrate. */
+    private void assertAuthTablesExist() {
+        for (String table : new String[]{
+                "user_account", "auth_refresh_session", "user_account_role"}) {
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.TABLES "
+                            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+                    Integer.class, table);
+            assertEquals(1, count, table + " must exist after migrate to latest");
+        }
+    }
+
+    /**
+     * V025 contract: token_hash must hold at least 68 characters
+     * ({@code "hex:"} + 64 hex chars). Verifies live column metadata,
+     * not merely that V025 appears in flyway_schema_history.
+     */
+    private void assertTokenHashCapacityAtLeast68() {
+        Map<String, Object> col = jdbc.queryForMap(
+                "SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE "
+                        + "FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'auth_refresh_session' "
+                        + "  AND COLUMN_NAME = 'token_hash'");
+        assertEquals("varchar", String.valueOf(col.get("DATA_TYPE")).toLowerCase(),
+                "token_hash must remain VARCHAR after V025");
+        Integer maxLength = ((Number) col.get("CHARACTER_MAXIMUM_LENGTH")).intValue();
+        assertTrue(maxLength >= 68,
+                "token_hash capacity must be >= 68 after V025 (actual: " + maxLength + ")");
+        assertEquals("NO", col.get("IS_NULLABLE"),
+                "token_hash must remain NOT NULL");
+    }
+
+    /**
+     * Insert a representative production hash shape
+     * ({@code "hex:"} + 64 hex chars = 68) and prove the DB accepts it
+     * without truncation. No real credentials.
+     */
+    private void assertRepresentativeTokenHashAccepted() {
+        // Ensure a parent user_account row exists for the FK.
+        Integer existingUser = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM user_account WHERE id = 1",
+                Integer.class);
+        if (existingUser == null || existingUser == 0) {
+            jdbc.update("INSERT INTO user_account "
+                            + "(id, subject, username, password_hash, status, created_at, updated_at) "
+                            + "VALUES (1, ?, ?, ?, 'ACTIVE', NOW(6), NOW(6))",
+                    "batch-b-subject-probe",
+                    "batch-b-user-probe",
+                    "not-a-real-password-hash");
+        }
+
+        String representativeHash = "hex:" + "b".repeat(64);
+        assertEquals(68, representativeHash.length());
+        jdbc.update("DELETE FROM auth_refresh_session WHERE token_hash = ?", representativeHash);
+        jdbc.update(
+                "INSERT INTO auth_refresh_session "
+                        + "(user_account_id, family_id, token_hash, issued_at, expires_at, created_at, updated_at) "
+                        + "VALUES (1, 1, ?, NOW(6), DATE_ADD(NOW(6), INTERVAL 1 DAY), NOW(6), NOW(6))",
+                representativeHash);
+
+        String stored = jdbc.queryForObject(
+                "SELECT token_hash FROM auth_refresh_session WHERE token_hash = ?",
+                String.class, representativeHash);
+        assertEquals(representativeHash, stored,
+                "68-char token_hash must round-trip without truncation");
+
+        // UNIQUE index on token_hash must still be present after V025.
+        Integer uniqueOnTokenHash = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'auth_refresh_session' "
+                        + "  AND INDEX_NAME = 'uq_auth_refresh_session_token_hash' "
+                        + "  AND NON_UNIQUE = 0",
+                Integer.class);
+        assertTrue(uniqueOnTokenHash > 0,
+                "uq_auth_refresh_session_token_hash must remain UNIQUE after V025");
+    }
+
+    /**
+     * V024 role contract: USER and ADMIN are the only accepted roles
+     * when a CHECK constraint is present. Validates the intended
+     * contract without brittle vendor-only catalog dumps.
+     */
+    private void assertRoleCheckContract() {
+        // Ensure a parent user_account for the FK.
+        Integer existingUser = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM user_account WHERE id = 1",
+                Integer.class);
+        if (existingUser == null || existingUser == 0) {
+            jdbc.update("INSERT INTO user_account "
+                            + "(id, subject, username, password_hash, status, created_at, updated_at) "
+                            + "VALUES (1, ?, ?, ?, 'ACTIVE', NOW(6), NOW(6))",
+                    "batch-b-subject-probe",
+                    "batch-b-user-probe",
+                    "not-a-real-password-hash");
+        }
+
+        // USER and ADMIN must be accepted.
+        jdbc.update("DELETE FROM user_account_role WHERE user_account_id = 1");
+        jdbc.update(
+                "INSERT INTO user_account_role (user_account_id, role, created_at) "
+                        + "VALUES (1, 'USER', NOW(6)), (1, 'ADMIN', NOW(6))");
+        Integer roleCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM user_account_role WHERE user_account_id = 1",
+                Integer.class);
+        assertEquals(2, roleCount, "USER and ADMIN must both be valid role values");
+
+        // An unsupported role must be rejected when the CHECK exists.
+        // If CHECK enforcement is disabled on this MySQL build, skip the
+        // negative assertion rather than writing a brittle catalog query.
+        boolean checkPresent = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'user_account_role' "
+                        + "  AND CONSTRAINT_NAME = 'chk_user_account_role_role'",
+                Integer.class) > 0;
+        if (checkPresent) {
+            try {
+                jdbc.update(
+                        "INSERT INTO user_account_role (user_account_id, role, created_at) "
+                                + "VALUES (1, 'SUPERUSER', NOW(6))");
+                jdbc.update(
+                        "DELETE FROM user_account_role WHERE user_account_id = 1 AND role = 'SUPERUSER'");
+                throw new AssertionError(
+                        "role CHECK must reject values other than USER/ADMIN");
+            } catch (org.springframework.dao.DataAccessException expected) {
+                // MySQL 8 CHECK violation surfaces as DataIntegrityViolationException
+                // or UncategorizedSQLException (error 3819) depending on driver path.
+            }
+        }
+    }
+
+    /** Refresh-session and role FK / index sanity (not an exhaustive snapshot). */
+    private void assertAuthForeignKeyAndIndexSanity() {
+        // auth_refresh_session -> user_account
+        List<Map<String, Object>> refreshFks = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME "
+                        + "FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'auth_refresh_session' "
+                        + "  AND CONSTRAINT_NAME = 'fk_auth_refresh_session_user_account'");
+        assertEquals(1, refreshFks.size(),
+                "fk_auth_refresh_session_user_account must exist");
+        assertEquals("user_account", refreshFks.get(0).get("REFERENCED_TABLE_NAME"));
+        assertEquals("id", refreshFks.get(0).get("REFERENCED_COLUMN_NAME"));
+
+        // Lookup indexes used by the refresh/logout flow.
+        for (String indexName : new String[]{
+                "idx_auth_refresh_session_family_id",
+                "idx_auth_refresh_session_user_account_id",
+                "idx_auth_refresh_session_expires_at"}) {
+            Integer present = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                            + "WHERE TABLE_SCHEMA = DATABASE() "
+                            + "  AND TABLE_NAME = 'auth_refresh_session' "
+                            + "  AND INDEX_NAME = ?",
+                    Integer.class, indexName);
+            assertTrue(present > 0, indexName + " must exist on auth_refresh_session");
+        }
+
+        // user_account_role -> user_account + UNIQUE (user, role)
+        List<Map<String, Object>> roleFks = jdbc.queryForList(
+                "SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME "
+                        + "FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'user_account_role' "
+                        + "  AND CONSTRAINT_NAME = 'fk_user_account_role_user_account'");
+        assertEquals(1, roleFks.size(), "fk_user_account_role_user_account must exist");
+        assertEquals("user_account", roleFks.get(0).get("REFERENCED_TABLE_NAME"));
+
+        List<String> roleUk = jdbc.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'user_account_role' "
+                        + "  AND INDEX_NAME = 'uq_user_account_role_user_role' "
+                        + "ORDER BY SEQ_IN_INDEX",
+                String.class);
+        assertEquals(List.of("user_account_id", "role"), roleUk,
+                "uq_user_account_role_user_role must cover (user_account_id, role)");
+        Integer roleUkUnique = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() "
+                        + "  AND TABLE_NAME = 'user_account_role' "
+                        + "  AND INDEX_NAME = 'uq_user_account_role_user_role' "
+                        + "  AND NON_UNIQUE = 0",
+                Integer.class);
+        assertTrue(roleUkUnique > 0, "uq_user_account_role_user_role must be UNIQUE");
+
+        // user_account unique keys used by login/subject lookup.
+        for (String indexName : new String[]{
+                "uq_user_account_subject", "uq_user_account_username"}) {
+            Integer present = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                            + "WHERE TABLE_SCHEMA = DATABASE() "
+                            + "  AND TABLE_NAME = 'user_account' "
+                            + "  AND INDEX_NAME = ? AND NON_UNIQUE = 0",
+                    Integer.class, indexName);
+            assertTrue(present > 0, indexName + " must be a UNIQUE index on user_account");
+        }
+    }
+
+    // ==================== AI SCHEMA HELPERS (V026/V027) ====================
+
+    private void assertAiTablesExist() {
+        for (String table : new String[]{"ai_conversation", "ai_message"}) {
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.TABLES "
+                            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+                    Integer.class, table);
+            assertEquals(1, count, table + " must exist after migrate to latest");
+        }
+    }
+
+    private void assertAiSchemaShape() {
+        Map<String, Object> contentCol = jdbc.queryForMap(
+                "SELECT DATA_TYPE, IS_NULLABLE FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message' "
+                        + "AND COLUMN_NAME = 'content'");
+        assertEquals("longtext", String.valueOf(contentCol.get("DATA_TYPE")).toLowerCase(),
+                "ai_message.content must be LONGTEXT");
+        assertEquals("NO", contentCol.get("IS_NULLABLE"));
+
+        Map<String, Object> statusCol = jdbc.queryForMap(
+                "SELECT DATA_TYPE FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_conversation' "
+                        + "AND COLUMN_NAME = 'status'");
+        assertEquals("varchar", String.valueOf(statusCol.get("DATA_TYPE")).toLowerCase());
+
+        Map<String, Object> subjectCol = jdbc.queryForMap(
+                "SELECT DATA_TYPE FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_conversation' "
+                        + "AND COLUMN_NAME = 'user_subject'");
+        assertEquals("varchar", String.valueOf(subjectCol.get("DATA_TYPE")).toLowerCase());
+
+        for (String col : new String[]{"provider", "model", "prompt_tokens",
+                "completion_tokens", "total_tokens"}) {
+            Map<String, Object> nullable = jdbc.queryForMap(
+                    "SELECT IS_NULLABLE FROM information_schema.COLUMNS "
+                            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message' "
+                            + "AND COLUMN_NAME = ?", col);
+            assertEquals("YES", nullable.get("IS_NULLABLE"),
+                    "ai_message." + col + " must be nullable");
+        }
+    }
+
+    private void assertAiRoleCheckContract() {
+        List<Integer> existing = jdbc.queryForList(
+                "SELECT id FROM learning_space ORDER BY id LIMIT 1", Integer.class);
+        Integer spaceId;
+        if (existing.isEmpty()) {
+            jdbc.update("INSERT INTO learning_space "
+                            + "(name, description, owner_subject, status, created_at, updated_at) "
+                            + "VALUES ('ai-schema-check', NULL, 'ai-schema-owner', 'ACTIVE', NOW(6), NOW(6))");
+            spaceId = jdbc.queryForObject(
+                    "SELECT id FROM learning_space WHERE name='ai-schema-check'",
+                    Integer.class);
+        } else {
+            spaceId = existing.get(0);
+        }
+        jdbc.update("INSERT INTO ai_conversation "
+                        + "(space_id, user_subject, title, status, created_at, updated_at) "
+                        + "VALUES (?, 'ai-schema-owner', 't', 'ACTIVE', NOW(6), NOW(6))",
+                spaceId);
+        Integer conversationId = jdbc.queryForObject(
+                "SELECT id FROM ai_conversation WHERE user_subject='ai-schema-owner' "
+                        + "ORDER BY id DESC LIMIT 1", Integer.class);
+
+        jdbc.update("INSERT INTO ai_message "
+                        + "(conversation_id, role, content, created_at) VALUES (?, 'USER', 'u', NOW(6))",
+                conversationId);
+        jdbc.update("INSERT INTO ai_message "
+                        + "(conversation_id, role, content, created_at) VALUES (?, 'ASSISTANT', 'a', NOW(6))",
+                conversationId);
+
+        boolean checkPresent = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message' "
+                        + "AND CONSTRAINT_NAME = 'chk_ai_message_role'", Integer.class) > 0;
+        if (checkPresent) {
+            try {
+                jdbc.update("INSERT INTO ai_message "
+                                + "(conversation_id, role, content, created_at) VALUES (?, 'SYSTEM', 's', NOW(6))",
+                        conversationId);
+                jdbc.update("DELETE FROM ai_message WHERE conversation_id = ? AND role = 'SYSTEM'",
+                        conversationId);
+                throw new AssertionError("ai_message role CHECK must reject SYSTEM");
+            } catch (org.springframework.dao.DataAccessException expected) {
+                // expected
+            }
+        }
+
+        jdbc.update("DELETE FROM ai_message WHERE conversation_id = ?", conversationId);
+        jdbc.update("DELETE FROM ai_conversation WHERE user_subject = 'ai-schema-owner'");
+    }
+
+    private void assertAiIndexSanity() {
+        Integer convIdx = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_conversation' "
+                        + "AND INDEX_NAME = 'idx_ai_conversation_space_user_created'",
+                Integer.class);
+        assertTrue(convIdx > 0, "conversation listing index must exist");
+
+        Integer msgIdx = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message' "
+                        + "AND INDEX_NAME = 'idx_ai_message_conversation_created'",
+                Integer.class);
+        assertTrue(msgIdx > 0, "message chronological index must exist");
+
+        Integer convFk = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_conversation' "
+                        + "AND CONSTRAINT_NAME = 'fk_ai_conversation_space'",
+                Integer.class);
+        assertEquals(1, convFk);
+
+        Integer msgFk = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message' "
+                        + "AND CONSTRAINT_NAME = 'fk_ai_message_conversation'",
+                Integer.class);
+        assertEquals(1, msgFk);
     }
 
     // ==================== helpers ====================

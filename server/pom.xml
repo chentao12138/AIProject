@@ -126,6 +126,18 @@
             <version>2.8.16</version>
         </dependency>
 
+        <!-- Spring Boot Actuator (BUSINESS-025 observability) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Micrometer Prometheus registry (BUSINESS-025 metrics export) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <!-- Flyway (version managed by Spring Boot; SPIKE-003 gate) -->
         <!-- Flyway 10.x splits DB-specific support into separate modules; MySQL
              requires flyway-mysql in addition to flyway-core. -->
@@ -143,6 +155,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <!-- PDFBox 3.x (BUSINESS-020 PDF ingestion) -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
         </dependency>
     </dependencies>
 

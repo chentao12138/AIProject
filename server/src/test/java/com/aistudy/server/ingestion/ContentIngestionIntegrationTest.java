@@ -1,6 +1,6 @@
 package com.aistudy.server.ingestion;
 
-import com.aistudy.server.spike.auth.SpikeJwtTokenService;
+import com.aistudy.server.auth.service.JwtAccessTokenService;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -58,8 +58,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * rows with exact text, block types, order, locator line ranges;
  * invalid UTF-8 → FAILED ENCODING_ERROR with zero content rows; empty
  * doc → SUCCEEDED with zero blocks; oversize → FAILED
- * DOCUMENT_TOO_LARGE (1KB test limit); PDF/image → 422
- * INGESTION_NOT_READY; duplicate re-ingest → 409; FAILED allows new
+ * DOCUMENT_TOO_LARGE (1KB test limit); malformed PDF → job FAILED
+ * INVALID_PDF / PDF_PARSE_FAILED; malformed PNG → job FAILED
+ * INVALID_IMAGE; duplicate re-ingest → 409; FAILED allows new
  * attempt; retry re-runs pipeline; pages/blocks list + pageId filter +
  * IDOR matrix.
  *
@@ -113,7 +114,7 @@ class ContentIngestionIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private SpikeJwtTokenService spikeJwtTokenService;
+    private JwtAccessTokenService jwtAccessTokenService;
 
     @DynamicPropertySource
     static void storageProps(DynamicPropertyRegistry registry) {
@@ -163,7 +164,7 @@ class ContentIngestionIntegrationTest {
     // ==================== helpers ====================
 
     private String tokenFor(String subject) {
-        String token = spikeJwtTokenService.issueAccessToken(subject);
+        String token = jwtAccessTokenService.issueAccessToken(subject);
         assertNotNull(token, "token must not be null");
         return token;
     }
@@ -490,40 +491,41 @@ jdbcTemplate.update(
 
     // ==================== format gate / duplicate guard ====================
 
-    /** (6) PDF asset → 422 INGESTION_NOT_READY, no job row. */
+    /** (6) malformed PDF is accepted by create, then fails the PDF pipeline. */
     @Test
-    void pdfAssetCreateReturns422IngestionNotReady() throws Exception {
+    void pdfAssetCreateFailsPipelineWithParseError() throws Exception {
         Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
         Long sourceId = insertFixtureSource(spaceId, "教材");
         String token = tokenFor("biz-e2e-user-1");
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "book.pdf", "application/pdf", "%PDF-1.4 fake".getBytes(StandardCharsets.UTF_8));
 
-        mockMvc.perform(post(JOBS, spaceId, sourceId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"assetId\":" + assetId + "}")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isUnprocessableEntity());
+        String body = createJobBody(token, spaceId, sourceId, assetId, "FAILED");
+        assertTrue(body.contains("\"errorCode\":\"PDF_PARSE_FAILED\"")
+                        || body.contains("\"errorCode\":\"INVALID_PDF\""),
+                "malformed PDF must fail with a PDF error code, body=" + body);
 
-        Long count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM ingestion_job WHERE source_id = ?", Long.class, sourceId);
-        assertEquals(0L, count, "422 must not persist any job row");
+        Long pageCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM source_page WHERE source_id = ?", Long.class, sourceId);
+        assertEquals(0L, pageCount, "failed PDF must not persist pages");
     }
 
-    /** (7) image asset → 422 INGESTION_NOT_READY. */
+    /** (7) malformed PNG is accepted by create, then fails the image pipeline. */
     @Test
-    void imageAssetCreateReturns422IngestionNotReady() throws Exception {
+    void imageAssetCreateFailsPipelineWithInvalidImage() throws Exception {
         Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
         Long sourceId = insertFixtureSource(spaceId, "图片");
         String token = tokenFor("biz-e2e-user-1");
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "page.png", "image/png", new byte[]{1, 2, 3});
 
-        mockMvc.perform(post(JOBS, spaceId, sourceId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"assetId\":" + assetId + "}")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isUnprocessableEntity());
+        String body = createJobBody(token, spaceId, sourceId, assetId, "FAILED");
+        assertTrue(body.contains("\"errorCode\":\"INVALID_IMAGE\""),
+                "malformed PNG must fail with INVALID_IMAGE, body=" + body);
+
+        Long pageCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM source_page WHERE source_id = ?", Long.class, sourceId);
+        assertEquals(0L, pageCount, "failed image must not persist pages");
     }
 
     /** (8) re-ingesting a SUCCEEDED asset → 409, no duplicate content. */
