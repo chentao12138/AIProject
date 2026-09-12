@@ -127,9 +127,15 @@ describe('SourcesPage', () => {
     expect(document.body.textContent).not.toMatch(/#undefined|#null|undefined/);
   });
 
-  it('shows the file-upload placeholder note without dominating (PHASE 11)', async () => {
+  it('links valid sources into the workbench (FE-002A PHASE 8)', async () => {
     const apiClient = mockApiClient({
-      listSources: vi.fn(async () => ({ data: [], response: { status: 200 } })),
+      listSources: vi.fn(async () => ({
+        data: [
+          { id: 5, title: 'Notes', sourceType: 'DESKTOP_UPLOAD', status: 'ACTIVE' },
+          { id: undefined, title: 'Ghost' },
+        ],
+        response: { status: 200 },
+      })),
     });
 
     renderWithProviders(<SourcesPage />, {
@@ -138,9 +144,14 @@ describe('SourcesPage', () => {
       routePath: '/spaces/:spaceId/sources',
     });
 
+    const openLink = await screen.findByRole('link', { name: 'Open' });
+    expect(openLink).toHaveAttribute('href', '/spaces/7/sources/5');
+    // Ghost row has no navigable id — no second Open link.
+    expect(screen.getAllByRole('link', { name: 'Open' })).toHaveLength(1);
+    // Old FE-001 placeholder note is gone.
     expect(
-      await screen.findByText(/File upload will become available/)
-    ).toBeInTheDocument();
+      screen.queryByText(/File upload will become available/)
+    ).not.toBeInTheDocument();
   });
 
   it('rejects an invalid space id with zero API calls (PHASE 11)', async () => {

@@ -18,6 +18,28 @@ export type LearningSpace = ResultData<ApiClient['listLearningSpaces']>[number];
 /** Single Source, inferred from listSources(). */
 export type Source = ResultData<ApiClient['listSources']>[number];
 
+/** Source detail, inferred from getSource(). */
+export type SourceDetail = ResultData<ApiClient['getSource']>;
+
+/** Single SourceAsset, inferred from listSourceAssets() (FE-002A). */
+export type SourceAsset = ResultData<ApiClient['listSourceAssets']>[number];
+
+/** Single IngestionJob, inferred from listIngestionJobs() (FE-002A). */
+export type IngestionJob = ResultData<ApiClient['listIngestionJobs']>[number];
+
+/** Ingestion job detail, inferred from getIngestionJob(). */
+export type IngestionJobDetail = ResultData<ApiClient['getIngestionJob']>;
+
+/** Single SourcePage, inferred from listSourcePages() (FE-002A). */
+export type SourcePage = ResultData<ApiClient['listSourcePages']>[number];
+
+/** Single ContentBlock, inferred from listContentBlocks() (FE-002A). */
+export type ContentBlock = ResultData<ApiClient['listContentBlocks']>[number];
+
+/** Single KnowledgePointSource link (BUSINESS-007 provenance). */
+export type KnowledgePointSourceLink =
+  ResultData<ApiClient['listKnowledgePointSources']>[number];
+
 /** Single KnowledgeCategory, inferred from listKnowledgeCategories(). */
 export type KnowledgeCategory =
   ResultData<ApiClient['listKnowledgeCategories']>[number];

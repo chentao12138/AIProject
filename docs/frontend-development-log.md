@@ -275,3 +275,93 @@ Git 状态一律以 Windows Git 输出为权威（git.exe -C D:/AIProject-fronte
 - Dev smoke：electron-vite dev 起服成功（5173 + start electron app...），进程存活 25s 后正常终止；nested route 单 active 由 AppShell.test.tsx 4 项 aria-current 断言覆盖（/spaces、/spaces/7/sources、/spaces/7/knowledge、至多一个 active）；custom API CSP 由 api-config.test.ts 11 项 + csp.test.ts custom-origin 5 项纯函数测试充分证明
 - Git：diff --check 无 whitespace error（仅 LF→CRLF 规范化 warning）；status 范围仅 desktop/** + docs/frontend-*；diff --stat 36 files / +4938 / −710；未 commit
 - 结论：FE-001.5 PRE-COMMIT REVIEW FIX PASS — READY FOR USER REVIEW AND COMMIT
+
+## FE-001.5 Committed Checkpoint（2026-09-12）
+
+- User commit：`e099ba1` "chore: harden desktop frontend foundation"（55 files, +6465/−710）
+- `docs/frontend-hardening-plan.md` 任务书已删除，未入 commit
+- Working tree clean；未 push
+- FE-001 + FE-001.5 hardening 正式封存为稳定前端 checkpoint
+
+## FE-002A Post-Sync Baseline（2026-09-12）
+
+- User 手动 `git merge main` → `d93b393` Merge branch 'main' into feat/fe-001
+- main 带入 BUSINESS-004~007：SourceAsset / IngestionJob / TXT-MD content /
+  provenance + stable packages/api-client
+- Post-sync 回归：lint OK / typecheck OK / test:run 230/230（19 files）/
+  coverage Statements 84.41% / Branches 85.16% / Functions 86.56% / Lines 84.41%
+- 结论：同步未破坏 FE-001.5 基线
+
+## FE-002A Stable Contract Audit + Multipart Gate（2026-09-12）
+
+- api-client 审计：uploadSourceAsset(spaceId, sourceId, file) 用
+  `MultipartUploadBody extends FormData`；createApiClient **无**全局
+  Content-Type；浏览器自生成 multipart boundary → **multipart gate PASS**
+- SourceAssetResponse：id/spaceId/sourceId/assetRole/originalName/mimeType/
+  sizeBytes/sha256/createdAt（无 storageKey 暴露）
+- IngestionJobResponse：id/spaceId/sourceId/assetId/status/stage/progressPercent/
+  startedAt/finishedAt/retryCount/errorCode/errorMessage/createdAt/updatedAt
+- Status exact：PENDING|RUNNING|SUCCEEDED|FAILED；Stage：QUEUED|IMPORTING|…
+- Content：SourcePageResponse + ContentBlockResponse（normalizedText）+
+  KnowledgePointSourceResponse（contentBlockId/relationType）
+- File selection：标准 `<input type="file">`，无 IPC/fs/path
+
+## FE-002A Implementation Checkpoint（2026-09-12）
+
+- query-keys 扩展：source / source-assets / source-asset / ingestion-jobs /
+  ingestion-job / source-pages / content-blocks / knowledge-point-sources
+- lib/ingestion-status.ts：classifyIngestionStatus / isIngestionPollable /
+  isIngestionRetryable / formatIngestionStage / UPLOAD_STAGE_LABELS
+  （exact match，unknown 中性，无假百分比）
+- lib/format.ts：formatBytes（undefined/0/B/KB/MB/GB/invalid → —）
+- features/sources/SourceWorkbenchPage.tsx：metadata + upload form +
+  ActiveJobStatus（2s 轮询，terminal/401/403/404 停）+ assets list +
+  ingestion list/retry + SourcePage 导航 + ContentBlock 纯文本查看器
+- SourcesPage：valid source → Link to workbench；移除 FE-001 placeholder note
+- router：`/spaces/:spaceId/sources/:sourceId`
+- KnowledgePointDetailPage：provenance 区（listKnowledgePointSources），
+  失败不阻塞 detail
+- 测试新增：format.test.ts / ingestion-status.test.ts /
+  SourceWorkbenchPage.test.tsx / SourceWorkbenchPolling.test.tsx /
+  KnowledgePage provenance + SourcesPage open-link
+- 安全：renderer 0 axios/XHR/dangerouslySetInnerHTML/localStorage/electron/fs；
+  Electron 四件套不变；preload zero surface
+
+## FE-002A Final Validation（2026-09-12，Windows Node 实测）
+
+- lint OK / typecheck OK
+- test:run 23 files / 266 tests 全 PASS（230 → 266，+36 meaningful，无凑数）
+- coverage：Statements 85.44% (2143/2508) / Branches 84.25% (578/686) /
+  Functions 84.32% (156/185) / Lines 85.44%（较 FE-001.5 84.41% 提升）
+- build OK：main 6.44 kB / preload 0.01 kB / renderer index-Bi4920Gu.js
+  553.56 kB + 14.48 kB css
+- BACKEND CONTRACT REQUEST：无
+- 未 commit；FE-002B / PDF / Image / Auth 未开始
+
+## FE-002A-CLOSEOUT-01 Checkpoint（2026-09-12）
+
+外部 review 判定 266 tests / 无 real smoke 未达 commit gate，执行 closeout。
+
+- 删除 docs/FE-002A-AUTONOMOUS-5H.md（未入 git）
+- SourcesPage 真实文件核查：valid id → Open link；invalid → —；
+  FE-001 placeholder 文案已移除；CreateSourceDialog `busy={pending}` 正确
+- 测试 266 → **302**（+36）：source get 401/403/404/network/5xx、
+  upload zero-byte/long-name/clear/replace/401/403/500/job-fail/no-double-submit、
+  asset multi/optional-fields、ingestion PENDING/RUNNING/SUCCEEDED/FAILED/unknown、
+  content multiline/MD-as-text/script-stays-text/long-unbroken/401/404/500/403、
+  formatBytes/formatIngestionStage/isIngestionRetryable 边界
+- Coverage：Statements 87.36% / Branches 85.02% / Functions 84.86% / Lines 87.36%
+- lint OK / typecheck OK / test:run 302/302 / build OK
+  （renderer index-Bi4920Gu.js 553.56 kB + 14.48 kB css）
+- Production app://aistudy smoke：Electron 进程存活 12s；out/main 实测含
+  APP_ORIGIN="app://aistudy"、DEFAULT_API_BASE_URL、resolveApiBaseUrl、
+  contextIsolation=true；无 startup crash
+- **Real Backend TXT/MD smoke BLOCKED**：本机 MySQL :3306 未运行；
+  E2eBackendHarness 需要 FLYWAY_DB_URL + 活跃 MySQL（aistudy_flyway_test）。
+  属环境阻塞，非前端代码缺陷。失败路径由 302 测试中的 401/403/404/5xx/network
+  与 polling-stop 断言覆盖。
+- 静态扫描：renderer 0 axios/XHR/dangerouslySetInnerHTML/electron/fs/ipcRenderer/
+  localStorage.setItem（仅注释提及）；Electron 四件套不变
+- Git：diff --check 无 whitespace error；status 范围仅 desktop/** + docs/frontend-*；
+  FE-002A plan 不存在；无 node_modules/out/dist/token/zip/.env 入 git
+- 未 commit

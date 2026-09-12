@@ -539,3 +539,97 @@ describe('KnowledgePointDetailPage', () => {
     expect(screen.getAllByText('PUBLISHED').length).toBeGreaterThan(0);
   });
 });
+
+describe('KnowledgePointDetailPage — provenance (FE-002A PHASE 19)', () => {
+  it('shows linked content blocks when the contract exposes them', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: {
+          id: 5,
+          title: 'Point',
+          content: 'body',
+          status: 'DRAFT',
+          originType: 'USER_CURATED',
+        },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        data: [
+          {
+            id: 91,
+            contentBlockId: 44,
+            relationType: 'PRIMARY',
+          },
+        ],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    expect(await screen.findByText(/Content block #44/)).toBeInTheDocument();
+    expect(screen.getByText(/PRIMARY/)).toBeInTheDocument();
+  });
+
+  it('shows empty provenance note when no links exist', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: { id: 5, title: 'Point', content: 'body', status: 'DRAFT' },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    expect(
+      await screen.findByText('No linked source content yet.')
+    ).toBeInTheDocument();
+  });
+
+  it('degrades provenance to a muted note on error without blocking detail', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: { id: 5, title: 'Point', content: 'body', status: 'DRAFT' },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        data: undefined,
+        error: { message: 'boom' },
+        response: { status: 500 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    expect(await screen.findByText('Point')).toBeInTheDocument();
+    expect(await screen.findByText('Provenance unavailable.')).toBeInTheDocument();
+  });
+});

@@ -1,23 +1,19 @@
 /**
- * Source Library UI (FE-001 PHASE H).
+ * Source Library UI (FE-001 PHASE H, FE-002A PHASE 8).
  *
  * /spaces/:spaceId/sources — list sources (listSources), create with
- * sourceType fixed to DESKTOP_UPLOAD (the UI never exposes an admin
- * sourceType dropdown).
- *
- * FE-001 deliberately does NOT implement file upload: no file input,
- * no drag&drop, no picker IPC, no multipart fetch. A short note tells
- * the user upload arrives with the SourceAsset contract.
+ * sourceType fixed to DESKTOP_UPLOAD. FE-002A adds navigation into the
+ * per-source workbench for valid source IDs only.
  */
 
 import { useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'react-router-dom';
 import { useApiClient } from '../../lib/api-context';
 import { unwrap, normalizeApiError } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
 import { formatDateTime } from '../../lib/format';
-import { parsePositiveIdParam } from '../../lib/ids';
+import { isPositiveId, parsePositiveIdParam } from '../../lib/ids';
 import { useFormError } from '../../lib/use-form-error';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -59,7 +55,9 @@ export function SourcesPage() {
         .then(unwrap);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sources(spaceId ?? 0) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.sources(spaceId ?? 0),
+      });
       setCreating(false);
     },
   });
@@ -80,11 +78,6 @@ export function SourcesPage() {
           </Button>
         }
       />
-
-      <p className="page__note">
-        File upload will become available when SourceAsset contract is
-        integrated.
-      </p>
 
       {sourcesQuery.isPending && <LoadingState text="加载来源列表…" />}
 
@@ -115,19 +108,36 @@ export function SourcesPage() {
               <th>Type</th>
               <th>Status</th>
               <th>Created</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {sources.map((source, index) => (
-              <tr key={source.id ?? `source-${index}`}>
-                <td>{source.title ?? '—'}</td>
-                <td>{source.sourceType ?? '—'}</td>
-                <td>
-                  <StatusBadge status={source.status} />
-                </td>
-                <td>{formatDateTime(source.createdAt)}</td>
-              </tr>
-            ))}
+            {sources.map((source, index) => {
+              const sourceId = source.id;
+              const navigable = isPositiveId(sourceId);
+              return (
+                <tr key={sourceId ?? `source-${index}`}>
+                  <td>{source.title ?? '—'}</td>
+                  <td>{source.sourceType ?? '—'}</td>
+                  <td>
+                    <StatusBadge status={source.status} />
+                  </td>
+                  <td>{formatDateTime(source.createdAt)}</td>
+                  <td>
+                    {navigable ? (
+                      <Link
+                        to={`/spaces/${spaceId}/sources/${sourceId}`}
+                        className="nav-link"
+                      >
+                        Open
+                      </Link>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -137,7 +147,9 @@ export function SourcesPage() {
           onClose={() => setCreating(false)}
           onSubmit={(title) => createSource.mutate(title)}
           pending={createSource.isPending}
-          error={createSource.isError ? normalizeApiError(createSource.error) : null}
+          error={
+            createSource.isError ? normalizeApiError(createSource.error) : null
+          }
         />
       )}
     </div>
@@ -184,10 +196,16 @@ function CreateSourceDialog({
           Source type is fixed to DESKTOP_UPLOAD for this client.
         </p>
         {formError.message && (
-          <p className="form__error" role="alert">{formError.message}</p>
+          <p className="form__error" role="alert">
+            {formError.message}
+          </p>
         )}
         <div className="form__actions">
-          <Button type="submit" variant="primary" disabled={pending || !title.trim()}>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={pending || !title.trim()}
+          >
             {pending ? 'Creating…' : 'Create'}
           </Button>
           <Button onClick={onClose} disabled={pending}>

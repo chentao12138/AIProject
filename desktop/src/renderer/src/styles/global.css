@@ -692,6 +692,76 @@ body {
   word-break: break-word;
 }
 
+/* ---------- FE-002A Source Workbench ---------- */
+
+.workbench-section {
+  margin-bottom: var(--space-5);
+}
+
+.workbench-section .section-title {
+  margin: 0 0 var(--space-3);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.meta-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.meta-list dt {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 0 0 2px;
+}
+
+.meta-list dd {
+  margin: 0;
+  font-weight: 500;
+}
+
+.upload-stage {
+  margin: var(--space-2) 0;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.ingestion-active {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface-alt);
+  border-radius: var(--radius);
+}
+
+.content-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.content-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.content-block__type {
+  margin: 0 0 var(--space-2);
+  font-size: 12px;
+}
+
+.content-block__text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 /* ---------- Dev session ---------- */
 
 .dev-session {

@@ -1,10 +1,15 @@
 /**
- * KnowledgePoint Detail + Publish flow (FE-001 PHASE I5/I6).
+ * KnowledgePoint Detail + Publish flow (FE-001 PHASE I5/I6,
+ * FE-002A PHASE 19 provenance).
  *
  * DRAFT -> shows a single Publish action (publishKnowledgePoint).
  * PUBLISHED -> shows a Published badge; no repeated publish CTA
  * (backend publish is idempotent, but the UI must not fabricate
  * repeat requests).
+ *
+ * Provenance: BUSINESS-007 stable links (listKnowledgePointSources)
+ * are shown when the contract exposes them. Navigation only for
+ * positive source ids that have a real route.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -51,6 +56,21 @@ export function KnowledgePointDetailPage() {
         return Promise.reject(new Error('invalid space id'));
       }
       return api.listKnowledgeCategories(spaceId).then(unwrap);
+    },
+    enabled: idsValid,
+  });
+
+  // BUSINESS-007 provenance links. Failure never blocks the detail page.
+  const provenanceQuery = useQuery({
+    queryKey: queryKeys.knowledgePointSources(
+      spaceId ?? 0,
+      knowledgePointId ?? 0
+    ),
+    queryFn: () => {
+      if (spaceId === null || knowledgePointId === null) {
+        return Promise.reject(new Error('invalid ids'));
+      }
+      return api.listKnowledgePointSources(spaceId, knowledgePointId).then(unwrap);
     },
     enabled: idsValid,
   });
@@ -107,6 +127,8 @@ export function KnowledgePointDetailPage() {
   }
   const categoryNameFor = (categoryId: number): string =>
     categoryNameById.get(categoryId) ?? `#${categoryId}`;
+
+  const provenanceLinks = provenanceQuery.data ?? [];
 
   return (
     <div className="page">
@@ -186,6 +208,34 @@ export function KnowledgePointDetailPage() {
       <section className="content-block">
         <h2 className="section-title">Content</h2>
         <div className="content-block__body">{point.content || '—'}</div>
+      </section>
+
+      <section className="workbench-section" aria-label="Provenance">
+        <h2 className="section-title">Provenance</h2>
+        {provenanceQuery.isPending && (
+          <p className="muted">Loading sources…</p>
+        )}
+        {provenanceQuery.isError && (
+          <p className="muted">Provenance unavailable.</p>
+        )}
+        {provenanceQuery.isSuccess && provenanceLinks.length === 0 && (
+          <p className="muted">No linked source content yet.</p>
+        )}
+        {provenanceQuery.isSuccess && provenanceLinks.length > 0 && (
+          <ul className="point-list">
+            {provenanceLinks.map((link, index) => {
+              // The contract exposes contentBlockId; source navigation
+              // is only offered when we can form a real route. We do
+              // NOT invent a content-block detail route in FE-002A.
+              return (
+                <li key={link.id ?? `prov-${index}`} className="muted">
+                  Content block #{link.contentBlockId ?? '—'}
+                  {link.relationType ? ` · ${link.relationType}` : ''}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
     </div>
   );
