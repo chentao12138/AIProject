@@ -762,6 +762,32 @@ body {
   line-height: 1.55;
 }
 
+.content-block--highlighted {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  background: #eef4ff;
+}
+
+.workbench-summary {
+  margin: 0 0 var(--space-3);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.pdf-reader-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.pdf-reader-nav__label {
+  font-weight: 500;
+  min-width: 100px;
+  text-align: center;
+}
+
 /* ---------- Dev session ---------- */
 
 .dev-session {

@@ -365,3 +365,132 @@ Git 状态一律以 Windows Git 输出为权威（git.exe -C D:/AIProject-fronte
 - Git：diff --check 无 whitespace error；status 范围仅 desktop/** + docs/frontend-*；
   FE-002A plan 不存在；无 node_modules/out/dist/token/zip/.env 入 git
 - 未 commit
+
+## FE-002A Committed + Real Ingestion Smoke（2026-09-12）
+
+- User commit：`a455be1` "feat: add source asset ingestion workbench"（20 files）
+- Real TXT smoke：space=280 source=258 asset=161 job=121 SUCCEEDED，1 page / 1 block
+- Real MD smoke：space=280 source=259 asset=162 job=122 SUCCEEDED，1 page / 3 blocks
+  （`<script>` 保持文本，SCRIPT_AS_TEXT=YES）
+- Failure smoke：无效 JWT → 401；有效 JWT recovery OK
+- TEMP/token/smoke 文件清理；git 零改动
+
+## FE-002B Media Ingestion Sprint（2026-09-13）
+
+Batch C commit `ec070c9` 在 `batch-c-frontend-handoff` 分支（用户需 merge）。
+api-client 方法签名未变——同一 uploadSourceAsset 扩展了 PDF/Image。
+
+- 新增 `lib/media-policy.ts`：classifyMediaFile / precheckFileSize /
+  describeIngestionErrorCode（13 个 stable failure code → 中文文案）/
+  isImageOnlyPdfSuccess / isStandaloneImageSuccess
+- Upload accept 扩展：.pdf/.png/.jpg/.jpeg + 原有 txt/md
+- Size precheck：PDF>100MB / Image>50MB / TXT>64MB 上传前拦截
+- Image 成功态：IMAGE page + 0 blocks →「图片已成功处理。当前版本不提供 OCR」
+- Image-only PDF：BODY page + 空文本 + 0 blocks →「PDF 已成功处理，但没有可提取文本」
+- Encrypted PDF：PDF_ENCRYPTED → 清晰中文文案 + retry
+- PDF 多页导航：1-based label，IMAGE page 显示 Image N
+- 测试 302 → **335**（+33：media-policy 27 + workbench media 6）
+- Coverage：Statements 87.34% / Branches 85.03% / Functions 85.34%
+- lint OK / typecheck OK / build OK（renderer 557.77 kB）
+
+### FE-002B Real Backend Smokes
+
+| Flow | Source | Asset | Job | Status | Pages | Blocks |
+|------|--------|-------|-----|--------|-------|--------|
+| PDF blank | 1 | 4 | 4 | SUCCEEDED | 1 BODY (empty) | 0 |
+| PNG | 2 | 5 | 5 | SUCCEEDED | 1 IMAGE | 0 |
+| JPEG | 2 | 6 | 6 | SUCCEEDED | 2 IMAGE | 0 |
+| Fake PDF | 1 | 7 | — | FAILED INVALID_PDF | — | — |
+| Bad JWT | — | — | — | 401 → recovery OK | — | — |
+
+- 手写 reportlab PDF 初版被 PDFBox 拒；curl 二进制 multipart 上传 blank PDF 正确 SUCCEEDED
+- PowerShell Invoke-RestMethod 上传二进制 PDF 会损坏内容——真实 smoke 应用 curl.exe
+- 删除 docs/FE-002B-2DAY-BUSINESS-SPRINT.md（未入 git）
+- TEMP/token/smoke 文件清理；harness 进程终止
+- 未 commit；待用户 merge batch-c-frontend-handoff 后 review
+
+## FE-002B-BUSINESS-CONTINUATION-01（2026-09-13）
+
+Day 2 业务补全。Batch C 仍未 merge（api-client 签名未变，不阻塞）。
+
+- 新增 `lib/latest-selection.ts`：selectLatestAsset（createdAt+id 确定性）/
+  selectLatestJobForAsset（按 assetId 过滤）/ filterPagesForAsset（sourceAssetId）/
+  deriveContentState（8 个 presentation states）/ CONTENT_STATE_LABELS
+- **SourceWorkbenchPage 全面重构**：
+  - BusinessSummary：一行摘要（如「PDF · 12 pages · Succeeded」）+
+    latest file / latest ingestion / content state
+  - ContentSection 只展示 latest asset 的 pages（stale prevention）
+  - RUNNING →「新文件正在处理」；FAILED →「最新文件处理失败」
+  - IngestionHistory：asset name / status / stage / created / finished /
+    latest badge / retry 仅 FAILED
+  - PDF reader：Page X of N / Previous / Next / page list / URL ?page= 同步
+  - Block highlight：?block= query / data-block-id / scrollIntoView / CSS highlight
+- 测试：删除不适用旧架构的 edge/media/polling 测试（~19 项），
+  新增 latest-selection 27 项 + Day2 workbench 测试 → **316 tests**
+- lint OK / typecheck OK / build OK（568.14 kB）
+- Production Electron boot PASS
+- BACKEND CONTRACT REQUEST：KnowledgePointSourceResponse 无 sourceId/sourcePageId，
+  无法做 provenance→source 导航（需 backend 在 provenance DTO 中暴露 sourceId）
+- 未 commit
+
+## FE-002B-PRE-COMMIT-FINALIZE-01（2026-09-13）
+
+用户手动 merge Batch C：`2bc86b3` Merge ec070c9 into feat/fe-001。
+stash → merge → stash pop 无冲突。lint/typecheck/test/build 四项全绿。
+
+### Post-merge contract verify
+
+- SourceAsset / IngestionJob / SourcePage / ContentBlock 签名不变
+- KnowledgePointSourceResponse 确认仅 contentBlockId，无 sourceId/sourcePageId
+- BACKEND CONTRACT REQUEST 已记录
+
+### Critical regression coverage
+
+新增 SourceWorkbenchCritical.test.tsx（16 项），替代已删除的 EdgeCases/Polling：
+- source get 401/403/404/5xx/network
+- invalid ids → no request
+- upload 401/403/500
+- polling stop SUCCEEDED/FAILED
+- stale content（PENDING + FAILED 带旧 success）
+- latest asset/job deterministic
+- retry FAILED only
+- size precheck
+
+### Real smoke
+
+- **Multi-asset smoke BLOCKED**：Batch C `ec070c9` 后端编译失败
+  （AiAnswerExplanationService.java:158 调用 SnapshotView.answerDataJson()，
+  该 record 无此方法）。E2eBackendHarness 无法启动。
+  前端代码不受影响。需后端修复后补跑。
+- Production app:// smoke：Electron 启动 PASS（12s）
+
+### Final gates
+
+- lint OK / typecheck OK / test:run **332/332**（26 files）/ build OK
+- Coverage：Statements 86.64% (2517/2905) / Branches 82.42% / Functions 83.67%
+- 未 commit
+
+## AI Provider Settings 架构预研（2026-09-13）
+
+后端 AI Tutor / Explanation / Study Coach 进入实现阶段。前端需提供 AI Provider
+设置入口，但等 AI-009 contract + live OpenAPI 稳定后再正式接入。
+
+### 核心架构原则
+
+**AI Key 由用户在前端输入，但不由前端保管。**
+前端只是配置界面；真实 Key 交给后端安全存储；
+所有 Tutor / Explanation / Study Coach 均由后端请求 StepFun。
+前端绝不直接从 renderer 请求 StepFun。
+
+### API Key UI 语义（关键）
+
+- GET settings 只返回 `apiKeyConfigured: boolean`，绝不返回真实 Key
+- 保存时若用户未重新输入 Key → **省略 `apiKey` 字段**（保留现有）
+- 只有用户真的输入新 Key 时才发送 `apiKey`
+- 绝不发送 `"********"` 占位符
+
+### 当前状态
+
+- `packages/api-client` 已确认**无** AI Provider 方法
+- 等 AI-009 contract 稳定 + api-client 再生后接入
+- 架构约束已写入 frontend-current-task.md

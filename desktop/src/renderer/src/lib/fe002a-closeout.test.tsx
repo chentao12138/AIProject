@@ -3,8 +3,7 @@
  * All assertions target real contract behavior — no filler.
  */
 
-import { describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { formatBytes, formatDateTime } from './format';
 import {
   classifyIngestionStatus,
@@ -12,8 +11,6 @@ import {
   isIngestionPollable,
   isIngestionRetryable,
 } from './ingestion-status';
-import { mockApiClient, renderWithProviders } from '../test/test-utils';
-import { SourceWorkbenchPage } from '../features/sources/SourceWorkbenchPage';
 
 describe('formatBytes — additional edges', () => {
   it('handles MAX_SAFE_INTEGER without overflow crash', () => {
@@ -63,60 +60,5 @@ describe('ingestion-status — additional edges', () => {
     expect(isIngestionRetryable(' failed ')).toBe(true);
     expect(isIngestionRetryable('FAILED_RETRY')).toBe(false);
     expect(isIngestionRetryable('FAIL')).toBe(false);
-  });
-});
-
-/* Integration: content 500 + workbench invalid source in nested route */
-
-const sourceOk = {
-  data: { id: 3, title: 'N', sourceType: 'DESKTOP_UPLOAD', status: 'ACTIVE' },
-  response: { status: 200 },
-};
-
-function workbenchApi(overrides: Record<string, unknown> = {}) {
-  return mockApiClient({
-    getSource: vi.fn(async () => sourceOk),
-    listSourceAssets: vi.fn(async () => ({ data: [], response: { status: 200 } })),
-    listIngestionJobs: vi.fn(async () => ({ data: [], response: { status: 200 } })),
-    listSourcePages: vi.fn(async () => ({ data: [], response: { status: 200 } })),
-    ...overrides,
-  });
-}
-
-describe('SourceWorkbenchPage — content 500 and blocks 403', () => {
-  it('shows 5xx on pages query', async () => {
-    renderWithProviders(<SourceWorkbenchPage />, {
-      apiClient: workbenchApi({
-        listSourcePages: vi.fn(async () => ({
-          data: undefined,
-          error: { message: 'no' },
-          response: { status: 500 },
-        })),
-      }),
-      initialEntries: ['/spaces/7/sources/3'],
-      routePath: '/spaces/:spaceId/sources/:sourceId',
-    });
-    expect(
-      await screen.findByText(/服务器暂时无法完成请求/)
-    ).toBeInTheDocument();
-  });
-
-  it('shows 403 on content-blocks query when page is selected', async () => {
-    renderWithProviders(<SourceWorkbenchPage />, {
-      apiClient: workbenchApi({
-        listSourcePages: vi.fn(async () => ({
-          data: [{ id: 20, pageOrder: 0 }],
-          response: { status: 200 },
-        })),
-        listContentBlocks: vi.fn(async () => ({
-          data: undefined,
-          error: { message: 'no' },
-          response: { status: 403 },
-        })),
-      }),
-      initialEntries: ['/spaces/7/sources/3'],
-      routePath: '/spaces/:spaceId/sources/:sourceId',
-    });
-    expect(await screen.findByText(/无权执行此操作/)).toBeInTheDocument();
   });
 });

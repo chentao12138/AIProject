@@ -2,117 +2,135 @@
 
 ## Objective
 
-LONG-RUN-FE-002A — SOURCE ASSET UPLOAD + INGESTION WORKBENCH + TXT/MARKDOWN CONTENT
-
-## Current Phase
-
-Core implementation DONE (contract audit → multipart gate → workbench → upload →
-ingestion polling → TXT/MD content → provenance). Validation suite green.
-Awaiting final docs closeout + user review/commit.
+FE-002B-PRE-COMMIT-FINALIZE-01（已完成，待 commit）
++ AI Provider Settings 架构预研（等 AI-009 contract）
 
 ## Baseline (post-merge)
 
-- Branch: feat/fe-001 @ d93b393 "Merge branch 'main' into feat/fe-001"
-- Pre-merge FE-001.5 checkpoint: e099ba1
-- main brought BUSINESS-004~007: SourceAsset, IngestionJob, TXT/MD, provenance,
-  stable packages/api-client (MultipartUploadBody FormData subclass, no global
-  Content-Type)
+- Branch: feat/fe-001 @ `2bc86b3` Merge ec070c9 (Batch C)
+- api-client from stable Batch C committed revision
 - Windows Node v24.11.1 / npm 11.6.2 / win32
 
-## Stable Contract Matrix (PHASE 2 audit)
+## Contract Verification
 
-### SourceAsset
-| method | HTTP | notes |
-|---|---|---|
-| uploadSourceAsset(spaceId, sourceId, file) | POST .../assets multipart part `file` | FormData subclass; browser boundary |
-| listSourceAssets(spaceId, sourceId) | GET .../assets | newest first |
-| getSourceAsset(spaceId, sourceId, assetId) | GET .../assets/{assetId} | |
+- SourceAsset / IngestionJob / SourcePage / ContentBlock signatures unchanged
+- KnowledgePointSourceResponse: **only contentBlockId** — confirmed no sourceId/sourcePageId
+- BACKEND CONTRACT REQUEST recorded (see below)
 
-SourceAssetResponse: id, spaceId, sourceId, assetRole, originalName, mimeType,
-sizeBytes, sha256, createdAt. storageKey NOT exposed.
+## Critical Test Coverage (replaces deleted EdgeCases/Polling)
 
-### IngestionJob
-| method | HTTP | notes |
-|---|---|---|
-| createIngestionJob(spaceId, sourceId, assetId) | POST .../ingestion-jobs body {assetId} | 201 / 409 duplicate / 422 not ready |
-| listIngestionJobs(spaceId, sourceId) | GET .../ingestion-jobs | newest first |
-| getIngestionJob(spaceId, jobId) | GET .../ingestion-jobs/{jobId} | space-scoped |
-| retryIngestionJob(spaceId, jobId) | POST .../retry | FAILED→PENDING only; else 409 |
+SourceWorkbenchCritical.test.tsx (16 tests):
+- Source get 401/403/404/5xx/network
+- Invalid ids → no request
+- Upload 401/403/500
+- Polling stops on SUCCEEDED / FAILED
+- Stale content prevention (PENDING + FAILED with old success)
+- Latest asset/job deterministic (newest createdAt wins)
+- Retry FAILED only
+- Size precheck blocks submit
 
-Status (exact): PENDING \| RUNNING \| SUCCEEDED \| FAILED
-Stage: QUEUED \| IMPORTING \| EXTRACTING \| STRUCTURING \| AI_PROCESSING \| NEEDS_REVIEW \| PUBLISHED
-Non-terminal = PENDING/RUNNING. Terminal success = SUCCEEDED. Terminal failure = FAILED.
-No substring matching. Unknown → neutral, not polled.
+## Real Smoke Status
 
-### Content
-| method | HTTP |
-|---|---|
-| listSourcePages(spaceId, sourceId) | GET .../pages (pageOrder ASC) |
-| listContentBlocks(spaceId, sourceId, pageId?) | GET .../content-blocks |
-| addKnowledgePointSources(spaceId, kpId, contentBlockIds) | POST .../sources |
-| listKnowledgePointSources(spaceId, kpId) | GET .../sources |
+| Smoke | Status |
+|-------|--------|
+| Multi-asset A→B latest switch | **BLOCKED** — backend compile error |
+| Failed-latest (fake PDF) | **BLOCKED** — same |
+| PDF/PNG/JPEG basic | PASS (Day 1 evidence) |
+| Production app:// | PASS (Electron alive 12s) |
 
-SourcePageResponse: id, spaceId, sourceId, sourceAssetId, sourcePageNumber,
-pageOrder, printedPageNumber, pageType, extractedText, …
-ContentBlockResponse: id, spaceId, sourceId, sourcePageId, blockType, sortOrder,
-normalizedText, structuredDataJson, locatorJson, …
-KnowledgePointSourceResponse: id, spaceId, knowledgePointId, contentBlockId,
-relationType, relevanceScore, createdAt
+**Backend compile error** (ec070c9):
+`AiAnswerExplanationService.java:158` calls `snapshot.answerDataJson()`
+but `AnswerDataCodec.SnapshotView` record has no such method.
+This blocks E2eBackendHarness startup → blocks real multi-asset smoke.
+Frontend code unaffected.
 
-## Architecture Decisions (FE-002A)
+## BACKEND CONTRACT REQUEST
 
-1. **Multipart gate PASS**: stable client uses `MultipartUploadBody extends FormData`,
-   no global Content-Type. Browser generates boundary. No axios/direct fetch.
-2. **File selection**: standard `<input type="file" accept=".txt,.md,…">`. No IPC,
-   no fs, no raw path. sandbox/preload unchanged.
-3. **Upload progress**: stage-state only (Ready / Uploading… / Uploaded /
-   Waiting for ingestion… / Ingesting… / Succeeded / Failed). Never fake %.
-   Backend progressPercent shown only when present and non-terminal.
-4. **Polling**: TanStack refetchInterval 2s, only while isIngestionPollable.
-   Stops on terminal / 401 / 403 / 404 / unmount / invalid id.
-5. **Retry**: contract-backed retryIngestionJob only for FAILED.
-6. **Content viewer**: plain `<pre>` readable text. NO dangerouslySetInnerHTML.
-   No Markdown renderer dependency. XSS test proves `<script>` stays text.
-7. **File-type policy**: TXT/Markdown only. PDF/Image deferred to Batch C.
-8. **Provenance**: BUSINESS-007 links listed on KnowledgePoint detail; no
-   invented routes for content blocks.
+```
+KNOWLEDGE PROVENANCE NAVIGATION
+KnowledgePointSourceResponse exposes contentBlockId but NOT:
+  sourceId
+  sourcePageId
+Frontend cannot safely navigate KnowledgePoint → Source → Page → Block
+without reverse N+1 lookups.
+Request: extend provenance response with sourceId + sourcePageId.
+Not blocking FE-002B commit.
+```
 
-## Route
+## Final Status
 
-`/spaces/:spaceId/sources/:sourceId` → SourceWorkbenchPage under SpaceScopeGuard.
-
-## Final Status (FE-002A-CLOSEOUT-01)
-
-FE-002A IMPLEMENTED
-WINDOWS LINT/TYPECHECK/TEST/COVERAGE/BUILD VERIFIED
-PRODUCTION app://aistudy SMOKE VERIFIED
-REAL TXT/MARKDOWN INGESTION — BLOCKED: local MySQL :3306 not running
-(E2eBackendHarness requires FLYWAY_DB_URL + live MySQL; environment
-blocker, not a frontend code defect). Failure-path behavior covered by
-302 unit/integration tests including 401/403/404/5xx/network on upload,
-source get, pages, blocks, and polling-stop semantics.
+FE-002B MEDIA INGESTION BUSINESS FLOW IMPLEMENTED
+STABLE BATCH C MERGED (2bc86b3)
+CRITICAL REGRESSION COVERAGE RESTORED (16 tests)
+PRODUCTION app:// SMOKE PASS
+REAL MULTI-ASSET SMOKE BLOCKED (backend compile error in ec070c9)
+PROVENANCE→SOURCE BLOCKED BY BACKEND CONTRACT
+WINDOWS GATES VERIFIED (332 tests / 86.64% coverage)
 AWAITING USER REVIEW AND COMMIT
-（不写 COMPLETE；不开始 FE-002B / PDF / Image / Auth）
 
-- 变更范围：desktop/** + docs/frontend-*；server/** 与 packages/api-client/** 零触碰
-- 测试：25 files / **302 tests**（baseline 230 → 302，≥300 gate MET）
-- Coverage：Statements **87.36%** (2191/2508) / Branches **85.02%** (596/701) /
-  Functions **84.86%** (157/185) / Lines **87.36%**
-- Build：renderer index-Bi4920Gu.js 553.56 kB + 14.48 kB css
-- Production smoke：Electron app://aistudy 存活；out/main 含 APP_ORIGIN +
-  DEFAULT_API_BASE_URL + resolveApiBaseUrl + contextIsolation=true
-- Electron 四件套不变；preload zero surface；无新 IPC
-- BACKEND CONTRACT REQUEST：无
-- docs/FE-002A-AUTONOMOUS-5H.md 已删除
+- lint OK / typecheck OK / test:run 332/332 / coverage OK / build OK
+- 26 test files / 332 tests
+- Coverage: Statements 86.64% / Branches 82.42% / Functions 83.67%
 
-## Allowed Write Scope
+## AI Provider Settings（架构预研，等 AI-009）
 
-- desktop/**
-- docs/frontend-current-task.md / docs/frontend-development-log.md
-- 禁止：server/**、packages/api-client/**、git add/commit/push/merge
+### 架构原则
+
+**AI Key 由用户在前端输入，但不由前端保管。**
+前端只是配置界面；真实 Key 交给后端安全存储；
+所有 Tutor / Explanation / Study Coach 均由后端请求 StepFun。
+
+### 前端职责
+
+- 提供 AI Settings UI（Provider / Base URL / Model / API Key / Enabled）
+- 调后端保存配置
+- 调后端"测试连接"
+- 展示 `apiKeyConfigured: true/false`
+- 展示连接成功/失败状态
+
+### 前端禁止
+
+- 不存 localStorage / sessionStorage
+- 不长期持久化 Key 于 renderer state
+- 不直接从 renderer 请求 StepFun
+- 不把 Key 打进日志
+- 不复制后端 AI DTO
+- 不要求 GET settings 返回真实 Key
+
+### API Key UI 语义
+
+- GET settings 只返回 `apiKeyConfigured: boolean`，绝不返回真实 Key
+- 保存时若用户未重新输入 Key → **省略 `apiKey` 字段**（表示保留现有）
+- 只有用户真的输入新 Key 时才发送 `apiKey`
+- 绝不发送 `"********"` 占位符
+
+### AI-009 Contract Spec（后端已实现，等 api-client 再生）
+
+```text
+GET    /api/v1/settings/ai                 → AiSettingsResponse
+PUT    /api/v1/settings/ai                 → AiSettingsResponse
+POST   /api/v1/settings/ai/test-connection → TestConnectionResponse
+DELETE /api/v1/settings/ai/api-key         → AiSettingsResponse
+```
+
+配置模型：
+```text
+provider = OPENAI_COMPATIBLE
+preset   = STEPFUN  →  baseUrl=https://api.stepfun.com/v1
+                       model=step-3.5-flash（可覆盖）
+```
+
+test-connection 返回：`{success, provider, model, latencyMs}`
+
+### 依赖
+
+- **api-client 尚未再生 AI-009 方法**（已确认）
+- 等 `packages/api-client` 再生后正式接入
+- 后端状态：IMPLEMENTATION COMPLETE / VERIFICATION DEFERRED
+- 后端下一步：test-compile → 自动化测试 → live OpenAPI / api-client → StepFun smoke
 
 ## Deferred
 
-- FE-002B PDF/Image（等 Backend Batch C）
-- 正式 Login / refresh / safeStorage
-- electron-builder / Playwright / packaging
+- Formal Auth / OCR / WebP / Question / Exam / AI Chat
+- Provenance→source navigation (needs backend sourceId)
+- AI Provider Settings UI（等 AI-009 contract）

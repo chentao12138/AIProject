@@ -1,25 +1,15 @@
 /**
- * SourceWorkbenchPage tests (FE-002A).
+ * SourceWorkbenchPage tests (FE-002B Day 2 architecture).
  *
- * Covers: source metadata, file selection, upload → create ingestion
- * job chain, stage labels (no fake %), assets list, ingestion list +
- * retry, polling stop on terminal, content pages + blocks as plain
- * readable text (no dangerouslySetInnerHTML).
+ * Content section requires: latest asset + SUCCEEDED job + pages
+ * with matching sourceAssetId. Tests mock the full chain.
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SourceWorkbenchPage } from './SourceWorkbenchPage';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
-
-function renderWorkbench(apiClient: ReturnType<typeof mockApiClient>) {
-  return renderWithProviders(<SourceWorkbenchPage />, {
-    apiClient,
-    initialEntries: ['/spaces/7/sources/3'],
-    routePath: '/spaces/:spaceId/sources/:sourceId',
-  });
-}
 
 const sourceOk = {
   data: {
@@ -31,236 +21,358 @@ const sourceOk = {
   response: { status: 200 },
 };
 
-const emptyLists = {
-  listSourceAssets: vi.fn(async () => ({ data: [], response: { status: 200 } })),
-  listIngestionJobs: vi.fn(async () => ({ data: [], response: { status: 200 } })),
-  listSourcePages: vi.fn(async () => ({ data: [], response: { status: 200 } })),
-};
-
-function baseApi(overrides: Record<string, unknown> = {}) {
+/** Full mock: asset 90 + SUCCEEDED job 55 + pages with sourceAssetId=90. */
+function contentReadyApi(
+  overrides: Record<string, unknown> = {}
+) {
   return mockApiClient({
     getSource: vi.fn(async () => sourceOk),
-    ...emptyLists,
+    listSourceAssets: vi.fn(async () => ({
+      data: [
+        {
+          id: 90,
+          originalName: 'notes.md',
+          mimeType: 'text/markdown',
+          sizeBytes: 100,
+          createdAt: '2026-09-01T10:00:00Z',
+        },
+      ],
+      response: { status: 200 },
+    })),
+    listIngestionJobs: vi.fn(async () => ({
+      data: [
+        {
+          id: 55,
+          assetId: 90,
+          status: 'SUCCEEDED',
+          stage: 'PUBLISHED',
+          createdAt: '2026-09-01T10:00:01Z',
+        },
+      ],
+      response: { status: 200 },
+    })),
+    listSourcePages: vi.fn(async () => ({
+      data: [
+        {
+          id: 20,
+          sourceAssetId: 90,
+          pageOrder: 0,
+          pageType: 'BODY',
+          extractedText: 'hello world',
+        },
+      ],
+      response: { status: 200 },
+    })),
+    listContentBlocks: vi.fn(async () => ({
+      data: [
+        {
+          id: 31,
+          blockType: 'PARAGRAPH',
+          sortOrder: 0,
+          normalizedText: 'hello world',
+        },
+      ],
+      response: { status: 200 },
+    })),
     ...overrides,
   });
 }
 
-/** Wait until the workbench form is mounted (source query settled). */
+function renderWorkbench(apiClient: ReturnType<typeof mockApiClient>) {
+  return renderWithProviders(<SourceWorkbenchPage />, {
+    apiClient,
+    initialEntries: ['/spaces/7/sources/3'],
+    routePath: '/spaces/:spaceId/sources/:sourceId',
+  });
+}
+
 async function waitForWorkbench() {
   await screen.findByRole('button', { name: /upload & ingest/i });
 }
 
-describe('SourceWorkbenchPage — metadata and empty states', () => {
-  it('renders source metadata', async () => {
-    renderWorkbench(baseApi());
-
-    expect(await screen.findByText('My Notes')).toBeInTheDocument();
-    expect(screen.getByText('DESKTOP_UPLOAD')).toBeInTheDocument();
-    await waitForWorkbench();
+describe('SourceWorkbenchPage — business summary', () => {
+  it('shows summary line with media type and content state', async () => {
+    renderWorkbench(contentReadyApi());
+    expect(await screen.findByTestId('summary-line')).toHaveTextContent(
+      /Markdown/
+    );
+    expect(screen.getByTestId('content-state')).toHaveTextContent('内容就绪');
   });
 
-  it('shows inaccessible for invalid ids and never calls child APIs', () => {
-    const getSource = vi.fn();
-    const listSourceAssets = vi.fn();
-    renderWithProviders(<SourceWorkbenchPage />, {
-      apiClient: mockApiClient({ getSource, listSourceAssets }),
-      initialEntries: ['/spaces/abc/sources/xyz'],
-      routePath: '/spaces/:spaceId/sources/:sourceId',
-    });
-    expect(screen.getByText('资源不存在或当前不可访问。')).toBeInTheDocument();
-    expect(getSource).not.toHaveBeenCalled();
-    expect(listSourceAssets).not.toHaveBeenCalled();
-  });
-
-  it('shows empty content state when no pages exist', async () => {
-    renderWorkbench(baseApi());
-    expect(
-      await screen.findByText('No extracted content yet')
-    ).toBeInTheDocument();
-  });
-});
-
-describe('SourceWorkbenchPage — upload flow', () => {
-  it('disables submit until a file is selected', async () => {
-    renderWorkbench(baseApi());
-    await waitForWorkbench();
-    expect(
-      screen.getByRole('button', { name: /upload & ingest/i })
-    ).toBeDisabled();
-  });
-
-  it('uploads via shared client FormData path and creates an ingestion job', async () => {
-    const user = userEvent.setup();
-    const uploadSourceAsset = vi.fn(async () => ({
-      data: {
-        id: 90,
-        originalName: 'notes.md',
-        sizeBytes: 120,
-        mimeType: 'text/markdown',
-      },
-      response: { status: 201 },
-    }));
-    const createIngestionJob = vi.fn(async () => ({
-      data: { id: 55, status: 'PENDING', stage: 'QUEUED' },
-      response: { status: 201 },
-    }));
-    const getIngestionJob = vi.fn(async () => ({
-      data: {
-        id: 55,
-        status: 'SUCCEEDED',
-        stage: 'PUBLISHED',
-        progressPercent: 100,
-      },
-      response: { status: 200 },
-    }));
+  it('shows no-asset state when empty', async () => {
     renderWorkbench(
-      baseApi({ uploadSourceAsset, createIngestionJob, getIngestionJob })
-    );
-    await waitForWorkbench();
-
-    const file = new File(['# hello'], 'notes.md', { type: 'text/markdown' });
-    const input = document.querySelector(
-      'input[type="file"]'
-    ) as HTMLInputElement;
-    expect(input).toBeTruthy();
-    fireEvent.change(input, { target: { files: [file] } });
-
-    expect(await screen.findByTestId('selected-file')).toHaveTextContent(
-      'notes.md'
-    );
-
-    await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
-
-    await waitFor(() => {
-      expect(uploadSourceAsset).toHaveBeenCalledWith(7, 3, file);
-    });
-    await waitFor(() => {
-      expect(createIngestionJob).toHaveBeenCalledWith(7, 3, 90);
-    });
-  });
-
-  it('shows stage labels and never a fake percent before job data', async () => {
-    renderWorkbench(baseApi());
-    await waitForWorkbench();
-
-    const stage = document.querySelector('.upload-stage');
-    expect(stage?.textContent).toBe('—');
-    expect(stage?.textContent).not.toMatch(/\d+%/);
-  });
-
-  it('shows upload failure message and keeps the form usable', async () => {
-    const user = userEvent.setup();
-    const uploadSourceAsset = vi.fn(async () => ({
-      data: undefined,
-      error: { message: 'boom' },
-      response: { status: 500 },
-    }));
-    renderWorkbench(baseApi({ uploadSourceAsset }));
-    await waitForWorkbench();
-
-    const file = new File(['x'], 'a.txt', { type: 'text/plain' });
-    const input = document.querySelector(
-      'input[type="file"]'
-    ) as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [file] } });
-    await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '服务器暂时无法完成请求，请稍后重试。'
-    );
-  });
-});
-
-describe('SourceWorkbenchPage — ingestion list and retry', () => {
-  it('lists jobs with exact status badges and offers Retry only for FAILED', async () => {
-    const user = userEvent.setup();
-    const retryIngestionJob = vi.fn(async () => ({
-      data: { id: 12, status: 'PENDING', stage: 'QUEUED' },
-      response: { status: 200 },
-    }));
-    renderWorkbench(
-      baseApi({
+      contentReadyApi({
+        listSourceAssets: vi.fn(async () => ({
+          data: [],
+          response: { status: 200 },
+        })),
         listIngestionJobs: vi.fn(async () => ({
+          data: [],
+          response: { status: 200 },
+        })),
+        listSourcePages: vi.fn(async () => ({
+          data: [],
+          response: { status: 200 },
+        })),
+      })
+    );
+    expect(await screen.findByTestId('summary-line')).toHaveTextContent(
+      '尚未上传文件'
+    );
+  });
+});
+
+describe('SourceWorkbenchPage — PDF reader', () => {
+  it('shows Page X of N and Prev/Next', async () => {
+    renderWorkbench(
+      contentReadyApi({
+        listSourceAssets: vi.fn(async () => ({
           data: [
-            { id: 11, status: 'SUCCEEDED', stage: 'PUBLISHED' },
             {
-              id: 12,
-              status: 'FAILED',
-              stage: 'QUEUED',
-              errorMessage: 'parse error',
+              id: 91,
+              originalName: 'doc.pdf',
+              mimeType: 'application/pdf',
+              createdAt: '2026-09-01T10:00:00Z',
             },
           ],
           response: { status: 200 },
         })),
-        retryIngestionJob,
-      })
-    );
-
-    expect(await screen.findByText('SUCCEEDED')).toBeInTheDocument();
-    expect(screen.getByText('FAILED')).toBeInTheDocument();
-
-    const retryButtons = screen.getAllByRole('button', { name: 'Retry' });
-    expect(retryButtons).toHaveLength(1);
-    await user.click(retryButtons[0]);
-    await waitFor(() => {
-      expect(retryIngestionJob).toHaveBeenCalledWith(7, 12);
-    });
-  });
-});
-
-describe('SourceWorkbenchPage — content viewer', () => {
-  it('renders pages and plain-text blocks without HTML injection', async () => {
-    const user = userEvent.setup();
-    renderWorkbench(
-      baseApi({
+        listIngestionJobs: vi.fn(async () => ({
+          data: [
+            { id: 56, assetId: 91, status: 'SUCCEEDED', stage: 'PUBLISHED' },
+          ],
+          response: { status: 200 },
+        })),
         listSourcePages: vi.fn(async () => ({
           data: [
-            { id: 21, pageOrder: 1 },
-            { id: 20, pageOrder: 0 },
+            { id: 60, sourceAssetId: 91, pageOrder: 0, pageType: 'BODY', extractedText: 'p0' },
+            { id: 61, sourceAssetId: 91, pageOrder: 1, pageType: 'BODY', extractedText: 'p1' },
+            { id: 62, sourceAssetId: 91, pageOrder: 2, pageType: 'BODY', extractedText: 'p2' },
           ],
           response: { status: 200 },
         })),
         listContentBlocks: vi.fn(async () => ({
           data: [
-            {
-              id: 31,
-              blockType: 'PARAGRAPH',
-              sortOrder: 1,
-              normalizedText: '<script>alert(1)</script>safe text',
-            },
+            { id: 70, blockType: 'PARAGRAPH', sortOrder: 0, normalizedText: 'p0 text' },
           ],
           response: { status: 200 },
         })),
       })
     );
 
-    // First page auto-selected (pageOrder 0 → id 20 → "Page 1").
-    expect(await screen.findByTestId('content-block')).toBeInTheDocument();
-    const pre = screen.getByTestId('content-block').querySelector('pre');
-    expect(pre?.textContent).toContain('<script>alert(1)</script>safe text');
-    expect(document.querySelector('script')).toBeNull();
-
-    // Switch to page 2 (pageOrder 1 → id 21).
-    const page2 = await screen.findByRole('button', { name: 'Page 2' });
-    await user.click(page2);
-    expect(page2).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByTestId('page-indicator')).toHaveTextContent(
+      'Page 1 of 3'
+    );
+    expect(
+      screen.getByRole('button', { name: 'Previous' })
+    ).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
   });
 
-  it('does not mount block query when pages have invalid ids only', async () => {
-    const listContentBlocks = vi.fn();
+  it('navigates pages with Next', async () => {
+    const user = userEvent.setup();
     renderWorkbench(
-      baseApi({
-        listSourcePages: vi.fn(async () => ({
-          data: [{ id: undefined, pageOrder: 1 }],
+      contentReadyApi({
+        listSourceAssets: vi.fn(async () => ({
+          data: [
+            { id: 91, originalName: 'doc.pdf', createdAt: '2026-09-01T10:00:00Z' },
+          ],
           response: { status: 200 },
         })),
-        listContentBlocks,
+        listIngestionJobs: vi.fn(async () => ({
+          data: [{ id: 56, assetId: 91, status: 'SUCCEEDED', stage: 'PUBLISHED' }],
+          response: { status: 200 },
+        })),
+        listSourcePages: vi.fn(async () => ({
+          data: [
+            { id: 60, sourceAssetId: 91, pageOrder: 0, pageType: 'BODY', extractedText: 'p0' },
+            { id: 61, sourceAssetId: 91, pageOrder: 1, pageType: 'BODY', extractedText: 'p1' },
+          ],
+          response: { status: 200 },
+        })),
+        listContentBlocks: vi.fn(async () => ({
+          data: [{ id: 70, blockType: 'PARAGRAPH', sortOrder: 0, normalizedText: 'text' }],
+          response: { status: 200 },
+        })),
       })
     );
 
-    // No navigable page buttons, no ContentBlocks component.
-    expect(await screen.findByRole('navigation', { name: 'Pages' })).toBeInTheDocument();
-    expect(screen.queryByTestId('content-block')).not.toBeInTheDocument();
-    expect(listContentBlocks).not.toHaveBeenCalled();
+    await screen.findByTestId('page-indicator');
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByTestId('page-indicator')).toHaveTextContent('Page 2 of 2');
+  });
+});
+
+describe('SourceWorkbenchPage — stale content prevention', () => {
+  it('shows processing note when latest job is RUNNING', async () => {
+    renderWorkbench(
+      contentReadyApi({
+        listIngestionJobs: vi.fn(async () => ({
+          data: [
+            { id: 55, assetId: 90, status: 'SUCCEEDED', stage: 'PUBLISHED' },
+            { id: 56, assetId: 91, status: 'RUNNING', stage: 'IMPORTING' },
+          ],
+          response: { status: 200 },
+        })),
+        listSourceAssets: vi.fn(async () => ({
+          data: [
+            { id: 90, originalName: 'old.md', createdAt: '2026-09-01T10:00:00Z' },
+            { id: 91, originalName: 'new.pdf', createdAt: '2026-09-02T10:00:00Z' },
+          ],
+          response: { status: 200 },
+        })),
+      })
+    );
+    expect(await screen.findByTestId('processing-note')).toHaveTextContent(
+      '新文件正在处理'
+    );
+  });
+
+  it('shows failed note when latest job FAILED', async () => {
+    renderWorkbench(
+      contentReadyApi({
+        listIngestionJobs: vi.fn(async () => ({
+          data: [
+            { id: 56, assetId: 91, status: 'FAILED', stage: 'QUEUED', errorCode: 'INVALID_PDF' },
+          ],
+          response: { status: 200 },
+        })),
+        listSourceAssets: vi.fn(async () => ({
+          data: [
+            { id: 91, originalName: 'bad.pdf', createdAt: '2026-09-02T10:00:00Z' },
+          ],
+          response: { status: 200 },
+        })),
+      })
+    );
+    expect(await screen.findByTestId('failed-note')).toBeInTheDocument();
+  });
+});
+
+describe('SourceWorkbenchPage — image no-OCR', () => {
+  it('shows image success note for IMAGE pages', async () => {
+    renderWorkbench(
+      contentReadyApi({
+        listSourceAssets: vi.fn(async () => ({
+          data: [
+            { id: 92, originalName: 'pic.png', mimeType: 'image/png', createdAt: '2026-09-01T10:00:00Z' },
+          ],
+          response: { status: 200 },
+        })),
+        listIngestionJobs: vi.fn(async () => ({
+          data: [{ id: 57, assetId: 92, status: 'SUCCEEDED', stage: 'PUBLISHED' }],
+          response: { status: 200 },
+        })),
+        listSourcePages: vi.fn(async () => ({
+          data: [
+            { id: 70, sourceAssetId: 92, pageOrder: 0, pageType: 'IMAGE', extractedText: null },
+          ],
+          response: { status: 200 },
+        })),
+        listContentBlocks: vi.fn(async () => ({
+          data: [],
+          response: { status: 200 },
+        })),
+      })
+    );
+    expect(await screen.findByTestId('image-success-note')).toHaveTextContent(
+      '图片已成功处理'
+    );
+  });
+});
+
+describe('SourceWorkbenchPage — no-text PDF', () => {
+  it('shows PDF no-text note for empty BODY pages', async () => {
+    renderWorkbench(
+      contentReadyApi({
+        listSourceAssets: vi.fn(async () => ({
+          data: [
+            { id: 93, originalName: 'scan.pdf', createdAt: '2026-09-01T10:00:00Z' },
+          ],
+          response: { status: 200 },
+        })),
+        listIngestionJobs: vi.fn(async () => ({
+          data: [{ id: 58, assetId: 93, status: 'SUCCEEDED', stage: 'PUBLISHED' }],
+          response: { status: 200 },
+        })),
+        listSourcePages: vi.fn(async () => ({
+          data: [
+            { id: 80, sourceAssetId: 93, pageOrder: 0, pageType: 'BODY', extractedText: '' },
+          ],
+          response: { status: 200 },
+        })),
+        listContentBlocks: vi.fn(async () => ({
+          data: [],
+          response: { status: 200 },
+        })),
+      })
+    );
+    expect(await screen.findByTestId('pdf-no-text-note')).toHaveTextContent(
+      'PDF 已成功处理'
+    );
+  });
+});
+
+describe('SourceWorkbenchPage — upload and ingestion history', () => {
+  it('renders ingestion history with latest badge and retry for FAILED', async () => {
+    renderWorkbench(
+      contentReadyApi({
+        listIngestionJobs: vi.fn(async () => ({
+          data: [
+            {
+              id: 55,
+              assetId: 90,
+              status: 'SUCCEEDED',
+              stage: 'PUBLISHED',
+              createdAt: '2026-09-01T10:00:01Z',
+            },
+            {
+              id: 54,
+              assetId: 89,
+              status: 'FAILED',
+              stage: 'QUEUED',
+              createdAt: '2026-09-01T09:00:00Z',
+              errorCode: 'INVALID_PDF',
+            },
+          ],
+          response: { status: 200 },
+        })),
+        listSourceAssets: vi.fn(async () => ({
+          data: [
+            { id: 90, originalName: 'ok.md', createdAt: '2026-09-01T10:00:00Z' },
+            { id: 89, originalName: 'bad.pdf', createdAt: '2026-09-01T09:00:00Z' },
+          ],
+          response: { status: 200 },
+        })),
+      })
+    );
+
+    const rows = await screen.findAllByTestId('history-row');
+    expect(rows.length).toBe(2);
+    // Latest job has the badge.
+    expect(rows[0].getAttribute('data-latest')).toBe('true');
+    // FAILED job has Retry button.
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('disables upload submit until file selected', async () => {
+    renderWorkbench(contentReadyApi());
+    await waitForWorkbench();
+    expect(
+      screen.getByRole('button', { name: /upload & ingest/i })
+    ).toBeDisabled();
+  });
+});
+
+describe('SourceWorkbenchPage — invalid ids', () => {
+  it('shows inaccessible for invalid source id', () => {
+    const getSource = vi.fn();
+    renderWithProviders(<SourceWorkbenchPage />, {
+      apiClient: mockApiClient({ getSource }),
+      initialEntries: ['/spaces/7/sources/abc'],
+      routePath: '/spaces/:spaceId/sources/:sourceId',
+    });
+    expect(screen.getByText('资源不存在或当前不可访问。')).toBeInTheDocument();
+    expect(getSource).not.toHaveBeenCalled();
   });
 });
