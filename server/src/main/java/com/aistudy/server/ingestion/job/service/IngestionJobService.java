@@ -3,8 +3,12 @@ package com.aistudy.server.ingestion.job.service;
 import com.aistudy.server.ingestion.extract.ContentExtractionService;
 import com.aistudy.server.ingestion.extract.IngestionParseException;
 import com.aistudy.server.ingestion.extract.TxtMarkdownContentParser.ParsedDocument;
+import com.aistudy.server.ingestion.image.ImageContentExtractionService;
+import com.aistudy.server.ingestion.image.ImageExtractionException;
 import com.aistudy.server.ingestion.job.entity.IngestionJob;
 import com.aistudy.server.ingestion.job.mapper.IngestionJobMapper;
+import com.aistudy.server.ingestion.pdf.PdfContentExtractionService;
+import com.aistudy.server.ingestion.pdf.PdfExtractionException;
 import com.aistudy.server.ingestion.zip.ZipArchiveInspector;
 import com.aistudy.server.ingestion.zip.ZipInspectionResult;
 import com.aistudy.server.ingestion.zip.ZipSafetyLimits;
@@ -33,58 +37,13 @@ import java.util.stream.Collectors;
 
 /**
  * BUSINESS-005 — application service for IngestionJob (process state
- * for one ingestion attempt, data-model.md §7.1) plus the synchronous
- * ZIP safety validation of the V1 pipeline.
+ * for one ingestion attempt) plus the synchronous ZIP safety
+ * validation of the V1 pipeline.
  *
- * <h3>V1 lifecycle (BACKEND_AUTORUN_4H.md §5.3)</h3>
- *
- * <pre>
- * PENDING --start--> RUNNING --finish--> SUCCEEDED
- *    |                   |
- *    +--fail--> FAILED --+--fail--> FAILED
- *                  |
- *                  +--retry--> PENDING (retryCount++)
- * </pre>
- *
- * <p>{@code status} is the coarse lifecycle state; {@code stage} is
- * the pipeline position (content-ingestion.md §6). PARTIAL_FAILED is
- * deferred — V1 ingestion is all-or-nothing per asset.
- *
- * <h3>Create-time pipeline dispatch (BUSINESS-005 + 006)</h3>
- *
- * <p>Creating a job dispatches on the asset format and runs the
- * pipeline steps that exist, synchronously (fast deterministic
- * steps; async infra is deferred until long-running extraction
- * exists — architecture.md §6.2):
- *
- * <ul>
- *   <li><strong>ZIP</strong> (assetRole ORIGINAL_PACKAGE):
- *       {@link ZipArchiveInspector} on the RAW bytes
- *       (content-ingestion.md §7 step 2). Valid → job stays PENDING
- *       (extraction is NOT part of this window — BACKEND_AUTORUN_4H.md
- *       §5.4); unsafe/unreadable → job FAILED with
- *       {@link IngestionErrorCode#ZIP_SAFETY_VIOLATION}.</li>
- *   <li><strong>TXT / Markdown</strong>: the deterministic parser
- *       runs (markRunning → parse → persist page+blocks → markSucceeded);
- *       content problems → FAILED with a stable code + SAFE message
- *       (ENCODING_ERROR / DOCUMENT_TOO_LARGE); nothing is persisted
- *       on failure.</li>
- *   <li><strong>anything else</strong> (PDF/image/…): no pipeline
- *       exists yet → 422 {@code INGESTION_NOT_READY}, no job row.</li>
- * </ul>
- *
- * <p>Duplicate guard: an asset that already has a PENDING / RUNNING /
- * SUCCEEDED job cannot be re-ingested (409) — silent duplicate
- * pages/blocks are impossible. A FAILED job does NOT block a new
- * attempt (retry or fresh create).</p>
- *
- * <h3>Ownership (D1/D2)</h3>
- *
- * <p>Create validates parent source via {@link SourceService#getMine}
- * and the asset via {@link SourceAssetService#getMine} (assetId +
- * spaceId + sourceId + owner in one JOIN) FIRST — any mismatch is a
- * 404 before any row is written. Reads are owner-scoped SQL JOINs
- * (id + spaceId + owner, plus source↔space consistency).
+ * <p>V1 dispatches to TXT/Markdown, PDF, or image ingestion. Each
+ * path validates the asset, extracts deterministic metadata/text,
+ * and persists one SourcePage plus optional ContentBlocks inside
+ * the surrounding job transaction.
  */
 @Service
 public class IngestionJobService {
@@ -111,6 +70,8 @@ public class IngestionJobService {
     private final SourceAssetService sourceAssetService;
     private final StorageService storageService;
     private final ContentExtractionService contentExtractionService;
+    private final PdfContentExtractionService pdfContentExtractionService;
+    private final ImageContentExtractionService imageContentExtractionService;
     private final ZipSafetyLimits zipLimits;
 
     public IngestionJobService(IngestionJobMapper ingestionJobMapper,
@@ -118,6 +79,8 @@ public class IngestionJobService {
                                SourceAssetService sourceAssetService,
                                StorageService storageService,
                                ContentExtractionService contentExtractionService,
+                               PdfContentExtractionService pdfContentExtractionService,
+                               ImageContentExtractionService imageContentExtractionService,
                                @Value("${aistudy.ingestion.zip.max-entries:10000}") int maxEntries,
                                @Value("${aistudy.ingestion.zip.max-entry-uncompressed-bytes:4GB}") DataSize maxEntryBytes,
                                @Value("${aistudy.ingestion.zip.max-total-uncompressed-bytes:16GB}") DataSize maxTotalBytes,
@@ -127,31 +90,27 @@ public class IngestionJobService {
         this.sourceAssetService = sourceAssetService;
         this.storageService = storageService;
         this.contentExtractionService = contentExtractionService;
+        this.pdfContentExtractionService = pdfContentExtractionService;
+        this.imageContentExtractionService = imageContentExtractionService;
         this.zipLimits = new ZipSafetyLimits(maxEntries, maxEntryBytes.toBytes(),
                 maxTotalBytes.toBytes(), maxCompressionRatio);
     }
 
     /**
      * Creates one ingestion job for the caller's own source + asset
-     * and runs the V1 pipeline steps that exist (format dispatch):
-     * ZIP safety inspection for ORIGINAL_PACKAGE assets, TXT/MD
-     * deterministic extraction for text assets.
+     * and runs the V1 pipeline steps that exist (format dispatch).
      *
-     * @return the persisted job (PENDING for validated ZIPs; RUNNING
-     *         → SUCCEEDED for ingested text; FAILED when a pipeline
-     *         step rejects the content), or {@code null} when
-     *         source/asset is absent or not owned (404)
+     * @return the persisted job, or {@code null} when source/asset is
+     *         absent or not owned (404)
      * @throws ResponseStatusException 409 when the asset already has a
      *         PENDING/RUNNING/SUCCEEDED job; 422 INGESTION_NOT_READY
-     *         when the asset format has no pipeline (PDF/image/…)
+     *         when the asset format has no wired pipeline
      */
     @Transactional
     public IngestionJob create(String ownerSubject,
                                Long spaceId,
                                Long sourceId,
                                Long assetId) {
-        // 1. Parent source + asset ownership (D1): null → 404 before
-        //    any row is written.
         if (sourceService.getMine(ownerSubject, spaceId, sourceId) == null) {
             return null;
         }
@@ -160,23 +119,17 @@ public class IngestionJobService {
             return null;
         }
 
-        // 2. Duplicate guard: an asset with a PENDING/RUNNING/SUCCEEDED
-        //    job must not be re-ingested (silent duplicate content).
         if (ingestionJobMapper.countActiveOrSucceeded(spaceId, sourceId, assetId) > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "an ingestion job for this asset already exists "
                             + "(pending, running or succeeded)");
         }
 
-        // 3. Format gate: only formats with a wired pipeline are
-        //    accepted — no zombie PENDING jobs for PDF/images.
-        if (!isZipAsset(asset) && !isTextAsset(asset)) {
+        if (!isSupportedAsset(asset)) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "INGESTION_NOT_READY: no ingestion pipeline for this asset format yet "
-                            + "(pdf/image ingestion is not implemented)");
+                    "INGESTION_NOT_READY: no ingestion pipeline for this asset format yet");
         }
 
-        // 4. Insert the job in PENDING/QUEUED.
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
         IngestionJob job = new IngestionJob();
         job.setSpaceId(spaceId);
@@ -191,32 +144,25 @@ public class IngestionJobService {
         job.setUpdatedAt(now);
         ingestionJobMapper.insert(job);
 
-        // 5. V1 pipeline dispatch.
         if (isZipAsset(asset)) {
             runZipSafetyGate(job, asset);
-        } else {
+        } else if (isTextAsset(asset)) {
             runTextPipeline(job, asset);
+        } else if (isPdfAsset(asset)) {
+            runPdfPipeline(job, asset);
+        } else if (isImageAsset(asset)) {
+            runImagePipeline(job, asset);
+        } else {
+            markFailed(job, IngestionErrorCode.UNSUPPORTED_FORMAT,
+                    "asset format has no ingestion pipeline");
         }
         return job;
     }
 
-    /**
-     * Returns ONE job of the caller's own space (space-scoped
-     * endpoint, api-guidelines.md §6).
-     *
-     * @return the job, or {@code null} when absent / not owned /
-     *         cross-space (404)
-     */
     public IngestionJob getMine(String ownerSubject, Long spaceId, Long jobId) {
         return ingestionJobMapper.selectByIdSpaceOwner(jobId, spaceId, ownerSubject);
     }
 
-    /**
-     * Lists the job history of the caller's own source, newest first.
-     *
-     * @return jobs (possibly empty), or {@code null} when the source
-     *         is absent / not owned (404)
-     */
     public List<IngestionJob> listMine(String ownerSubject, Long spaceId, Long sourceId) {
         if (sourceService.getMine(ownerSubject, spaceId, sourceId) == null) {
             return null;
@@ -224,15 +170,6 @@ public class IngestionJobService {
         return ingestionJobMapper.selectBySpaceSourceOwner(spaceId, sourceId, ownerSubject);
     }
 
-    /**
-     * Retries a FAILED job (R-INGEST-010): FAILED → PENDING,
-     * {@code retryCount++}, error fields cleared, then the V1
-     * pipeline steps run again (ZIP safety gate re-inspects).
-     *
-     * @return the re-queued job (possibly FAILED again by the safety
-     *         gate), or {@code null} when absent / not owned (404);
-     *         409 when the job is not in FAILED state
-     */
     @Transactional
     public IngestionJob retry(String ownerSubject, Long spaceId, Long jobId) {
         IngestionJob job = getMine(ownerSubject, spaceId, jobId);
@@ -264,6 +201,10 @@ public class IngestionJobService {
                 runZipSafetyGate(job, asset);
             } else if (isTextAsset(asset)) {
                 runTextPipeline(job, asset);
+            } else if (isPdfAsset(asset)) {
+                runPdfPipeline(job, asset);
+            } else if (isImageAsset(asset)) {
+                runImagePipeline(job, asset);
             } else {
                 markFailed(job, IngestionErrorCode.UNSUPPORTED_FORMAT,
                         "asset format has no ingestion pipeline");
@@ -272,14 +213,6 @@ public class IngestionJobService {
         return job;
     }
 
-    // ==================== pipeline transitions (V1) ====================
-
-    /**
-     * PENDING → RUNNING (startedAt set, stage → IMPORTING). Called by
-     * the ingestion executor (BUSINESS-006 TXT/Markdown parser).
-     *
-     * @throws IllegalStateException when the transition is invalid
-     */
     @Transactional
     public IngestionJob markRunning(IngestionJob job) {
         requireStatus(job, STATUS_PENDING, "start");
@@ -292,12 +225,6 @@ public class IngestionJobService {
         return job;
     }
 
-    /**
-     * RUNNING → SUCCEEDED (progress 100, stage → PUBLISHED,
-     * finishedAt set).
-     *
-     * @throws IllegalStateException when the transition is invalid
-     */
     @Transactional
     public IngestionJob markSucceeded(IngestionJob job) {
         requireStatus(job, STATUS_RUNNING, "finish");
@@ -311,13 +238,6 @@ public class IngestionJobService {
         return job;
     }
 
-    /**
-     * PENDING|RUNNING → FAILED with a stable error code + SAFE
-     * message (no stack trace, no absolute paths; bounded to the
-     * column size). finishedAt is set.
-     *
-     * @throws IllegalStateException when the transition is invalid
-     */
     @Transactional
     public IngestionJob markFailed(IngestionJob job,
                                    IngestionErrorCode errorCode,
@@ -336,31 +256,8 @@ public class IngestionJobService {
         return job;
     }
 
-    // ==================== helpers ====================
+    // ==================== pipeline steps ====================
 
-    private static void requireStatus(IngestionJob job, String expected, String action) {
-        if (!expected.equals(job.getStatus())) {
-            throw new IllegalStateException("cannot " + action + " job " + job.getId()
-                    + " in status " + job.getStatus() + " (expected " + expected + ")");
-        }
-    }
-
-    /** ORIGINAL_PACKAGE (server-derived for .zip, BUSINESS-004) ⇒ ZIP asset. */
-    private static boolean isZipAsset(SourceAsset asset) {
-        return SourceAssetService.ROLE_ORIGINAL_PACKAGE.equals(asset.getAssetRole());
-    }
-
-    /** V1 text formats (extension of the display basename, lowercase). */
-    private static boolean isTextAsset(SourceAsset asset) {
-        String name = asset.getOriginalName() == null ? "" : asset.getOriginalName();
-        int dot = name.lastIndexOf('.');
-        if (dot < 0 || dot == name.length() - 1) {
-            return false;
-        }
-        return TEXT_EXTENSIONS.contains(name.substring(dot + 1).toLowerCase(Locale.ROOT));
-    }
-
-    /** ZIP pipeline step: safety inspection; invalid → FAILED job. */
     private void runZipSafetyGate(IngestionJob job, SourceAsset asset) {
         ZipInspectionResult result = inspectZipAsset(asset);
         if (!result.valid()) {
@@ -369,13 +266,6 @@ public class IngestionJobService {
         }
     }
 
-    /**
-     * TXT/MD pipeline step (BUSINESS-006): RUNNING → parse →
-     * persist page+blocks → SUCCEEDED; content problems → FAILED
-     * with a stable code + SAFE message. Persistence happens only
-     * after a complete parse, so a FAILED job never leaves partial
-     * content behind.
-     */
     private void runTextPipeline(IngestionJob job, SourceAsset asset) {
         markRunning(job);
         try {
@@ -387,21 +277,48 @@ public class IngestionJobService {
         }
     }
 
+    private void runPdfPipeline(IngestionJob job, SourceAsset asset) {
+        markRunning(job);
+        try {
+            pdfContentExtractionService.extractAndPersist(asset);
+            markSucceeded(job);
+        } catch (PdfExtractionException e) {
+            markFailed(job, e.errorCode(), e.safeMessage());
+        }
+    }
+
+    private void runImagePipeline(IngestionJob job, SourceAsset asset) {
+        markRunning(job);
+        try {
+            imageContentExtractionService.extractAndPersist(asset);
+            markSucceeded(job);
+        } catch (ImageExtractionException e) {
+            markFailed(job, e.errorCode(), e.safeMessage());
+        }
+    }
+
+    // ==================== helpers ====================
+
+    private static void requireStatus(IngestionJob job, String expected, String action) {
+        if (!expected.equals(job.getStatus())) {
+            throw new IllegalStateException("cannot " + action + " job " + job.getId()
+                    + " in status " + job.getStatus() + " (expected " + expected + ")");
+        }
+    }
+
     private ZipInspectionResult inspectZipAsset(SourceAsset asset) {
         try (InputStream in = storageService.load(asset.getStorageKey())) {
             return ZipArchiveInspector.inspect(in, zipLimits);
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             throw new IllegalStateException("failed to load asset for ZIP inspection", e);
         }
     }
 
-    /** Safe, bounded summary of violations for the job's error_message. */
     private static String zipViolationSummary(List<ZipViolation> violations) {
-        String summary = violations.stream()
+        return boundMessage(violations.stream()
                 .limit(5)
                 .map(ZipViolation::message)
-                .collect(Collectors.joining("; "));
-        return boundMessage(summary);
+                .collect(Collectors.joining("; ")));
     }
 
     private static String boundMessage(String message) {
@@ -411,5 +328,39 @@ public class IngestionJobService {
         return message.length() <= MAX_ERROR_MESSAGE_LENGTH
                 ? message
                 : message.substring(0, MAX_ERROR_MESSAGE_LENGTH);
+    }
+
+    private static boolean isSupportedAsset(SourceAsset asset) {
+        return isZipAsset(asset) || isTextAsset(asset) || isPdfAsset(asset) || isImageAsset(asset);
+    }
+
+    private static boolean isZipAsset(SourceAsset asset) {
+        return SourceAssetService.ROLE_ORIGINAL_PACKAGE.equals(asset.getAssetRole());
+    }
+
+    private static boolean isTextAsset(SourceAsset asset) {
+        String name = asset.getOriginalName() == null ? "" : asset.getOriginalName();
+        int dot = name.lastIndexOf('.');
+        if (dot < 0 || dot == name.length() - 1) {
+            return false;
+        }
+        return TEXT_EXTENSIONS.contains(name.substring(dot + 1).toLowerCase(Locale.ROOT));
+    }
+
+    private static boolean isPdfAsset(SourceAsset asset) {
+        String name = asset.getOriginalName() == null ? "" : asset.getOriginalName();
+        int dot = name.lastIndexOf('.');
+        if (dot < 0 || dot == name.length() - 1) {
+            return false;
+        }
+        return "pdf".equals(name.substring(dot + 1).toLowerCase(Locale.ROOT));
+    }
+
+    private static boolean isImageAsset(SourceAsset asset) {
+        if (asset.getMimeType() == null) {
+            return false;
+        }
+        return asset.getMimeType().equals("image/png")
+                || asset.getMimeType().equals("image/jpeg");
     }
 }

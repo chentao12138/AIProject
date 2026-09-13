@@ -130,6 +130,35 @@ class ExamOpenApiContractTest {
 
     @MockitoBean
     private com.aistudy.server.studyplan.mapper.StudyTaskMapper studyTaskMapper;
+    // BUSINESS-017: keep the full-context test profile bootable without a
+    // database — the real UserAccountMapper runs under flyway-it tests only.
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountMapper userAccountMapper;
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountRoleMapper userAccountRoleMapper;
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.RefreshSessionMapper refreshSessionMapper;
+
+    @MockitoBean
+    private com.aistudy.server.search.mapper.SearchMapper searchMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageReferenceMapper aiMessageReferenceMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSettingsMapper aiProviderSettingsMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSecretMapper aiProviderSecretMapper;
+
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiConversationMapper aiConversationMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageMapper aiMessageMapper;
 
     private static final String EXAMS = "/api/v1/spaces/{spaceId}/exams";
 

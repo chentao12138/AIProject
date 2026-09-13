@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aistudy.server.search.mapper.SearchMapper">
+
+  <sql id="typeFilter">
+    <if test="types == null || types.isEmpty()">
+      AND 1=1
+    </if>
+    <if test="types != null and !types.isEmpty()">
+      AND entity_type IN
+      <foreach item="type" collection="types" open="(" separator="," close=")">
+        #{type}
+      </foreach>
+    </if>
+  </sql>
+
+  <select id="searchProjection" resultType="com.aistudy.server.search.model.SearchProjection">
+    SELECT * FROM (
+      <trim suffixOverrides="UNION ALL">
+      <if test="types == null || types.isEmpty() || types.contains('SOURCE')">
+        SELECT
+          'SOURCE' AS entity_type,
+          s.id AS entity_id,
+          s.title AS title,
+          s.title AS search_text,
+          CASE
+            WHEN s.title = #{exactQuery} THEN 100
+            WHEN s.title LIKE #{prefixPattern} ESCAPE '\\' THEN 80
+            WHEN s.title LIKE #{containsPattern} ESCAPE '\\' THEN 60
+            ELSE 0
+          END AS score,
+          s.id AS source_id,
+          NULL AS source_asset_id,
+          NULL AS source_page_id,
+          NULL AS page_number,
+          NULL AS knowledge_point_id,
+          NULL AS question_id,
+          CONCAT('SOURCE|', LPAD(s.id, 20, '0')) AS sort_key
+        FROM source s
+        JOIN learning_space ls ON ls.id = s.space_id
+        WHERE s.space_id = #{spaceId}
+          AND ls.owner_subject = #{ownerSubject}
+          AND s.title LIKE #{containsPattern} ESCAPE '\\'
+        UNION ALL
+      </if>
+
+      <if test="types == null || types.isEmpty() || types.contains('CONTENT_BLOCK')">
+        SELECT
+          'CONTENT_BLOCK' AS entity_type,
+          cb.id AS entity_id,
+          SUBSTRING(cb.normalized_text, 1, 120) AS title,
+          cb.normalized_text AS search_text,
+          CASE
+            WHEN cb.normalized_text = #{exactQuery} THEN 40
+            WHEN cb.normalized_text LIKE #{prefixPattern} ESCAPE '\\' THEN 30
+            WHEN cb.normalized_text LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            ELSE 0
+          END AS score,
+          cb.source_id AS source_id,
+          sp.source_asset_id AS source_asset_id,
+          cb.source_page_id AS source_page_id,
+          sp.source_page_number AS page_number,
+          NULL AS knowledge_point_id,
+          NULL AS question_id,
+          CONCAT('CONTENT_BLOCK|', LPAD(cb.id, 20, '0')) AS sort_key
+        FROM content_block cb
+        JOIN source_page sp ON sp.id = cb.source_page_id
+          AND sp.space_id = cb.space_id
+          AND sp.source_id = cb.source_id
+        JOIN learning_space ls ON ls.id = cb.space_id
+        WHERE cb.space_id = #{spaceId}
+          AND ls.owner_subject = #{ownerSubject}
+          AND cb.normalized_text LIKE #{containsPattern} ESCAPE '\\'
+        UNION ALL
+      </if>
+
+      <if test="types == null || types.isEmpty() || types.contains('KNOWLEDGE_POINT')">
+        SELECT
+          'KNOWLEDGE_POINT' AS entity_type,
+          kp.id AS entity_id,
+          kp.title AS title,
+          CONCAT_WS(' ',
+            kp.title,
+            IFNULL(kp.summary, ''),
+            IFNULL(kp.content, '')
+          ) AS search_text,
+          CASE
+            WHEN kp.title = #{exactQuery} THEN 100
+            WHEN kp.title LIKE #{prefixPattern} ESCAPE '\\' THEN 80
+            WHEN kp.title LIKE #{containsPattern} ESCAPE '\\' THEN 60
+            WHEN kp.summary LIKE #{containsPattern} ESCAPE '\\' THEN 40
+            WHEN kp.content LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            ELSE 0
+          END AS score,
+          NULL AS source_id,
+          NULL AS source_asset_id,
+          NULL AS source_page_id,
+          NULL AS page_number,
+          kp.id AS knowledge_point_id,
+          NULL AS question_id,
+          CONCAT('KNOWLEDGE_POINT|', LPAD(kp.id, 20, '0')) AS sort_key
+        FROM knowledge_point kp
+        JOIN learning_space ls ON ls.id = kp.space_id
+        WHERE kp.space_id = #{spaceId}
+          AND ls.owner_subject = #{ownerSubject}
+          AND kp.deleted_at IS NULL
+          AND (
+            kp.title LIKE #{containsPattern} ESCAPE '\\'
+            OR kp.summary LIKE #{containsPattern} ESCAPE '\\'
+            OR kp.content LIKE #{containsPattern} ESCAPE '\\'
+          )
+        UNION ALL
+      </if>
+
+      <if test="types == null || types.isEmpty() || types.contains('QUESTION')">
+        SELECT
+          'QUESTION' AS entity_type,
+          q.id AS entity_id,
+          q.stem AS title,
+          q.stem AS search_text,
+          CASE
+            WHEN q.stem = #{exactQuery} THEN 60
+            WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
+            WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            ELSE 0
+          END AS score,
+          NULL AS source_id,
+          NULL AS source_asset_id,
+          NULL AS source_page_id,
+          NULL AS page_number,
+          NULL AS knowledge_point_id,
+          q.id AS question_id,
+          CONCAT('QUESTION|', LPAD(q.id, 20, '0')) AS sort_key
+        FROM question q
+        JOIN learning_space ls ON ls.id = q.space_id
+        WHERE q.space_id = #{spaceId}
+          AND ls.owner_subject = #{ownerSubject}
+          AND q.deleted_at IS NULL
+          AND q.stem LIKE #{containsPattern} ESCAPE '\\'
+        UNION ALL
+      </if>
+
+      <if test="types == null || types.isEmpty() || types.contains('WRONG_QUESTION')">
+        SELECT
+          'WRONG_QUESTION' AS entity_type,
+          wq.id AS entity_id,
+          q.stem AS title,
+          q.stem AS search_text,
+          CASE
+            WHEN q.stem = #{exactQuery} THEN 60
+            WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
+            WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            ELSE 0
+          END AS score,
+          NULL AS source_id,
+          NULL AS source_asset_id,
+          NULL AS source_page_id,
+          NULL AS page_number,
+          NULL AS knowledge_point_id,
+          wq.question_id AS question_id,
+          CONCAT('WRONG_QUESTION|', LPAD(wq.id, 20, '0')) AS sort_key
+        FROM wrong_question wq
+        JOIN learning_space ls ON ls.id = wq.space_id
+        JOIN question q ON q.id = wq.question_id
+          AND q.space_id = wq.space_id
+          AND q.deleted_at IS NULL
+        WHERE wq.space_id = #{spaceId}
+          AND wq.user_subject = #{userSubject}
+          AND ls.owner_subject = #{ownerSubject}
+          AND q.stem LIKE #{containsPattern} ESCAPE '\\'
+      </if>
+      </trim>
+    ) AS results
+    WHERE score > 0
+    ORDER BY score DESC, sort_key ASC
+    LIMIT #{limit} OFFSET #{offset}
+  </select>
+
+  <select id="searchCount" resultType="long">
+    SELECT COUNT(*) FROM (
+      <trim suffixOverrides="UNION ALL">
+      <if test="types == null || types.isEmpty() || types.contains('SOURCE')">
+        SELECT 1 AS score_alias
+        FROM source s
+        JOIN learning_space ls ON ls.id = s.space_id
+        WHERE s.space_id = #{spaceId}
+          AND ls.owner_subject = #{ownerSubject}
+          AND s.title LIKE #{containsPattern} ESCAPE '\\'
+          AND CASE
+            WHEN s.title = #{exactQuery} THEN 100
+            WHEN s.title LIKE #{prefixPattern} ESCAPE '\\' THEN 80
+            WHEN s.title LIKE #{containsPattern} ESCAPE '\\' THEN 60
+            ELSE 0
+          END > 0
+        UNION ALL
+      </if>
+
+      <if test="types == null || types.isEmpty() || types.contains('CONTENT_BLOCK')">
+        SELECT 1 AS score_alias
+        FROM content_block cb
+        JOIN source_page sp ON sp.id = cb.source_page_id
+          AND sp.space_id = cb.space_id
+          AND sp.source_id = cb.source_id
+        JOIN learning_space ls ON ls.id = cb.space_id
+        WHERE cb.space_id = #{spaceId}
+          AND ls.owner_subject = #{ownerSubject}
+          AND cb.normalized_text LIKE #{containsPattern} ESCAPE '\\'
+          AND CASE
+            WHEN cb.normalized_text = #{exactQuery} THEN 40
+            WHEN cb.normalized_text LIKE #{prefixPattern} ESCAPE '\\' THEN 30
+            WHEN cb.normalized_text LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            ELSE 0
+          END > 0
+        UNION ALL
+      </if>
+
+      <if test="types == null || types.isEmpty() || types.contains('KNOWLEDGE_POINT')">
+        SELECT 1 AS score_alias
+        FROM knowledge_point kp
+        JOIN learning_space ls ON ls.id = kp.space_id
+        WHERE kp.space_id = #{spaceId}
+          AND ls.owner_subject = #{ownerSubject}
+          AND kp.deleted_at IS NULL
+          AND (
+            kp.title LIKE #{containsPattern} ESCAPE '\\'
+            OR kp.summary LIKE #{containsPattern} ESCAPE '\\'
+            OR kp.content LIKE #{containsPattern} ESCAPE '\\'
+          )
+          AND CASE
+            WHEN kp.title = #{exactQuery} THEN 100
+            WHEN kp.title LIKE #{prefixPattern} ESCAPE '\\' THEN 80
+            WHEN kp.title LIKE #{prefixPattern} ESCAPE '\\' THEN 60
+            WHEN kp.summary LIKE #{containsPattern} ESCAPE '\\' THEN 40
+            WHEN kp.content LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            ELSE 0
+          END > 0
+        UNION ALL
+      </if>
+
+      <if test="types == null || types.isEmpty() || types.contains('QUESTION')">
+        SELECT 1 AS score_alias
+        FROM question q
+        JOIN learning_space ls ON ls.id = q.space_id
+        WHERE q.space_id = #{spaceId}
+          AND ls.owner_subject = #{ownerSubject}
+          AND q.deleted_at IS NULL
+          AND q.stem LIKE #{containsPattern} ESCAPE '\\'
+          AND CASE
+            WHEN q.stem = #{exactQuery} THEN 60
+            WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
+            WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            ELSE 0
+          END > 0
+        UNION ALL
+      </if>
+
+      <if test="types == null || types.isEmpty() || types.contains('WRONG_QUESTION')">
+        SELECT 1 AS score_alias
+        FROM wrong_question wq
+        JOIN learning_space ls ON ls.id = wq.space_id
+        JOIN question q ON q.id = wq.question_id
+          AND q.space_id = wq.space_id
+          AND q.deleted_at IS NULL
+        WHERE wq.space_id = #{spaceId}
+          AND wq.user_subject = #{userSubject}
+          AND ls.owner_subject = #{ownerSubject}
+          AND q.stem LIKE #{containsPattern} ESCAPE '\\'
+          AND CASE
+            WHEN q.stem = #{exactQuery} THEN 60
+            WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
+            WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            ELSE 0
+          END > 0
+      </if>
+      </trim>
+    ) AS counted
+  </select>
+
+</mapper>

@@ -1,6 +1,6 @@
 package com.aistudy.server.spike.auth;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.aistudy.server.config.properties.CorsProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -62,9 +62,8 @@ public class ServerCorsConfig {
 
     private final List<String> allowedOrigins;
 
-    public ServerCorsConfig(
-            @Value("${aistudy.cors.allowed-origins}") List<String> allowedOrigins) {
-        this.allowedOrigins = allowedOrigins;
+    public ServerCorsConfig(CorsProperties corsProperties) {
+        this.allowedOrigins = List.copyOf(corsProperties.getAllowedOrigins());
     }
 
     @Bean

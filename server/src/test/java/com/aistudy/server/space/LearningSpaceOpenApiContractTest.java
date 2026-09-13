@@ -177,12 +177,42 @@ class LearningSpaceOpenApiContractTest {
     @MockitoBean
     private com.aistudy.server.studyplan.mapper.StudyTaskMapper studyTaskMapper;
 
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountRoleMapper userAccountRoleMapper;
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.RefreshSessionMapper refreshSessionMapper;
+
+    @MockitoBean
+    private com.aistudy.server.search.mapper.SearchMapper searchMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageReferenceMapper aiMessageReferenceMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSettingsMapper aiProviderSettingsMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSecretMapper aiProviderSecretMapper;
+
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiConversationMapper aiConversationMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageMapper aiMessageMapper;
+
+
 
     /**
      * The three business paths must be present in the contract:
      * POST + GET on {@code /api/v1/spaces}, GET on
      * {@code /api/v1/spaces/{spaceId}}.
      */
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountMapper userAccountMapper;
+
     @Test
     void learningSpacePathsAreExposedInOpenApi() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))

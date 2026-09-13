@@ -4,60 +4,96 @@ spring:
   main:
     banner-mode: "off"
 
-  # DataSource is NOT configured in the default profile.
-  # The real MySQL connection is defined in application-it.yml for SPIKE-002
-  # and will be finalized when SPIKE-003 introduces Flyway-based migrations.
-  #
-  # Local development flow (from Windows PowerShell, after export-ing env vars):
-  #   export DB_URL, DB_USERNAME, DB_PASSWORD   (see deploy/local/mysql/.env)
-  #   .\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=it
-
   sql:
     init:
       mode: never
 
-  # BUSINESS-004: multipart upload limits (NFR-SEC-002). Env-overridable
-  # via AISTUDY_MAX_UPLOAD_SIZE (default 1GB). The service layer ALSO
-  # checks aistudy.upload.max-file-size itself — the servlet limit is
-  # defense-in-depth, not the only guard.
+  # Canonical multipart contract.
+  #
+  # - max-file-size  = canonical asset limit (env AISTUDY_UPLOAD_MAX_FILE_SIZE)
+  # - max-request-size > max-file-size to absorb multipart protocol overhead
+  #   (env AISTUDY_UPLOAD_MAX_REQUEST_SIZE)
   servlet:
     multipart:
-      max-file-size: ${AISTUDY_MAX_UPLOAD_SIZE:1024MB}
-      max-request-size: ${AISTUDY_MAX_UPLOAD_SIZE:1024MB}
+      max-file-size: ${AISTUDY_UPLOAD_MAX_FILE_SIZE:1024MB}
+      max-request-size: ${AISTUDY_UPLOAD_MAX_REQUEST_SIZE:1040MB}
 
-# BUSINESS-004: business-side upload limit (service-level check) and
-# storage root (ADR-033). Root is env-overridable via
-# AISTUDY_STORAGE_ROOT (e.g. D:\AIStudyData\resources on Windows,
-# /data/ai-study/resources on Linux); fallback is cross-platform and
-# outside the Git repo.
+# Canonical application property defaults.
+#
+# - upload.max-file-size = same ceiling as the servlet layer, enforced again
+#   in SourceAssetService / LocalStorageService.
+# - storage.local.root = env-overridable persistent storage location.
+# - cors.allowed-origins intentionally empty by default; profiles must
+#   supply explicit origins.
 aistudy:
   upload:
-    max-file-size: ${AISTUDY_MAX_UPLOAD_SIZE:1024MB}
+    max-file-size: ${AISTUDY_UPLOAD_MAX_FILE_SIZE:1024MB}
   storage:
     local:
-      root: ${AISTUDY_STORAGE_ROOT:${user.home}/.aistudy/resources}
-  # ELECTRON-CORS-001-B: explicit Browser CORS origins for the Desktop
-  # client. Env override: AISTUDY_CORS_ALLOWED_ORIGINS (comma separated).
-  # The security default is exactly these two Electron renderer origins —
-  # a missing env value NEVER degrades to "*" (see ServerCorsConfig).
+      root: ${AISTUDY_STORAGE_LOCAL_ROOT:${user.home}/.aistudy/resources}
   cors:
-    allowed-origins: ${AISTUDY_CORS_ALLOWED_ORIGINS:http://localhost:5173,app://aistudy}
-  # BUSINESS-005: ZIP safety inspection limits (ZipArchiveInspector).
-  # Env-overridable via AISTUDY_INGESTION_ZIP_*; defaults are generous
-  # for scanned textbook packages while bounding decompression bombs.
-  # NOTE: encrypted ZIPs are ALWAYS rejected in V1 (pure-JDK cannot
-  # read them; no reject-encrypted toggle exists —
-  # AUTORUN-4H-PRE-RUNTIME-FIX-01).
+    allowed-origins: ${AISTUDY_CORS_ALLOWED_ORIGINS:}
+  operations:
+    storage-reconciliation:
+      max-scan-entries: ${AISTUDY_OPS_RECONCILE_MAX_SCAN:10000}
+      min-age: ${AISTUDY_OPS_RECONCILE_MIN_AGE:PT1H}
   ingestion:
     zip:
       max-entries: ${AISTUDY_INGESTION_ZIP_MAX_ENTRIES:10000}
       max-entry-uncompressed-bytes: ${AISTUDY_INGESTION_ZIP_MAX_ENTRY_BYTES:4GB}
       max-total-uncompressed-bytes: ${AISTUDY_INGESTION_ZIP_MAX_TOTAL_BYTES:16GB}
       max-compression-ratio: ${AISTUDY_INGESTION_ZIP_MAX_RATIO:200}
-    # BUSINESS-006: bounded text ingestion (ContentExtractionService).
-    # Env-overridable via AISTUDY_INGESTION_TEXT_MAX_DOCUMENT_BYTES.
     text:
       max-document-bytes: ${AISTUDY_INGESTION_TEXT_MAX_DOCUMENT_BYTES:64MB}
+    pdf:
+      max-bytes: ${AISTUDY_INGESTION_PDF_MAX_BYTES:100MB}
+      max-pages: ${AISTUDY_INGESTION_PDF_MAX_PAGES:200}
+      max-extracted-chars: ${AISTUDY_INGESTION_PDF_MAX_EXTRACTED_CHARS:2000000}
+    image:
+      max-bytes: ${AISTUDY_INGESTION_IMAGE_MAX_BYTES:50MB}
+      max-width: ${AISTUDY_INGESTION_IMAGE_MAX_WIDTH:10000}
+      max-height: ${AISTUDY_INGESTION_IMAGE_MAX_HEIGHT:10000}
+      max-pixels: ${AISTUDY_INGESTION_IMAGE_MAX_PIXELS:100000000}
+  ai:
+    # AI is disabled by default. Enable only with a configured provider.
+    enabled: ${AISTUDY_AI_ENABLED:false}
+    provider: ${AISTUDY_AI_PROVIDER:openai-compatible}
+    base-url: ${AISTUDY_AI_BASE_URL:}
+    api-key: ${AISTUDY_AI_API_KEY:}
+    model: ${AISTUDY_AI_MODEL:}
+    # AES-GCM master key (Base64 ≥256-bit) for encrypting runtime BYOK secrets.
+    secret-key: ${AISTUDY_AI_SECRET_KEY:}
+    temperature: ${AISTUDY_AI_TEMPERATURE:0.3}
+    max-output-tokens: ${AISTUDY_AI_MAX_OUTPUT_TOKENS:1024}
+    connect-timeout: ${AISTUDY_AI_CONNECT_TIMEOUT:5s}
+    read-timeout: ${AISTUDY_AI_READ_TIMEOUT:60s}
+    context:
+      max-search-results: ${AISTUDY_AI_CONTEXT_MAX_SEARCH_RESULTS:8}
+      max-context-chars: ${AISTUDY_AI_CONTEXT_MAX_CHARS:12000}
+      max-user-message-chars: ${AISTUDY_AI_CONTEXT_MAX_USER_MESSAGE_CHARS:8000}
+      max-history-messages: ${AISTUDY_AI_CONTEXT_MAX_HISTORY_MESSAGES:20}
+      max-learning-state-items: ${AISTUDY_AI_CONTEXT_MAX_LEARNING_STATE_ITEMS:8}
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db,storage
+    prometheus:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: AIStudyServer
 
 mybatis-plus:
   configuration:
@@ -65,12 +101,18 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     banner: false
+  mapper-locations: classpath:/mapper/*.xml
 
-server:
-  address: 127.0.0.1
-  port: 8080
+app:
+  auth:
+    jwt:
+      secret: ${AUTH_JWT_SECRET:}
+      access-token-ttl-seconds: ${AUTH_JWT_ACCESS_TOKEN_TTL_SECONDS:900}
+      refresh-token-ttl-seconds: ${AUTH_REFRESH_TOKEN_TTL_SECONDS:2592000}
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} requestId=%X{requestId:-} - %msg%n"
   level:
     root: INFO
     com.aistudy: INFO

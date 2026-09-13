@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/v1/settings/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get my AI provider settings (never returns the API key) */
+        get: operations["getSettings"];
+        /** Update my AI provider settings; omit apiKey to keep the stored secret */
+        put: operations["updateSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{subject}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateRoles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces": {
         parameters: {
             query?: never;
@@ -388,6 +422,207 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/ai/study-coach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read-only study coach: recommend next study steps */
+        post: operations["studyCoach"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ai/explanations/practice-answers/{answerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Explain a submitted practice answer (post-submit only) */
+        post: operations["explainPracticeAnswer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ai/explanations/exam-answers/{answerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Explain a submitted exam answer (post-submit only) */
+        post: operations["explainExamAnswer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ai/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List my ACTIVE AI conversations in this LearningSpace */
+        get: operations["listConversations"];
+        put?: never;
+        /** Create an AI tutor conversation in this LearningSpace */
+        post: operations["createConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ai/conversations/{conversationId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List messages of one of my AI conversations */
+        get: operations["listMessages"];
+        put?: never;
+        /** Send a user message and receive the AI tutor reply */
+        post: operations["sendMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ai/conversations/{conversationId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive one of my AI conversations */
+        post: operations["archiveConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/ai/test-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test my provider connectivity from the backend */
+        post: operations["testConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/operations/storage/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reconcileStorage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{subject}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateStatus"];
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -556,6 +791,26 @@ export interface paths {
             cookie?: never;
         };
         get: operations["get_3"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Unified workspace keyword search
+         * @description Keyword search scoped to ONE LearningSpace. Search indexes safe user-visible text such as source title, content block text, knowledge point title/summary/content, question stem and wrong-question stems. Results are ranked by deterministic application score and space isolation is enforced at the SQL level.
+         */
+        get: operations["search"];
         put?: never;
         post?: never;
         delete?: never;
@@ -756,10 +1011,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/ai/conversations/{conversationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one of my AI conversations */
+        get: operations["getConversation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{subject}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/ai/api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete my stored AI API key */
+        delete: operations["deleteApiKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Write-only update. Omit apiKey to keep the stored secret. */
+        UpdateAiProviderSettingsRequest: {
+            enabled?: boolean;
+            provider?: string;
+            preset?: string;
+            baseUrl?: string;
+            model?: string;
+            apiKey?: string;
+        };
+        AiProviderSettingsView: {
+            enabled?: boolean;
+            provider?: string;
+            preset?: string;
+            baseUrl?: string;
+            model?: string;
+            apiKeyConfigured?: boolean;
+        };
+        UpdateUserRolesRequest: {
+            roles: string[];
+        };
         CreateLearningSpaceRequest: {
             name: string;
             description?: string;
@@ -1219,6 +1576,127 @@ export interface components {
             /** Format: date-time */
             answeredAt?: string;
         };
+        StudyCoachRequest: {
+            question?: string;
+        };
+        ContextReference: {
+            type?: string;
+            /** Format: int64 */
+            id?: number;
+            title?: string;
+            snippet?: string;
+            locator?: string;
+        };
+        StudyCoachResponse: {
+            summary?: string;
+            recommendedNextActions?: string[];
+            focusKnowledgePointIds?: number[];
+            rationale?: string;
+            contextReferences?: components["schemas"]["ContextReference"][];
+        };
+        ExplanationResponse: {
+            explanation?: string;
+            keyConcepts?: string[];
+            reviewSuggestions?: string[];
+            relatedKnowledgePointIds?: number[];
+            contextReferences?: components["schemas"]["ContextReference"][];
+        };
+        CreateConversationRequest: {
+            title?: string;
+        };
+        ConversationView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            title?: string;
+            status?: string;
+            /** Format: date-time */
+            lastMessageAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        SendMessageRequest: {
+            content?: string;
+        };
+        MessageView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            conversationId?: number;
+            role?: string;
+            content?: string;
+            provider?: string;
+            model?: string;
+            /** Format: int32 */
+            promptTokens?: number;
+            /** Format: int32 */
+            completionTokens?: number;
+            /** Format: int32 */
+            totalTokens?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            references?: components["schemas"]["ContextReference"][];
+        };
+        SendMessageResponse: {
+            /** Format: int64 */
+            conversationId?: number;
+            userMessage?: components["schemas"]["MessageView"];
+            assistantMessage?: components["schemas"]["MessageView"];
+            contextReferences?: components["schemas"]["ContextReference"][];
+        };
+        TestConnectionResponse: {
+            success?: boolean;
+            provider?: string;
+            model?: string;
+            /** Format: int64 */
+            latencyMs?: number;
+        };
+        RefreshTokenRequest: {
+            refreshToken?: string;
+        };
+        TokenPairResponse: {
+            accessToken?: string;
+            tokenType?: string;
+            /** Format: int64 */
+            expiresIn?: number;
+            refreshToken?: string;
+            /** Format: int64 */
+            refreshExpiresIn?: number;
+        };
+        LogoutRequest: {
+            refreshToken?: string;
+        };
+        LoginRequest: {
+            username: string;
+            password: string;
+        };
+        ReconcileRequest: {
+            /** @enum {string} */
+            mode?: "DRY_RUN" | "CLEANUP";
+        };
+        StorageReconciliationResult: {
+            /** Format: int32 */
+            scanned?: number;
+            /** Format: int32 */
+            referenced?: number;
+            /** Format: int32 */
+            candidateOrphans?: number;
+            /** Format: int32 */
+            deleted?: number;
+            /** Format: int32 */
+            skippedRecent?: number;
+            /** Format: int32 */
+            skippedUnsafe?: number;
+            truncated?: boolean;
+            mode?: string;
+        };
+        UpdateUserStatusRequest: {
+            /** @enum {string} */
+            status: "ACTIVE" | "DISABLED";
+        };
         SpikeHealthResponse: {
             status?: string;
             service?: string;
@@ -1292,6 +1770,39 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        SearchPageResponse: {
+            content?: components["schemas"]["SearchResult"][];
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+            /** Format: int64 */
+            totalElements?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
+        SearchResult: {
+            /** @enum {string} */
+            type?: "SOURCE" | "CONTENT_BLOCK" | "KNOWLEDGE_POINT" | "QUESTION" | "WRONG_QUESTION";
+            /** Format: int64 */
+            id?: number;
+            title?: string;
+            snippet?: string;
+            /** Format: int32 */
+            score?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            sourceAssetId?: number;
+            /** Format: int64 */
+            sourcePageId?: number;
+            /** Format: int32 */
+            pageNumber?: number;
+            /** Format: int64 */
+            knowledgePointId?: number;
+            /** Format: int64 */
+            questionId?: number;
         };
         ReviewTaskView: {
             /** Format: int64 */
@@ -1384,6 +1895,66 @@ export interface components {
             severity?: string;
             recommendation?: string;
         };
+        ConversationPageResponse: {
+            content?: components["schemas"]["ConversationView"][];
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+            /** Format: int64 */
+            totalElements?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
+        MessagePageResponse: {
+            content?: components["schemas"]["MessageView"][];
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+            /** Format: int64 */
+            totalElements?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
+        CurrentUserResponse: {
+            subject?: string;
+            username?: string;
+            roles?: string[];
+        };
+        AdminUserPageResponse: {
+            items?: components["schemas"]["AdminUserSummary"][];
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+            /** Format: int64 */
+            totalElements?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
+        AdminUserSummary: {
+            /** Format: int64 */
+            id?: number;
+            subject?: string;
+            username?: string;
+            status?: string;
+            roles?: string[];
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        AdminUserDetail: {
+            /** Format: int64 */
+            id?: number;
+            subject?: string;
+            username?: string;
+            status?: string;
+            roles?: string[];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -1393,6 +1964,74 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiProviderSettingsView"];
+                };
+            };
+        };
+    };
+    updateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAiProviderSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiProviderSettingsView"];
+                };
+            };
+        };
+    };
+    updateRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserRolesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list: {
         parameters: {
             query?: never;
@@ -2219,6 +2858,343 @@ export interface operations {
             };
         };
     };
+    studyCoach: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StudyCoachRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyCoachResponse"];
+                };
+            };
+        };
+    };
+    explainPracticeAnswer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                answerId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExplanationResponse"];
+                };
+            };
+        };
+    };
+    explainExamAnswer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                answerId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExplanationResponse"];
+                };
+            };
+        };
+    };
+    listConversations: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationPageResponse"];
+                };
+            };
+        };
+    };
+    createConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CreateConversationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationView"];
+                };
+            };
+        };
+    };
+    listMessages: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessagePageResponse"];
+                };
+            };
+        };
+    };
+    sendMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendMessageResponse"];
+                };
+            };
+        };
+    };
+    archiveConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationView"];
+                };
+            };
+        };
+    };
+    testConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestConnectionResponse"];
+                };
+            };
+        };
+    };
+    refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TokenPairResponse"];
+                };
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogoutRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TokenPairResponse"];
+                };
+            };
+        };
+    };
+    reconcileStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReconcileRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["StorageReconciliationResult"];
+                };
+            };
+        };
+    };
+    updateStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     health: {
         parameters: {
             query?: never;
@@ -2458,6 +3434,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceAssetResponse"];
+                };
+            };
+        };
+    };
+    search: {
+        parameters: {
+            query: {
+                q: string;
+                types?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Typed heterogeneous search results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchPageResponse"];
+                };
+            };
+            /** @description Invalid query, type, page or size */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchPageResponse"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchPageResponse"];
+                };
+            };
+            /** @description LearningSpace absent/not owned */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchPageResponse"];
                 };
             };
         };
@@ -2735,6 +3765,112 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ExamDiagnosisView"];
                 };
+            };
+        };
+    };
+    getConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationView"];
+                };
+            };
+        };
+    };
+    me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CurrentUserResponse"];
+                };
+            };
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminUserPageResponse"];
+                };
+            };
+        };
+    };
+    getUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminUserDetail"];
+                };
+            };
+        };
+    };
+    deleteApiKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

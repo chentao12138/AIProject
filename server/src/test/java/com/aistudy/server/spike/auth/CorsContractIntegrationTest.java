@@ -131,6 +131,32 @@ class CorsContractIntegrationTest {
     @MockitoBean
     private com.aistudy.server.studyplan.mapper.StudyTaskMapper studyTaskMapper;
 
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountRoleMapper userAccountRoleMapper;
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.RefreshSessionMapper refreshSessionMapper;
+
+    @MockitoBean
+    private com.aistudy.server.search.mapper.SearchMapper searchMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageReferenceMapper aiMessageReferenceMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSettingsMapper aiProviderSettingsMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSecretMapper aiProviderSecretMapper;
+
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiConversationMapper aiConversationMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageMapper aiMessageMapper;
+
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -140,6 +166,10 @@ class CorsContractIntegrationTest {
     // ---------- PRE-FLIGHT ----------
 
     /** A. Allowed dev origin preflight -> 2xx + echo + methods/headers. */
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountMapper userAccountMapper;
+
     @Test
     void preflightDevOriginIsAllowed() throws Exception {
         mockMvc.perform(options("/api/v1/spaces")

@@ -1,0 +1,76 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: aistudy-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?set MYSQL_DATABASE in .env}
+      MYSQL_USER: ${MYSQL_USER:?set MYSQL_USER in .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --sql_mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+    ports:
+      - "${MYSQL_HOST_PORT:-3306}:3306"
+    volumes:
+      - aistudy_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks:
+      - aistudy_net
+
+  backend:
+    build:
+      # Maven project root is server/; Dockerfile expects .mvn/mvnw/pom/src there.
+      context: ../server
+      dockerfile: ../Dockerfile
+    container_name: aistudy-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: "jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false"
+      DB_USERNAME: "${MYSQL_USER}"
+      DB_PASSWORD: "${MYSQL_PASSWORD}"
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET in .env}
+      AISTUDY_STORAGE_LOCAL_ROOT: /var/lib/aistudy/resources
+      AISTUDY_CORS_ALLOWED_ORIGINS: ${AISTUDY_CORS_ALLOWED_ORIGINS:?set AISTUDY_CORS_ALLOWED_ORIGINS in .env}
+      AISTUDY_BOOTSTRAP_ADMIN_ENABLED: "true"
+      AISTUDY_BOOTSTRAP_ADMIN_USERNAME: "${AISTUDY_BOOTSTRAP_ADMIN_USERNAME:?set AISTUDY_BOOTSTRAP_ADMIN_USERNAME in .env}"
+      AISTUDY_BOOTSTRAP_ADMIN_PASSWORD: "${AISTUDY_BOOTSTRAP_ADMIN_PASSWORD:?set AISTUDY_BOOTSTRAP_ADMIN_PASSWORD in .env}"
+      # AI-001 optional env defaults. Leave AISTUDY_AI_ENABLED=false unless a
+      # provider key is supplied via .env / secrets platform — never bake keys.
+      AISTUDY_AI_ENABLED: "${AISTUDY_AI_ENABLED:-false}"
+      AISTUDY_AI_PROVIDER: "${AISTUDY_AI_PROVIDER:-openai-compatible}"
+      AISTUDY_AI_BASE_URL: "${AISTUDY_AI_BASE_URL:-}"
+      AISTUDY_AI_MODEL: "${AISTUDY_AI_MODEL:-}"
+      AISTUDY_AI_API_KEY: "${AISTUDY_AI_API_KEY:-}"
+      AISTUDY_AI_SECRET_KEY: "${AISTUDY_AI_SECRET_KEY:-}"
+    volumes:
+      - aistudy_resources:/var/lib/aistudy/resources
+    networks:
+      - aistudy_net
+    # Do not expose the backend port on the host. A reverse proxy
+    # terminates TLS and forwards traffic to this container.
+    # ports:
+    #   - "127.0.0.1:8080:8080"
+
+volumes:
+  aistudy_mysql_data:
+    name: aistudy_mysql_data
+  aistudy_resources:
+    name: aistudy_resources
+
+networks:
+  aistudy_net:
+    name: aistudy_net
+    driver: bridge

@@ -31,4 +31,13 @@ public interface PracticeSessionQuestionMapper extends BaseMapper<PracticeSessio
     PracticeSessionQuestion selectByIdAndSession(@Param("spaceId") Long spaceId,
                                                   @Param("sessionId") Long sessionId,
                                                   @Param("slotId") Long slotId);
+
+    /** Owner-scoped single slot for post-submit AI explanation (AI-007). */
+    @Select("SELECT psq.* FROM practice_session_question psq "
+            + "JOIN learning_space ls ON ls.id = psq.space_id "
+            + "WHERE psq.id = #{slotId} AND psq.space_id = #{spaceId} "
+            + "  AND ls.owner_subject = #{ownerSubject} LIMIT 1")
+    PracticeSessionQuestion selectByIdSpaceOwner(@Param("slotId") Long slotId,
+                                                 @Param("spaceId") Long spaceId,
+                                                 @Param("ownerSubject") String ownerSubject);
 }

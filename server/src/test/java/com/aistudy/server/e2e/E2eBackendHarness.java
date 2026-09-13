@@ -1,6 +1,6 @@
 package com.aistudy.server.e2e;
 
-import com.aistudy.server.spike.auth.SpikeJwtTokenService;
+import com.aistudy.server.auth.service.JwtAccessTokenService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,7 +49,7 @@ public class E2eBackendHarness {
     public static final String TOKEN_FILE_NAME = "aistudy-desktop-e2e-token.txt";
 
     @Autowired
-    private SpikeJwtTokenService tokenService;
+    private JwtAccessTokenService tokenService;
 
     @Test
     void keepAliveUntilStopped() throws Exception {

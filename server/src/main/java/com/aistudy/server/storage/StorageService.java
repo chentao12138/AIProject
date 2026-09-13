@@ -18,15 +18,18 @@ import java.io.InputStream;
  * <p>Contract:
  * <ul>
  *   <li>{@link #store} — streams {@code input} to storage, returns
- *       key + size + sha256. Throws {@link IllegalStateException} on
- *       failure; never leaves a partial object behind.</li>
+ *       key + size + sha256. Throws {@link StorageLimitExceededException}
+ *       when the configured byte ceiling is exceeded and
+ *       {@link StorageWriteException} on IO/environment failure; never
+ *       leaves a partial object behind.</li>
  *   <li>{@link #load} — opens the object for reading; throws
- *       {@link IllegalArgumentException} for keys escaping the root
- *       and {@link java.nio.file.NoSuchFileException} (wrapped) when
- *       absent.</li>
+ *       {@link StorageInvalidKeyException} for keys escaping the root
+ *       and {@link StorageNotFoundException} when the target is absent
+ *       or not a regular file.</li>
  *   <li>{@link #delete} — removes the object; a missing object is a
- *       no-op. Throws {@link IllegalArgumentException} for keys
- *       escaping the root.</li>
+ *       no-op. Throws {@link StorageInvalidKeyException} for keys
+ *       escaping the root and {@link StorageWriteException} on IO
+ *       failure.</li>
  * </ul>
  */
 public interface StorageService {
@@ -36,6 +39,10 @@ public interface StorageService {
      * key. The input stream is fully consumed; {@code metadata} carries
      * only what the storage layer needs (the first local implementation
      * needs nothing — see {@link StorageMetadata}).
+     *
+     * <p>The storage layer bounds the stream copy independently from
+     * transport-layer limits. Misreported or chunked uploads cannot
+     * exceed the configured storage byte ceiling.
      *
      * @param input    byte source (never buffered whole into memory)
      * @param metadata storage-layer metadata (optional)
@@ -48,7 +55,8 @@ public interface StorageService {
      *
      * @param storageKey logical key stored in the database
      * @return stream positioned at the first byte
-     * @throws IllegalArgumentException if the key escapes the storage root
+     * @throws StorageInvalidKeyException if the key escapes the storage root
+     * @throws StorageNotFoundException   when the target object is absent or not a regular file
      */
     InputStream load(String storageKey);
 
@@ -56,7 +64,7 @@ public interface StorageService {
      * Deletes the object identified by {@code storageKey}.
      *
      * @param storageKey logical key stored in the database
-     * @throws IllegalArgumentException if the key escapes the storage root
+     * @throws StorageInvalidKeyException if the key escapes the storage root
      */
     void delete(String storageKey);
 }

@@ -1,6 +1,6 @@
 package com.aistudy.server.source;
 
-import com.aistudy.server.spike.auth.SpikeJwtTokenService;
+import com.aistudy.server.auth.service.JwtAccessTokenService;
 import com.aistudy.server.storage.StorageService;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -102,7 +102,7 @@ class SourceAssetUploadIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private SpikeJwtTokenService spikeJwtTokenService;
+    private JwtAccessTokenService jwtAccessTokenService;
 
     @Autowired
     private StorageService storageService;
@@ -154,7 +154,7 @@ class SourceAssetUploadIntegrationTest {
     // ==================== helpers ====================
 
     private String tokenFor(String subject) {
-        String token = spikeJwtTokenService.issueAccessToken(subject);
+        String token = jwtAccessTokenService.issueAccessToken(subject);
         assertNotNull(token, "token must not be null");
         return token;
     }

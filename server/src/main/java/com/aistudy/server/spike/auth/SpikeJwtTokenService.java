@@ -1,5 +1,6 @@
 package com.aistudy.server.spike.auth;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -57,7 +58,14 @@ public class SpikeJwtTokenService {
 
     private final JwtEncoder jwtEncoder;
 
-    public SpikeJwtTokenService(JwtEncoder jwtEncoder) {
+    /**
+     * Explicit SPIKE encoder binding: two {@link JwtEncoder} beans now exist
+     * (SPIKE {@code jwtEncoder} over {@code spikeJwtSecretKey} and production
+     * {@code authJwtEncoder} over the AUTH secret). Type-only injection would
+     * rely on parameter-name fallback; {@code @Qualifier("jwtEncoder")} pins
+     * this service to the SPIKE trust domain.
+     */
+    public SpikeJwtTokenService(@Qualifier("jwtEncoder") JwtEncoder jwtEncoder) {
         this.jwtEncoder = jwtEncoder;
     }
 

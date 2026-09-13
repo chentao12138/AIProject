@@ -1,0 +1,47 @@
+# ============================================================
+# BUSINESS-026 .dockerignore
+# Keep Maven wrapper files required for `./mvnw` builds.
+# Do not bake local secrets, IDE metadata, or build outputs.
+# ============================================================
+
+# Git + IDE
+.git
+.idea
+.vscode
+
+# Java / Maven
+target/
+*.log
+
+# Node / frontend
+node_modules/
+dist/
+build/
+out/
+release/
+dist-electron/
+dist-web/
+*.js.map
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+sensenova-load-test/
+
+# Local / runtime data directories
+AIStudyData/
+local/
+runtime-data/
+uploads/
+temp/
+tmp/
+.cache/
+
+# Maven wrapper files must stay in the published source tree so
+# the builder stage can run `./mvnw` without Maven preinstalled.
+# The negation below is redundant (parent rules above don't match
+# these paths), but it makes the intent explicit in one place.
+!.mvn/
+!mvnw
+!mvnw.cmd

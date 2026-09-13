@@ -1,15 +1,51 @@
-# Test profile: unit-test friendly.
-# Excludes DataSource / JDBC auto-config so unit tests do not require a real database.
-#
-# Important: MybatisPlusAutoConfiguration does not itself require a DataSource,
-# so it must be explicitly excluded in the unit-test profile as well.
-# SPIKE-002 MySQL integration tests use a separate profile (see application-it.yml)
-# where DataSourceAutoConfiguration + MybatisPlusAutoConfiguration both stay ON.
-
 spring:
+  sql:
+    init:
+      mode: never
+
+  # Keep the default test profile lightweight: no real database, no
+  # MyBatis-Plus auto-configuration. Production-style datasource
+  # integration lives under 'flyway-it'; this profile only needs the
+  # auth test secret so unit / slice tests can start the context.
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
       - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
       - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
       - com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration
+
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:25}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SMTP_AUTH:false}
+          starttls:
+            enable: ${SMTP_STARTTLS:false}
+
+# DataSource is excluded above, so the 'db' health contributor does not
+# exist. Override the readiness group so context boot does not fail on
+# HealthEndpointGroupMembershipValidator.
+management:
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState
+
+app:
+  auth:
+    jwt:
+      secret: ${AUTH_JWT_SECRET:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ==}
+      access-token-ttl-seconds: ${AUTH_JWT_ACCESS_TOKEN_TTL_SECONDS:900}
+      refresh-token-ttl-seconds: ${AUTH_REFRESH_TOKEN_TTL_SECONDS:2592000}
+
+# CORS contract tests exercise the same Desktop origins as local/dev.
+aistudy:
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+      - app://aistudy

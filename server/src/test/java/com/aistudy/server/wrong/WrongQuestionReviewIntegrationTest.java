@@ -1,6 +1,6 @@
 package com.aistudy.server.wrong;
 
-import com.aistudy.server.spike.auth.SpikeJwtTokenService;
+import com.aistudy.server.auth.service.JwtAccessTokenService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
@@ -68,7 +68,7 @@ class WrongQuestionReviewIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private SpikeJwtTokenService spikeJwtTokenService;
+    private JwtAccessTokenService jwtAccessTokenService;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -99,7 +99,7 @@ class WrongQuestionReviewIntegrationTest {
     // ==================== helpers ====================
 
     private String tokenFor(String subject) {
-        String token = spikeJwtTokenService.issueAccessToken(subject);
+        String token = jwtAccessTokenService.issueAccessToken(subject);
         assertNotNull(token, "token must not be null");
         return token;
     }

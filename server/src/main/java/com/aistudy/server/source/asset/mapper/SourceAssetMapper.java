@@ -36,8 +36,7 @@ import java.util.List;
 @Mapper
 public interface SourceAssetMapper extends BaseMapper<SourceAsset> {
 
-    /**
-     * Returns the asset iff ALL of: it exists, belongs to
+    /** Returns the asset iff ALL of: it exists, belongs to
      * {@code spaceId}, belongs to {@code sourceId}, that source
      * really belongs to that space (JOIN), and the space is owned by
      * {@code ownerSubject}. Any mismatch returns {@code null} (404,
@@ -60,7 +59,29 @@ public interface SourceAssetMapper extends BaseMapper<SourceAsset> {
                                            @Param("ownerSubject") String ownerSubject);
 
     /**
-     * Lists assets of one owned source, newest first. The owner
+     * Returns distinct non-null storage keys referenced by source_asset.
+     * Used by storage reconciliation to bound filesystem scan targets.
+     */
+    @Select("SELECT sa.storage_key FROM source_asset sa WHERE sa.storage_key IS NOT NULL GROUP BY sa.storage_key")
+    List<String> selectDistinctStorageKeys();
+
+    /**
+     * Returns storage keys from the given bounded set that are actually
+     * referenced by source_asset. Used by bounded reconciliation to avoid
+     * scanning the entire table.
+     */
+    @Select({"<script>",
+            "SELECT sa.storage_key",
+            "FROM source_asset sa",
+            "WHERE sa.storage_key IN",
+            "<foreach item='key' collection='keys' open='(' separator=',' close=')'>",
+            "#{key}",
+            "</foreach>",
+            "GROUP BY sa.storage_key",
+            "</script>"})
+    List<String> selectExistingStorageKeys(@Param("keys") List<String> keys);
+
+    /** Lists assets of one owned source, newest first. The owner
      * predicate and the source↔space consistency are enforced IN SQL
      * via the JOINs — this method can never list assets of a source
      * the caller does not own, even if the service layer were bypassed.

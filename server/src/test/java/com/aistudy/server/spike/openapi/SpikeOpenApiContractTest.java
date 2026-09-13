@@ -217,6 +217,32 @@ class SpikeOpenApiContractTest {
     @MockitoBean
     private com.aistudy.server.studyplan.mapper.StudyTaskMapper studyTaskMapper;
 
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountRoleMapper userAccountRoleMapper;
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.RefreshSessionMapper refreshSessionMapper;
+
+    @MockitoBean
+    private com.aistudy.server.search.mapper.SearchMapper searchMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageReferenceMapper aiMessageReferenceMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSettingsMapper aiProviderSettingsMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSecretMapper aiProviderSecretMapper;
+
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiConversationMapper aiConversationMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageMapper aiMessageMapper;
+
+
 
     /**
      * MICRO-02A assertion 1: the {@code bearerAuth} security scheme
@@ -229,6 +255,10 @@ class SpikeOpenApiContractTest {
      * edit accidentally flipped {@code scheme = "bearer"} to {@code "apiKey"}
      * or dropped {@code bearerFormat}, this test would fail.
      */
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountMapper userAccountMapper;
+
     @Test
     void bearerAuthSecuritySchemeIsDeclared() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))

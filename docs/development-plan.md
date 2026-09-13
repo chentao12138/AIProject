@@ -1,6 +1,6 @@
 # 开发计划
 
-> 状态：**BUSINESS-001 ~ BUSINESS-007 全部 COMPLETE（用户 runtime verified，2026-09-06）；BUSINESS-008~016 COMPLETE / RUNTIME VERIFIED（2026-09-08 final backend closeout）**
+> 状态：**BUSINESS-001 ~ BUSINESS-007 全部 COMPLETE（用户 runtime verified，2026-09-06）；BUSINESS-008~016 COMPLETE / RUNTIME VERIFIED（2026-09-08 final backend closeout）；BUSINESS-017/018/019/020/021/022/023/024/025/026 IMPLEMENTATION COMPLETE / VERIFICATION DEFERRED（2026-09-09）；AI-001~AI-004 IMPLEMENTATION COMPLETE / VERIFICATION DEFERRED（2026-09-12）**
 
 ## Phase 0：Baseline Final Review
 
@@ -434,6 +434,7 @@ AI 不得绕过 LearningSpace scope。
 - Storage migration
 - backup/restore drill
 - Desktop API base switch
+- **BUSINESS-026 DEPLOYMENT HARDENING COMPLETE**
 
 ## Phase 11：Android
 

@@ -141,6 +141,32 @@ class IngestionJobOpenApiContractTest {
     @MockitoBean
     private com.aistudy.server.studyplan.mapper.StudyTaskMapper studyTaskMapper;
 
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountRoleMapper userAccountRoleMapper;
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.RefreshSessionMapper refreshSessionMapper;
+
+    @MockitoBean
+    private com.aistudy.server.search.mapper.SearchMapper searchMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageReferenceMapper aiMessageReferenceMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSettingsMapper aiProviderSettingsMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSecretMapper aiProviderSecretMapper;
+
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiConversationMapper aiConversationMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageMapper aiMessageMapper;
+
+
     private static final String CREATE_LIST =
             "/api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs";
     private static final String GET_ONE =
@@ -149,6 +175,10 @@ class IngestionJobOpenApiContractTest {
             "/api/v1/spaces/{spaceId}/ingestion-jobs/{jobId}/retry";
 
     /** (1) the four IngestionJob paths must be exposed. */
+
+    @MockitoBean
+    private com.aistudy.server.auth.mapper.UserAccountMapper userAccountMapper;
+
     @Test
     void ingestionJobPathsAreExposedInOpenApi() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
