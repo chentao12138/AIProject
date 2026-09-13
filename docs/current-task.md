@@ -1,47 +1,50 @@
 # Current Task
 
 ## Objective
-Backend Batch C final frontend handoff for FE-002B.
+AI V1 runtime closeout (no new business features).
 
 ## Current Phase
-**BATCH C FRONTEND HANDOFF READY**
+**AI V1 BACKEND RELEASE CANDIDATE READY** (pending USER commit)
 
 ## Status Board
 
-- Batch C functional verification: PASS
-- Full Maven clean test: PASS (603 run, 0 failures, 0 errors, 2 skipped)
-- Real backend boot (flyway-it): PASS
-- Live `/v3/api-docs`: PASS (OpenAPI 3.1.0, 61 paths)
-- Regenerated `packages/api-client` from live contract: PASS
-- `packages/api-client` typecheck + typecheck:generated: PASS
-- Stable backend + generated-client commit: done on `batch-c-frontend-handoff`
+- AI-005~009 automated verification = PASS
+- Full clean regression = PASS (639 / 0 / 0 / 2 skipped)
+- StepFun real smoke = PASS
+- Real boot + Actuator = PASS
+- Live OpenAPI = PASS
+- api-client regenerate + typecheck = PASS
+- Docker smoke = PASS
+- Secret / git hygiene = PASS
 
-## Verified scope (already stable for FE)
+## StepFun real smoke (2026-09-13)
 
-- Storage / SourceAsset upload
-- IngestionJob lifecycle + retry
-- TXT / Markdown regression
-- PDF ingestion (SourcePage + ContentBlock)
-- PNG / JPEG ingestion (SourcePage only, no OCR)
-- SourcePage / ContentBlock read APIs
-- Ops / runtime / deployment foundation
-- AI-001 ~ AI-004 implementation (runtime-verified in this gate via full suite)
+- Provider: openai-compatible → `https://api.stepfun.com/v1`
+- Model: `step-3.5-flash`
+- Runtime settings/secret rows: 0 (env path used; no BYOK delete required)
+- `POST /api/v1/settings/ai/test-connection`: success=true, latencyMs≈2605
+- Tutor `sendMessage`: USER+ASSISTANT persisted, model/token usage recorded
+- Study Coach: 200 with contextReferences
+- Archive: ACTIVE → ARCHIVED
+- API key not present in logs, settings GET, or tutor response JSON
 
-## Frontend handoff contract (summary)
+### Smoke-discovered production fix
 
-See `BACKEND BATCH C FINAL FRONTEND HANDOFF REPORT` in the release notes /
-handoff conversation. Key FE pointers:
+`test-connection` hardcoded `max_tokens=8`. Reasoning models such as
+`step-3.5-flash` spend budget on hidden reasoning before visible content,
+returning empty `choices[0].message.content` → HTTP 502
+`AI_PROVIDER_RESPONSE_INVALID`. Raised budget to 64.
 
-- Upload allowlist extensions: zip, pdf, jpg, jpeg, png, md, markdown, txt
-- PDF MIME: `application/pdf` (fallback `application/octet-stream`)
-- Image MIME: `image/png`, `image/jpeg`
-- IngestionJob status: PENDING | RUNNING | SUCCEEDED | FAILED
-- IngestionJob stage (V1): QUEUED | IMPORTING | PUBLISHED
-- Retry only on FAILED (409 otherwise)
-- Image pages: `pageType=IMAGE`, `extractedText=null`, no ContentBlocks
-- OCR fields exposed but always null in V1
+## Remaining limitations (accepted for V1)
 
-## Next Actions
-1. FE-002B may start from this stable commit.
-2. Do not regenerate the client from a dirty worktree.
-3. Remaining limitations listed in the handoff report.
+- Windows symlink tests still skipped (2)
+- Tutor context search may return empty for long CJK sentences (query
+  derivation + search matching); Coach demonstrated non-empty refs
+- No Review-answer explanation endpoint (no independent Review answer entity)
+- SSRF hostname allowlist deferred (documented V1 Desktop trust assumption)
+- Real StepFun smoke uses env API key; encrypted BYOK path covered by tests
+
+## Next Actions (USER)
+
+1. Review + `git add` / commit / push (developer must not Git write)
+2. Then FE integration / product acceptance / next-version scope

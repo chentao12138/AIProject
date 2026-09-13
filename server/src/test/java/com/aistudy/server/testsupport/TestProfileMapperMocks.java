@@ -194,4 +194,19 @@ public class TestProfileMapperMocks {
     public com.aistudy.server.ai.mapper.AiMessageMapper aiMessageMapper() {
         return Mockito.mock(com.aistudy.server.ai.mapper.AiMessageMapper.class);
     }
+
+    @Bean
+    public com.aistudy.server.ai.mapper.AiMessageReferenceMapper aiMessageReferenceMapper() {
+        return Mockito.mock(com.aistudy.server.ai.mapper.AiMessageReferenceMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.ai.settings.AiProviderSettingsMapper aiProviderSettingsMapper() {
+        return Mockito.mock(com.aistudy.server.ai.settings.AiProviderSettingsMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.ai.settings.AiProviderSecretMapper aiProviderSecretMapper() {
+        return Mockito.mock(com.aistudy.server.ai.settings.AiProviderSecretMapper.class);
+    }
 }

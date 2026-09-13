@@ -32,6 +32,16 @@ public interface ExamAnswerMapper extends BaseMapper<ExamAnswer> {
     List<ExamAnswer> selectByAttemptId(@Param("spaceId") Long spaceId,
                                        @Param("attemptId") Long attemptId);
 
+    /** Owner-scoped single answer for post-submit AI explanation (AI-007). */
+    @Select("SELECT ea.* FROM exam_answer ea "
+            + "JOIN learning_space ls ON ls.id = ea.space_id "
+            + "WHERE ea.id = #{answerId} AND ea.space_id = #{spaceId} "
+            + "  AND ls.owner_subject = #{ownerSubject} LIMIT 1")
+    ExamAnswer selectByIdSpaceOwnerUser(@Param("answerId") Long answerId,
+                                        @Param("spaceId") Long spaceId,
+                                        @Param("userSubject") String userSubject,
+                                        @Param("ownerSubject") String ownerSubject);
+
     /** Scoped upsert update. */
     @Update("UPDATE exam_answer SET answer_data_json = #{answerDataJson}, "
             + "score = #{score}, is_correct = #{isCorrect}, answered_at = #{answeredAt}, "

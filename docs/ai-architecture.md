@@ -1,38 +1,80 @@
 # AI Backend Architecture
 
-> Status: **IMPLEMENTATION COMPLETE / VERIFICATION DEFERRED**
->
-> Scope: AI-001 ~ AI-004 first backend slice only.
+> Status: **AI-001~AI-004 VERIFIED; AI-005~AI-008 IMPLEMENTATION COMPLETE / VERIFICATION DEFERRED**
 
 ## Goal
 
-Learning-context-aware tutor whose context comes from the user's actual
-LearningSpace. This is **not** a generic chatbot.
+Learning-context-aware tutor + grounded provenance + learning-state personalization
++ post-submit explanation + read-only study coach. This is **not** a generic chatbot.
 
-## Main flow
+## Main flows
+
+### Tutor chat (pre-submit)
 
 ```text
 user message
 → LearningSpace authorization
 → persist USER message (short DB tx)
 → assemble learning context via SearchService
-→ build tutor prompt (system policy + history + context + user turn)
+→ assemble bounded LEARNING STATE
+→ build prompt (SYSTEM / STATE / CONTEXT / HISTORY / USER)
 → AiProvider.chat() OUTSIDE DB transaction
-→ persist ASSISTANT message (short DB tx)
-→ return conversation/message response
+→ persist ASSISTANT message + exact references (short DB tx)
+→ return conversation/message + references
 ```
+
+### Post-submit explanation (AI-007)
+
+```text
+authorize space/user
+→ load submitted practice/exam answer
+→ require session/attempt SUBMITTED (else 409)
+→ load snapshot stem + grading outcome + safe KP ids
+→ optional Search context
+→ AiProvider.chat() OUTSIDE DB transaction
+→ return ExplanationResponse
+```
+
+Deterministic grading remains source of truth. AI never grades.
+
+### Study coach (AI-008, read-only)
+
+```text
+authorize space
+→ AiLearningStateService (mastery/wrong/diagnosis/plan)
+→ optional Search context
+→ AiProvider.chat()
+→ StudyCoachResponse (advisory only; no mutations)
+```
+
+## Safety boundaries
+
+| Path | Correctness access |
+|---|---|
+| Pre-submit tutor | Search-safe projection only |
+| Post-submit explanation | Authorized submitted evidence + deterministic grade |
+| Study coach | Learning state signals only; no answer payloads |
 
 ## Layers
 
 | Layer | Package | Responsibility |
 |---|---|---|
-| API | `ai.controller` | thin REST, auth subject from JWT |
-| Orchestration | `ai.service` | conversation lifecycle + tutor turn |
-| Context | `ai.context` | bounded SearchService retrieval |
-| Prompt | `ai.prompt` | system policy + untrusted context delimiting |
-| Provider | `ai.provider` | `AiProvider` port + OpenAI-compatible adapter |
-| Persistence | `ai.entity` / `ai.mapper` | `ai_conversation`, `ai_message` |
-| Config | `ai.config` | `aistudy.ai.*` typed properties |
+| API | `ai.controller` | thin REST |
+| Orchestration | `ai.service` / `explain` / `coach` | tutor / explanation / coach |
+| Learning state | `ai.learning` | bounded domain read models |
+| Context | `ai.context` | SearchService retrieval |
+| Prompt | `ai.prompt` | SYSTEM + STATE + CONTEXT delimiting |
+| Provider | `ai.provider` | AiProvider port |
+| Persistence | `ai.entity` / `ai.mapper` | messages + references |
+| Config | `ai.config` | `aistudy.ai.*` |
+
+## Out of scope (still)
+
+- SSE / streaming
+- Vector DB / embeddings
+- Tool-calling / AI mutations of learning engine
+- Real provider smoke (verification phase)
+
 
 ## Dependency direction
 

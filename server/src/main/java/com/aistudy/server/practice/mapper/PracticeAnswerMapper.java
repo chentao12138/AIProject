@@ -24,6 +24,17 @@ public interface PracticeAnswerMapper extends BaseMapper<PracticeAnswer> {
     PracticeAnswer selectBySlotId(@Param("spaceId") Long spaceId,
                                   @Param("slotId") Long slotId);
 
+    /** Owner-scoped single answer for post-submit AI explanation (AI-007). */
+    @Select("SELECT pa.* FROM practice_answer pa "
+            + "JOIN learning_space ls ON ls.id = pa.space_id "
+            + "WHERE pa.id = #{answerId} AND pa.space_id = #{spaceId} "
+            + "  AND pa.user_subject = #{userSubject} "
+            + "  AND ls.owner_subject = #{ownerSubject} LIMIT 1")
+    PracticeAnswer selectByIdSpaceOwnerUser(@Param("answerId") Long answerId,
+                                            @Param("spaceId") Long spaceId,
+                                            @Param("userSubject") String userSubject,
+                                            @Param("ownerSubject") String ownerSubject);
+
     /** All answers of one session (JOIN slots), for submit summary. */
     @Select("SELECT pa.* FROM practice_answer pa "
             + "JOIN practice_session_question psq ON psq.id = pa.practice_session_question_id "

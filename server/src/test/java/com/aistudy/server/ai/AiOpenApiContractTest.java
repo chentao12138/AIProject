@@ -49,6 +49,15 @@ class AiOpenApiContractTest {
     @MockitoBean
     private com.aistudy.server.ai.mapper.AiMessageMapper aiMessageMapper;
 
+    @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageReferenceMapper aiMessageReferenceMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSettingsMapper aiProviderSettingsMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSecretMapper aiProviderSecretMapper;
+
     @Test
     void aiConversationPathsAreExposed() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
@@ -78,6 +87,23 @@ class AiOpenApiContractTest {
     }
 
     @Test
+    void aiSettingsPathsAreExposedWithoutApiKeyInGetSchema() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/v1/settings/ai']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/settings/ai/test-connection']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/settings/ai/api-key']").exists());
+        String docs = mockMvc.perform(get("/v3/api-docs"))
+                .andReturn().getResponse().getContentAsString();
+        org.junit.jupiter.api.Assertions.assertTrue(
+                docs.contains("apiKeyConfigured"),
+                "OpenAPI must document apiKeyConfigured");
+        org.junit.jupiter.api.Assertions.assertFalse(
+                docs.contains("\"apiKey\":{\"type\":\"string\"}"),
+                "GET response must not expose apiKey as a readable string field");
+    }
+
+    @Test
     void aiEndpointsRequireBearerAuth() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
@@ -85,6 +111,8 @@ class AiOpenApiContractTest {
                         "$.paths['/api/v1/spaces/{spaceId}/ai/conversations'].get.security[0].bearerAuth").exists())
                 .andExpect(jsonPath(
                         "$.paths['/api/v1/spaces/{spaceId}/ai/conversations/{conversationId}/messages']"
-                                + ".post.security[0].bearerAuth").exists());
+                                + ".post.security[0].bearerAuth").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/settings/ai'].get.security[0].bearerAuth").exists());
     }
 }

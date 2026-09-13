@@ -1,6 +1,10 @@
 package com.aistudy.server.ai.provider;
 
 import com.aistudy.server.ai.config.AiProperties;
+import com.aistudy.server.ai.settings.AiProviderSecretMapper;
+import com.aistudy.server.ai.settings.AiProviderSettingsMapper;
+import com.aistudy.server.ai.settings.AiRuntimeConfigResolver;
+import com.aistudy.server.ai.settings.AiSecretStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -12,12 +16,14 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 
 /**
  * AI-001 — OpenAI-compatible adapter against a local deterministic stub.
@@ -62,7 +68,18 @@ class OpenAiCompatibleAiProviderTest {
         properties.setModel("stub-model");
         properties.setTemperature(0.2);
         properties.setMaxOutputTokens(128);
-        provider = new OpenAiCompatibleAiProvider(properties, new ObjectMapper());
+        provider = newProvider(properties);
+    }
+
+    private static OpenAiCompatibleAiProvider newProvider(AiProperties envProperties) {
+        AiProviderSettingsMapper settingsMapper = Mockito.mock(AiProviderSettingsMapper.class);
+        AiProviderSecretMapper secretMapper = Mockito.mock(AiProviderSecretMapper.class);
+        when(settingsMapper.selectByUserSubject(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
+        when(secretMapper.selectByUserSubject(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
+        AiSecretStore secretStore = new AiSecretStore(secretMapper, envProperties);
+        AiRuntimeConfigResolver resolver = new AiRuntimeConfigResolver(
+                envProperties, settingsMapper, secretStore);
+        return new OpenAiCompatibleAiProvider(resolver, envProperties, new ObjectMapper());
     }
 
     @AfterEach
@@ -76,7 +93,7 @@ class OpenAiCompatibleAiProviderTest {
     void successParsesContentModelAndUsage() {
         AiChatResponse response = provider.chat(new AiChatRequest(
                 List.of(AiChatMessage.system("sys"), AiChatMessage.user("hi")),
-                null, null));
+                null, null), "user-1");
         assertEquals("你好", response.content());
         assertEquals("stub-model", response.model());
         assertNotNull(response.usage());
@@ -89,7 +106,7 @@ class OpenAiCompatibleAiProviderTest {
     void requestUsesChatCompletionsPathAndBearerAuth() {
         provider.chat(new AiChatRequest(
                 List.of(AiChatMessage.system("sys"), AiChatMessage.user("x")),
-                null, null));
+                null, null), "user-1");
         assertEquals("/chat/completions", lastPath.get());
         assertEquals("Bearer test-api-key", lastAuth.get());
         String body = lastBody.get();
@@ -103,9 +120,8 @@ class OpenAiCompatibleAiProviderTest {
     @Test
     void trailingSlashBaseUrlDoesNotDoublePath() {
         properties.setBaseUrl(baseUrl + "/");
-        OpenAiCompatibleAiProvider withSlash =
-                new OpenAiCompatibleAiProvider(properties, new ObjectMapper());
-        withSlash.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null));
+        OpenAiCompatibleAiProvider withSlash = newProvider(properties);
+        withSlash.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null), "user-1");
         assertEquals("/chat/completions", lastPath.get());
     }
 
@@ -115,7 +131,7 @@ class OpenAiCompatibleAiProviderTest {
                 {"choices":[{"message":{"role":"assistant","content":"ok"}}],"model":"stub-model"}
                 """;
         AiChatResponse response = provider.chat(new AiChatRequest(
-                List.of(AiChatMessage.user("x")), null, null));
+                List.of(AiChatMessage.user("x")), null, null), "user-1");
         assertEquals("ok", response.content());
         assertNotNull(response.usage());
         assertEquals(null, response.usage().promptTokens());
@@ -127,10 +143,9 @@ class OpenAiCompatibleAiProviderTest {
     void unconfiguredThrowsAiNotConfiguredAndDoesNotLeakKey() {
         properties.setEnabled(false);
         properties.setApiKey("secret-should-not-leak");
-        OpenAiCompatibleAiProvider disabled =
-                new OpenAiCompatibleAiProvider(properties, new ObjectMapper());
+        OpenAiCompatibleAiProvider disabled = newProvider(properties);
         AiProviderException ex = assertThrows(AiProviderException.class,
-                () -> disabled.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null)));
+                () -> disabled.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null), "user-1"));
         assertEquals(AiErrorCode.AI_NOT_CONFIGURED, ex.errorCode());
         assertFalse(ex.getMessage().contains("secret-should-not-leak"));
     }
@@ -141,7 +156,7 @@ class OpenAiCompatibleAiProviderTest {
             responseStatus = status;
             responseBody = "{\"error\":\"nope\"}";
             AiProviderException ex = assertThrows(AiProviderException.class,
-                    () -> provider.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null)));
+                    () -> provider.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null), "user-1"));
             assertEquals(AiErrorCode.AI_PROVIDER_REJECTED, ex.errorCode(), "status=" + status);
             assertFalse(ex.getMessage().contains("test-api-key"));
             assertFalse(ex.getMessage().contains("nope"));
@@ -153,7 +168,7 @@ class OpenAiCompatibleAiProviderTest {
         responseStatus = 500;
         responseBody = "{\"error\":\"boom-secret-upstream\"}";
         AiProviderException ex = assertThrows(AiProviderException.class,
-                () -> provider.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null)));
+                () -> provider.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null), "user-1"));
         assertEquals(AiErrorCode.AI_PROVIDER_UNAVAILABLE, ex.errorCode());
         assertFalse(ex.getMessage().contains("boom-secret-upstream"));
         assertFalse(ex.getMessage().contains("test-api-key"));
@@ -163,7 +178,7 @@ class OpenAiCompatibleAiProviderTest {
     void malformedJsonMapsToResponseInvalid() {
         responseBody = "not-json";
         AiProviderException ex = assertThrows(AiProviderException.class,
-                () -> provider.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null)));
+                () -> provider.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null), "user-1"));
         assertEquals(AiErrorCode.AI_PROVIDER_RESPONSE_INVALID, ex.errorCode());
         assertFalse(ex.getMessage().contains("not-json"));
     }
@@ -172,7 +187,7 @@ class OpenAiCompatibleAiProviderTest {
     void emptyChoicesMapToResponseInvalid() {
         responseBody = "{\"choices\":[]}";
         AiProviderException ex = assertThrows(AiProviderException.class,
-                () -> provider.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null)));
+                () -> provider.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null), "user-1"));
         assertEquals(AiErrorCode.AI_PROVIDER_RESPONSE_INVALID, ex.errorCode());
     }
 
@@ -181,7 +196,7 @@ class OpenAiCompatibleAiProviderTest {
         server.stop(0);
         server = null;
         AiProviderException ex = assertThrows(AiProviderException.class,
-                () -> provider.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null)));
+                () -> provider.chat(new AiChatRequest(List.of(AiChatMessage.user("x")), null, null), "user-1"));
         assertEquals(AiErrorCode.AI_PROVIDER_UNAVAILABLE, ex.errorCode());
     }
 }

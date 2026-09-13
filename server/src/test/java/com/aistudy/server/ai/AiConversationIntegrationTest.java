@@ -173,7 +173,8 @@ class AiConversationIntegrationTest {
         var assistant = messagePersistenceService.persistAssistantMessage(
                 USER_A, spaceA, conversation,
                 new AiChatResponse("answer", "openai-compatible", "m1",
-                        new AiUsage(1, 2, 3)));
+                        new AiUsage(1, 2, 3)),
+                java.util.List.of());
         assertEquals("ASSISTANT", assistant.getRole());
         assertEquals("m1", assistant.getModel());
         assertEquals(1, assistant.getPromptTokens());

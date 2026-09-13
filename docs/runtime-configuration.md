@@ -161,12 +161,78 @@ secrets platform — never committed or baked into an image.
 | `AISTUDY_AI_CONTEXT_MAX_CHARS` | all | no | `12000` | chars | no |
 | `AISTUDY_AI_CONTEXT_MAX_USER_MESSAGE_CHARS` | all | no | `8000` | chars | no |
 | `AISTUDY_AI_CONTEXT_MAX_HISTORY_MESSAGES` | all | no | `20` | count | no |
+| `AISTUDY_AI_CONTEXT_MAX_LEARNING_STATE_ITEMS` | all | no | `8` | count | no |
+| `AISTUDY_AI_SECRET_KEY` | all | when BYOK runtime secrets are used | (none) | Base64 AES key ≥256-bit | yes |
+
+### Runtime settings / BYOK (AI-009)
+
+Desktop users configure **their own** provider via the Settings API. The
+frontend only collects the API key; the backend stores it encrypted per user
+and performs all Tutor / Explanation / Study Coach / test-connection calls.
+
+```text
+GET    /api/v1/settings/ai
+PUT    /api/v1/settings/ai
+POST   /api/v1/settings/ai/test-connection
+DELETE /api/v1/settings/ai/api-key
+```
+
+Ownership: every operation is scoped to the authenticated JWT subject.
+Users cannot read or mutate another user's settings or secret.
+
+GET never returns the API key (only `apiKeyConfigured: true/false`).
+PUT with a non-empty `apiKey` replaces **this user's** secret; omitting
+`apiKey` keeps the existing secret. Placeholder masks such as `********`
+are rejected.
+
+Config resolution for each AI call (`resolveForUser(subject)`):
+
+1. Non-secret: user runtime settings override env defaults
+2. API key: user encrypted secret if a row exists; env `AISTUDY_AI_API_KEY`
+   only when no user secret exists. Decrypt failure of an existing secret
+   is a hard error (no env fallback).
+
+DB never stores plaintext keys. Ciphertext format:
+`Base64(IV(12) || AES-GCM ciphertext+tag)` with a unique IV per encryption.
+Master key is `AISTUDY_AI_SECRET_KEY` (Base64, ≥256-bit) from the
+environment/secrets platform — never committed.
+
+Trust note: `base_url` is operator/user configuration that causes outbound
+HTTP from the backend. V1 accepts http(s) absolute URLs without userinfo;
+hostname allowlisting is not enforced yet (documented SSRF trust assumption).
+
+### Vendor-neutral example (OpenAI-compatible)
+
+Any Chat Completions endpoint that accepts OpenAI-style
+`POST {baseUrl}/chat/completions` can be used via the generic adapter.
+Example using StepFun:
+
+```text
+AISTUDY_AI_ENABLED=true
+AISTUDY_AI_PROVIDER=openai-compatible
+AISTUDY_AI_BASE_URL=https://api.stepfun.com/v1
+AISTUDY_AI_API_KEY=<secret from environment/secrets platform — never commit>
+AISTUDY_AI_MODEL=step-3.5-flash
+```
+
+Other OpenAI-compatible providers work the same way with their own
+base URL and model id. StepFun is **not** the only supported vendor.
+
+Request body fields sent by the adapter: `model`, `messages`,
+`temperature`, `max_tokens`, `stream=false`. Response is parsed from
+`choices[0].message.content`, `model`, and optional `usage.*_tokens`.
+Trailing slash on base URL is normalized (`.../v1/` → `.../v1/chat/completions`).
 
 Notes:
 
 - Provider egress to `AISTUDY_AI_BASE_URL` is required when AI is enabled.
 - First version is synchronous request/response (no SSE/WebSocket streaming).
-- Runtime verification of a live provider is deferred.
+- Live StepFun smoke (`step-3.5-flash`) verified 2026-09-13:
+  `test-connection`, Tutor send-message, Study Coach, archive.
+- `test-connection` uses `max_tokens=64`. Reasoning models (e.g.
+  `step-3.5-flash`) consume hidden reasoning tokens before visible content;
+  a tiny budget returns empty `choices[0].message.content` and maps to 502
+  `AI_PROVIDER_RESPONSE_INVALID`.
 
 Storage persistence requirement: `AISTUDY_STORAGE_LOCAL_ROOT` MUST be on
 persistent storage. Database + storage are treated as one logical backup set;

@@ -30,4 +30,13 @@ public interface ExamQuestionMapper extends BaseMapper<ExamQuestion> {
     ExamQuestion selectByIdAndPaper(@Param("spaceId") Long spaceId,
                                     @Param("paperId") Long paperId,
                                     @Param("examQuestionId") Long examQuestionId);
+
+    /** Owner-scoped single slot for post-submit AI explanation (AI-007). */
+    @Select("SELECT eq.* FROM exam_question eq "
+            + "JOIN learning_space ls ON ls.id = eq.space_id "
+            + "WHERE eq.id = #{examQuestionId} AND eq.space_id = #{spaceId} "
+            + "  AND ls.owner_subject = #{ownerSubject} LIMIT 1")
+    ExamQuestion selectByIdSpaceOwner(@Param("examQuestionId") Long examQuestionId,
+                                      @Param("spaceId") Long spaceId,
+                                      @Param("ownerSubject") String ownerSubject);
 }

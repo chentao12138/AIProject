@@ -1,6 +1,8 @@
 package com.aistudy.server.ai.provider;
 
 import com.aistudy.server.ai.config.AiProperties;
+import com.aistudy.server.ai.settings.AiRuntimeConfigResolver;
+import com.aistudy.server.ai.settings.AiRuntimeConfigResolver.ResolvedConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -10,51 +12,55 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
-import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * AI-001 — OpenAI-compatible Chat Completions adapter.
+ * AI-001 / AI-009 — OpenAI-compatible Chat Completions adapter.
  *
- * <p>Uses JDK {@link HttpClient} (already on the classpath) so no vendor
- * SDK is required. Vendor DTOs never leave this class.
+ * <p>Vendor-neutral (OpenAI, StepFun, …). Effective config is resolved
+ * per call from runtime settings + secret store with env fallback.
+ * Vendor DTOs and the API key never leave this class.
  */
 @Component
 public class OpenAiCompatibleAiProvider implements AiProvider {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleAiProvider.class);
 
-    private final AiProperties properties;
+    private final AiRuntimeConfigResolver configResolver;
+    private final AiProperties envProperties;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
 
-    public OpenAiCompatibleAiProvider(AiProperties properties, ObjectMapper objectMapper) {
-        this.properties = properties;
+    public OpenAiCompatibleAiProvider(AiRuntimeConfigResolver configResolver,
+                                      AiProperties envProperties,
+                                      ObjectMapper objectMapper) {
+        this.configResolver = configResolver;
+        this.envProperties = envProperties;
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(properties.getConnectTimeout())
+                .connectTimeout(envProperties.getConnectTimeout())
                 .build();
     }
 
     @Override
-    public AiChatResponse chat(AiChatRequest request) {
-        if (!properties.isConfigured()) {
+    public AiChatResponse chat(AiChatRequest request, String userSubject) {
+        ResolvedConfig config = configResolver.resolveForUser(userSubject);
+        if (!config.isConfigured()) {
             throw new AiProviderException(AiErrorCode.AI_NOT_CONFIGURED,
                     "AI provider is not configured");
         }
-        String endpoint = joinUrl(properties.getBaseUrl(), "/chat/completions");
+        String endpoint = joinUrl(config.baseUrl(), "/chat/completions");
         HttpRequest httpRequest;
         try {
             httpRequest = HttpRequest.newBuilder()
                     .uri(URI.create(endpoint))
-                    .timeout(properties.getReadTimeout())
+                    .timeout(config.readTimeout())
                     .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + properties.getApiKey())
-                    .POST(HttpRequest.BodyPublishers.ofString(buildBody(request)))
+                    .header("Authorization", "Bearer " + config.apiKey())
+                    .POST(HttpRequest.BodyPublishers.ofString(buildBody(request, config)))
                     .build();
         } catch (IllegalArgumentException e) {
             throw new AiProviderException(AiErrorCode.AI_NOT_CONFIGURED,
@@ -87,17 +93,18 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
             throw new AiProviderException(AiErrorCode.AI_PROVIDER_UNAVAILABLE,
                     "AI provider is unavailable");
         }
-        return parseResponse(response.body());
+        return parseResponse(response.body(), config);
     }
 
-    private String buildBody(AiChatRequest request) {
+    private String buildBody(AiChatRequest request, ResolvedConfig config) {
         ObjectNode root = objectMapper.createObjectNode();
-        root.put("model", properties.getModel());
+        root.put("model", config.model());
         root.put("temperature", request.temperature() != null
-                ? request.temperature() : properties.getTemperature());
+                ? request.temperature() : config.temperature());
         int maxTokens = request.maxOutputTokens() != null
-                ? request.maxOutputTokens() : properties.getMaxOutputTokens();
+                ? request.maxOutputTokens() : config.maxOutputTokens();
         root.put("max_tokens", maxTokens);
+        root.put("stream", false);
         ArrayNode messages = root.putArray("messages");
         List<AiChatMessage> safe = request.messages() == null ? List.of() : request.messages();
         for (AiChatMessage message : safe) {
@@ -108,7 +115,7 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
         return root.toString();
     }
 
-    private AiChatResponse parseResponse(String body) {
+    private AiChatResponse parseResponse(String body, ResolvedConfig config) {
         try {
             JsonNode root = objectMapper.readTree(body);
             JsonNode choices = root.path("choices");
@@ -134,8 +141,8 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
                         ? usageNode.get("total_tokens").asInt() : null;
                 usage = new AiUsage(prompt, completion, total);
             }
-            String model = root.path("model").asText(properties.getModel());
-            return new AiChatResponse(content, properties.getProvider(), model, usage);
+            String model = root.path("model").asText(config.model());
+            return new AiChatResponse(content, config.provider(), model, usage);
         } catch (AiProviderException e) {
             throw e;
         } catch (Exception e) {

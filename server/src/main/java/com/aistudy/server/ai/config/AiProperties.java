@@ -4,8 +4,13 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * AI-001 — typed AI configuration under {@code aistudy.ai.*}.
- * Secrets never have real defaults; production injects via environment.
+ * AI-001 / AI-009 — typed AI configuration under {@code aistudy.ai.*}.
+ *
+ * <p>Env values act as deployment defaults / fallback. Runtime user
+ * settings (DB) override non-secret fields; API key comes from
+ * {@code AiSecretStore} first, then env {@code AISTUDY_AI_API_KEY}.
+ * {@code secretKey} is the AES master key for encrypting runtime secrets
+ * (Base64, ≥256-bit). Never commit real values.
  */
 @ConfigurationProperties(prefix = "aistudy.ai")
 public class AiProperties {
@@ -15,6 +20,7 @@ public class AiProperties {
     private String baseUrl = "";
     private String apiKey = "";
     private String model = "";
+    private String secretKey = "";
     private double temperature = 0.3;
     private int maxOutputTokens = 1024;
     private Duration connectTimeout = Duration.ofSeconds(5);
@@ -97,6 +103,14 @@ public class AiProperties {
         return context;
     }
 
+    public String getSecretKey() {
+        return secretKey;
+    }
+
+    public void setSecretKey(String secretKey) {
+        this.secretKey = secretKey;
+    }
+
     public boolean isConfigured() {
         return enabled
                 && baseUrl != null && !baseUrl.isBlank()
@@ -109,6 +123,7 @@ public class AiProperties {
         private int maxContextChars = 12000;
         private int maxUserMessageChars = 8000;
         private int maxHistoryMessages = 20;
+        private int maxLearningStateItems = 8;
 
         public int getMaxSearchResults() {
             return maxSearchResults;
@@ -140,6 +155,14 @@ public class AiProperties {
 
         public void setMaxHistoryMessages(int maxHistoryMessages) {
             this.maxHistoryMessages = maxHistoryMessages;
+        }
+
+        public int getMaxLearningStateItems() {
+            return maxLearningStateItems;
+        }
+
+        public void setMaxLearningStateItems(int maxLearningStateItems) {
+            this.maxLearningStateItems = maxLearningStateItems;
         }
     }
 }

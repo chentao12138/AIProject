@@ -1247,6 +1247,9 @@ class FlywayMigrationIntegrationTest {
         assertAiSchemaShape();
         assertAiRoleCheckContract();
         assertAiIndexSanity();
+
+        // (40) AI REFS + PROVIDER SETTINGS — V028/V029/V030 (AI-005/009).
+        assertAiReferenceAndSettingsSchema();
     }
 
     // ==================== TEST E — V025 -> LATEST (AI tables) ====================
@@ -2089,5 +2092,65 @@ class FlywayMigrationIntegrationTest {
 
     private Flyway flyway() {
         return flyway(null);
+    }
+
+    /** V028/V029/V030 — message references + per-user provider settings. */
+    private void assertAiReferenceAndSettingsSchema() {
+        for (String table : new String[]{
+                "ai_message_reference", "ai_provider_settings", "ai_provider_secret"}) {
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.TABLES "
+                            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+                    Integer.class, table);
+            assertEquals(1, count, table + " must exist after migrate to latest");
+        }
+
+        Map<String, Object> refType = jdbc.queryForMap(
+                "SELECT DATA_TYPE FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message_reference' "
+                        + "AND COLUMN_NAME = 'reference_type'");
+        assertEquals("varchar", String.valueOf(refType.get("DATA_TYPE")).toLowerCase());
+
+        Integer refFk = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message_reference' "
+                        + "AND CONSTRAINT_NAME = 'fk_ai_message_reference_message'",
+                Integer.class);
+        assertEquals(1, refFk);
+
+        Integer settingsSubject = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider_settings' "
+                        + "AND COLUMN_NAME = 'user_subject' AND IS_NULLABLE = 'NO'",
+                Integer.class);
+        assertEquals(1, settingsSubject);
+
+        Integer secretSubject = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider_secret' "
+                        + "AND COLUMN_NAME = 'user_subject' AND IS_NULLABLE = 'NO'",
+                Integer.class);
+        assertEquals(1, secretSubject);
+
+        Integer plaintext = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider_secret' "
+                        + "AND COLUMN_NAME IN ('api_key','plaintext','password')",
+                Integer.class);
+        assertEquals(0, plaintext, "secret table must not store plaintext columns");
+
+        Integer settingsUk = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider_settings' "
+                        + "AND INDEX_NAME = 'uq_ai_provider_settings_user' AND NON_UNIQUE = 0",
+                Integer.class);
+        assertTrue(settingsUk > 0);
+
+        Integer secretUk = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider_secret' "
+                        + "AND INDEX_NAME = 'uq_ai_provider_secret_user' AND NON_UNIQUE = 0",
+                Integer.class);
+        assertTrue(secretUk > 0);
     }
 }

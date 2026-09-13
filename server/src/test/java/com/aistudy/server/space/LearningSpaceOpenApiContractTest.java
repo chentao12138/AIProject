@@ -187,6 +187,16 @@ class LearningSpaceOpenApiContractTest {
     private com.aistudy.server.search.mapper.SearchMapper searchMapper;
 
     @MockitoBean
+    private com.aistudy.server.ai.mapper.AiMessageReferenceMapper aiMessageReferenceMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSettingsMapper aiProviderSettingsMapper;
+
+    @MockitoBean
+    private com.aistudy.server.ai.settings.AiProviderSecretMapper aiProviderSecretMapper;
+
+
+    @MockitoBean
     private com.aistudy.server.ai.mapper.AiConversationMapper aiConversationMapper;
 
     @MockitoBean

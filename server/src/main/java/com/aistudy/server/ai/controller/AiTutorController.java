@@ -1,11 +1,16 @@
 package com.aistudy.server.ai.controller;
 
+import com.aistudy.server.ai.coach.AiStudyCoachService;
 import com.aistudy.server.ai.dto.AiDto.CreateConversationRequest;
 import com.aistudy.server.ai.dto.AiDto.ConversationPageResponse;
 import com.aistudy.server.ai.dto.AiDto.ConversationView;
+import com.aistudy.server.ai.dto.AiDto.ExplanationResponse;
 import com.aistudy.server.ai.dto.AiDto.MessagePageResponse;
 import com.aistudy.server.ai.dto.AiDto.SendMessageRequest;
 import com.aistudy.server.ai.dto.AiDto.SendMessageResponse;
+import com.aistudy.server.ai.dto.AiDto.StudyCoachRequest;
+import com.aistudy.server.ai.dto.AiDto.StudyCoachResponse;
+import com.aistudy.server.ai.explain.AiAnswerExplanationService;
 import com.aistudy.server.ai.service.AiConversationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -34,9 +39,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiTutorController {
 
     private final AiConversationService aiConversationService;
+    private final AiAnswerExplanationService answerExplanationService;
+    private final AiStudyCoachService studyCoachService;
 
-    public AiTutorController(AiConversationService aiConversationService) {
+    public AiTutorController(AiConversationService aiConversationService,
+                             AiAnswerExplanationService answerExplanationService,
+                             AiStudyCoachService studyCoachService) {
         this.aiConversationService = aiConversationService;
+        this.answerExplanationService = answerExplanationService;
+        this.studyCoachService = studyCoachService;
     }
 
     @Operation(summary = "Create an AI tutor conversation in this LearningSpace")
@@ -106,5 +117,35 @@ public class AiTutorController {
             Authentication authentication) {
         return aiConversationService.sendMessage(
                 authentication.getName(), spaceId, conversationId, request.content());
+    }
+
+    @Operation(summary = "Explain a submitted practice answer (post-submit only)")
+    @PostMapping("/explanations/practice-answers/{answerId}")
+    public ExplanationResponse explainPracticeAnswer(
+            @PathVariable Long spaceId,
+            @PathVariable Long answerId,
+            Authentication authentication) {
+        return answerExplanationService.explainPracticeAnswer(
+                authentication.getName(), spaceId, answerId);
+    }
+
+    @Operation(summary = "Explain a submitted exam answer (post-submit only)")
+    @PostMapping("/explanations/exam-answers/{answerId}")
+    public ExplanationResponse explainExamAnswer(
+            @PathVariable Long spaceId,
+            @PathVariable Long answerId,
+            Authentication authentication) {
+        return answerExplanationService.explainExamAnswer(
+                authentication.getName(), spaceId, answerId);
+    }
+
+    @Operation(summary = "Read-only study coach: recommend next study steps")
+    @PostMapping(value = "/study-coach", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public StudyCoachResponse studyCoach(
+            @PathVariable Long spaceId,
+            @Valid @RequestBody(required = false) StudyCoachRequest request,
+            Authentication authentication) {
+        String question = request == null ? null : request.question();
+        return studyCoachService.coach(authentication.getName(), spaceId, question);
     }
 }

@@ -4,7 +4,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * AI-004 — public API DTOs. No vendor fields, no correctness material.
+ * AI-004 ~ AI-008 — public API DTOs. No vendor fields, no pre-submit
+ * correctness material.
  */
 public final class AiDto {
 
@@ -15,6 +16,9 @@ public final class AiDto {
     }
 
     public record SendMessageRequest(String content) {
+    }
+
+    public record StudyCoachRequest(String question) {
     }
 
     public record ConversationView(
@@ -38,7 +42,8 @@ public final class AiDto {
             Integer promptTokens,
             Integer completionTokens,
             Integer totalTokens,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            List<ContextReference> references
     ) {
     }
 
@@ -46,8 +51,12 @@ public final class AiDto {
             String type,
             Long id,
             String title,
-            String snippet
+            String snippet,
+            String locator
     ) {
+        public ContextReference(String type, Long id, String title, String snippet) {
+            this(type, id, title, snippet, null);
+        }
     }
 
     public record SendMessageResponse(
@@ -73,6 +82,26 @@ public final class AiDto {
             int size,
             long totalElements,
             int totalPages
+    ) {
+    }
+
+    /** AI-007 — post-submit explanation (deterministic grade already decided). */
+    public record ExplanationResponse(
+            String explanation,
+            List<String> keyConcepts,
+            List<String> reviewSuggestions,
+            List<Long> relatedKnowledgePointIds,
+            List<ContextReference> contextReferences
+    ) {
+    }
+
+    /** AI-008 — read-only study coach output. Never mutates learning state. */
+    public record StudyCoachResponse(
+            String summary,
+            List<String> recommendedNextActions,
+            List<Long> focusKnowledgePointIds,
+            String rationale,
+            List<ContextReference> contextReferences
     ) {
     }
 }

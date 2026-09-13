@@ -5,12 +5,17 @@ import com.aistudy.server.ai.context.AiContextItem;
 import com.aistudy.server.ai.context.AiLearningContextService;
 import com.aistudy.server.ai.dto.AiDto.ConversationPageResponse;
 import com.aistudy.server.ai.dto.AiDto.ConversationView;
+import com.aistudy.server.ai.dto.AiDto.ContextReference;
 import com.aistudy.server.ai.dto.AiDto.MessagePageResponse;
 import com.aistudy.server.ai.dto.AiDto.MessageView;
 import com.aistudy.server.ai.entity.AiConversation;
 import com.aistudy.server.ai.entity.AiMessage;
+import com.aistudy.server.ai.entity.AiMessageReference;
+import com.aistudy.server.ai.learning.AiLearningState;
+import com.aistudy.server.ai.learning.AiLearningStateService;
 import com.aistudy.server.ai.mapper.AiConversationMapper;
 import com.aistudy.server.ai.mapper.AiMessageMapper;
+import com.aistudy.server.ai.mapper.AiMessageReferenceMapper;
 import com.aistudy.server.ai.provider.AiChatMessage;
 import com.aistudy.server.ai.provider.AiChatRequest;
 import com.aistudy.server.ai.provider.AiChatResponse;
@@ -19,6 +24,7 @@ import com.aistudy.server.ai.provider.AiProvider;
 import com.aistudy.server.ai.provider.AiProviderException;
 import com.aistudy.server.ai.provider.AiChatRole;
 import com.aistudy.server.ai.prompt.AiTutorPromptBuilder;
+import com.aistudy.server.ai.settings.AiRuntimeConfigResolver;
 import com.aistudy.server.operations.AiMetrics;
 import com.aistudy.server.space.service.LearningSpaceService;
 import java.time.LocalDateTime;
@@ -26,6 +32,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -55,28 +62,37 @@ public class AiConversationService {
 
     private final AiConversationMapper conversationMapper;
     private final AiMessageMapper messageMapper;
+    private final AiMessageReferenceMapper messageReferenceMapper;
     private final AiMessagePersistenceService messagePersistenceService;
     private final LearningSpaceService learningSpaceService;
     private final AiLearningContextService learningContextService;
+    private final AiLearningStateService learningStateService;
     private final AiProvider aiProvider;
     private final AiProperties aiProperties;
+    private final AiRuntimeConfigResolver configResolver;
     private final AiMetrics aiMetrics;
 
     public AiConversationService(AiConversationMapper conversationMapper,
                                  AiMessageMapper messageMapper,
+                                 AiMessageReferenceMapper messageReferenceMapper,
                                  AiMessagePersistenceService messagePersistenceService,
                                  LearningSpaceService learningSpaceService,
                                  AiLearningContextService learningContextService,
+                                 AiLearningStateService learningStateService,
                                  AiProvider aiProvider,
                                  AiProperties aiProperties,
+                                 AiRuntimeConfigResolver configResolver,
                                  AiMetrics aiMetrics) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
+        this.messageReferenceMapper = messageReferenceMapper;
         this.messagePersistenceService = messagePersistenceService;
         this.learningSpaceService = learningSpaceService;
         this.learningContextService = learningContextService;
+        this.learningStateService = learningStateService;
         this.aiProvider = aiProvider;
         this.aiProperties = aiProperties;
+        this.configResolver = configResolver;
         this.aiMetrics = aiMetrics;
     }
 
@@ -158,11 +174,36 @@ public class AiConversationService {
         long total = messageMapper.countByConversation(conversation.getId(), spaceId, ownerSubject);
         int totalPages = (int) Math.max(1, Math.ceil((double) total / safeSize));
         List<MessageView> content = new ArrayList<>(rows.size());
+        Map<Long, List<ContextReference>> refsByMessage = loadReferencesForMessages(
+                conversationId, spaceId, ownerSubject, rows);
         for (AiMessage row : rows) {
-            content.add(toMessageView(row));
+            content.add(toMessageView(row, refsByMessage.getOrDefault(row.getId(), List.of())));
         }
         return new MessagePageResponse(
                 Collections.unmodifiableList(content), safePage, safeSize, total, totalPages);
+    }
+
+    private Map<Long, List<ContextReference>> loadReferencesForMessages(
+            Long conversationId, Long spaceId, String ownerSubject, List<AiMessage> messages) {
+        List<Long> assistantIds = new ArrayList<>();
+        for (AiMessage message : messages) {
+            if (ROLE_ASSISTANT.equals(message.getRole())) {
+                assistantIds.add(message.getId());
+            }
+        }
+        if (assistantIds.isEmpty()) {
+            return Map.of();
+        }
+        List<AiMessageReference> rows = messageReferenceMapper.selectByConversationMessages(
+                conversationId, spaceId, ownerSubject, assistantIds);
+        Map<Long, List<ContextReference>> result = new java.util.HashMap<>();
+        for (AiMessageReference row : rows) {
+            result.computeIfAbsent(row.getMessageId(), k -> new ArrayList<>())
+                    .add(new ContextReference(
+                            row.getReferenceType(), row.getEntityId(),
+                            row.getTitle(), row.getSnippet()));
+        }
+        return result;
     }
 
     /**
@@ -174,7 +215,7 @@ public class AiConversationService {
             Long spaceId,
             Long conversationId,
             String content) {
-        requireAiEnabled();
+        requireAiEnabled(ownerSubject);
         requireSpace(ownerSubject, spaceId);
         String trimmed = content == null ? "" : content.trim();
         if (trimmed.isEmpty()) {
@@ -198,15 +239,16 @@ public class AiConversationService {
         List<AiContextItem> contextItems = learningContextService.assemble(
                 ownerSubject, ownerSubject, spaceId, trimmed);
         String renderedContext = learningContextService.renderContextBlock(contextItems);
+        AiLearningState learningState = learningStateService.assemble(ownerSubject, spaceId);
         List<AiChatMessage> providerMessages = AiTutorPromptBuilder.build(
-                history, renderedContext, trimmed);
+                history, renderedContext, learningState, trimmed);
 
         AiChatResponse response;
         try {
             response = aiProvider.chat(new AiChatRequest(
                     providerMessages,
                     aiProperties.getTemperature(),
-                    aiProperties.getMaxOutputTokens()));
+                    aiProperties.getMaxOutputTokens()), ownerSubject);
         } catch (AiProviderException e) {
             aiMetrics.recordFailure(aiProperties.getProvider(), e.errorCode().name());
             throw e;
@@ -214,22 +256,24 @@ public class AiConversationService {
         aiMetrics.recordRequest(aiProperties.getProvider(), "SUCCESS");
 
         AiMessage assistantMessage = messagePersistenceService.persistAssistantMessage(
-                ownerSubject, spaceId, conversation, response);
+                ownerSubject, spaceId, conversation, response, contextItems);
+
+        List<ContextReference> refs = contextItems.stream()
+                .map(item -> new ContextReference(
+                        item.type(), item.entityId(), item.title(), item.snippet()))
+                .toList();
 
         return new com.aistudy.server.ai.dto.AiDto.SendMessageResponse(
                 conversation.getId(),
-                toMessageView(userMessage),
-                toMessageView(assistantMessage),
-                contextItems.stream()
-                        .map(item -> new com.aistudy.server.ai.dto.AiDto.ContextReference(
-                                item.type(), item.entityId(), item.title(), item.snippet()))
-                        .toList());
+                toMessageView(userMessage, List.of()),
+                toMessageView(assistantMessage, refs),
+                refs);
     }
 
     // ==================== internals ====================
 
-    private void requireAiEnabled() {
-        if (!aiProperties.isEnabled() || !aiProperties.isConfigured()) {
+    private void requireAiEnabled(String userSubject) {
+        if (!configResolver.resolveForUser(userSubject).isConfigured()) {
             aiMetrics.recordFailure(aiProperties.getProvider(), AiErrorCode.AI_NOT_CONFIGURED.name());
             throw new AiProviderException(AiErrorCode.AI_NOT_CONFIGURED,
                     "AI tutor is not configured");
@@ -304,7 +348,7 @@ public class AiConversationService {
         );
     }
 
-    private static MessageView toMessageView(AiMessage message) {
+    private static MessageView toMessageView(AiMessage message, List<ContextReference> references) {
         return new MessageView(
                 message.getId(),
                 message.getConversationId(),
@@ -315,7 +359,8 @@ public class AiConversationService {
                 message.getPromptTokens(),
                 message.getCompletionTokens(),
                 message.getTotalTokens(),
-                message.getCreatedAt()
+                message.getCreatedAt(),
+                references == null ? List.of() : List.copyOf(references)
         );
     }
 }

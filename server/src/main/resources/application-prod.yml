@@ -53,3 +53,4 @@ aistudy:
     base-url: "${AISTUDY_AI_BASE_URL:}"
     api-key: "${AISTUDY_AI_API_KEY:}"
     model: "${AISTUDY_AI_MODEL:}"
+    secret-key: "${AISTUDY_AI_SECRET_KEY:}"

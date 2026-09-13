@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -85,7 +86,7 @@ class AiTutorSecurityIntegrationTest {
         spaceB = insertSpace(USER_B, "SecB");
         tokenA = jwtAccessTokenService.issueAccessToken(USER_A);
         tokenB = jwtAccessTokenService.issueAccessToken(USER_B);
-        when(aiProvider.chat(any())).thenReturn(new AiChatResponse(
+        when(aiProvider.chat(any(), anyString())).thenReturn(new AiChatResponse(
                 "安全回答", "openai-compatible", "test-model", AiUsage.empty()));
     }
 

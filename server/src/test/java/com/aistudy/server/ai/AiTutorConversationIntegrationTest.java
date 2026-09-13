@@ -36,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -102,7 +103,7 @@ class AiTutorConversationIntegrationTest {
 
     @Test
     void successPersistsUserThenAssistantAndUpdatesLastMessageAt() {
-        when(aiProvider.chat(any())).thenReturn(new AiChatResponse(
+        when(aiProvider.chat(any(), anyString())).thenReturn(new AiChatResponse(
                 "这是辅导回答", "openai-compatible", "test-model",
                 new AiUsage(10, 20, 30)));
 
@@ -129,14 +130,14 @@ class AiTutorConversationIntegrationTest {
 
     @Test
     void providerRequestContainsSystemPolicyHistoryAndCurrentMessage() {
-        when(aiProvider.chat(any())).thenReturn(new AiChatResponse(
+        when(aiProvider.chat(any(), anyString())).thenReturn(new AiChatResponse(
                 "ok", "openai-compatible", "test-model", AiUsage.empty()));
 
         conversationService.sendMessage(OWNER, spaceId, conversationId, "第一问");
         conversationService.sendMessage(OWNER, spaceId, conversationId, "第二问");
 
         ArgumentCaptor<AiChatRequest> captor = ArgumentCaptor.forClass(AiChatRequest.class);
-        verify(aiProvider, atLeastOnce()).chat(captor.capture());
+        verify(aiProvider, atLeastOnce()).chat(captor.capture(), anyString());
         AiChatRequest last = captor.getAllValues().get(captor.getAllValues().size() - 1);
         assertFalse(last.messages().isEmpty());
         assertTrue(last.messages().get(0).content().contains("AIStudy learning tutor"));
@@ -149,13 +150,13 @@ class AiTutorConversationIntegrationTest {
 
     @Test
     void historyIsBoundedToConfiguredMax() {
-        when(aiProvider.chat(any())).thenReturn(new AiChatResponse(
+        when(aiProvider.chat(any(), anyString())).thenReturn(new AiChatResponse(
                 "ok", "openai-compatible", "test-model", AiUsage.empty()));
         for (int i = 1; i <= 6; i++) {
             conversationService.sendMessage(OWNER, spaceId, conversationId, "msg-" + i);
         }
         ArgumentCaptor<AiChatRequest> captor = ArgumentCaptor.forClass(AiChatRequest.class);
-        verify(aiProvider, atLeastOnce()).chat(captor.capture());
+        verify(aiProvider, atLeastOnce()).chat(captor.capture(), anyString());
         AiChatRequest last = captor.getAllValues().get(captor.getAllValues().size() - 1);
         // system + bounded history + current user turn
         // max-history-messages=3 means at most 3 history rows + system + current
@@ -168,7 +169,7 @@ class AiTutorConversationIntegrationTest {
 
     @Test
     void providerFailureKeepsUserMessageAndDoesNotWriteAssistant() {
-        when(aiProvider.chat(any())).thenThrow(new AiProviderException(
+        when(aiProvider.chat(any(), anyString())).thenThrow(new AiProviderException(
                 AiErrorCode.AI_PROVIDER_UNAVAILABLE, "AI provider is unavailable"));
 
         AiProviderException ex = assertThrows(AiProviderException.class,
@@ -189,7 +190,7 @@ class AiTutorConversationIntegrationTest {
     void blankContentIsRejected() {
         assertThrows(org.springframework.web.server.ResponseStatusException.class,
                 () -> conversationService.sendMessage(OWNER, spaceId, conversationId, "   "));
-        verify(aiProvider, never()).chat(any());
+        verify(aiProvider, never()).chat(any(), anyString());
     }
 
     @Test
@@ -197,7 +198,7 @@ class AiTutorConversationIntegrationTest {
         String longMsg = "x".repeat(aiProperties.getContext().getMaxUserMessageChars() + 1);
         assertThrows(org.springframework.web.server.ResponseStatusException.class,
                 () -> conversationService.sendMessage(OWNER, spaceId, conversationId, longMsg));
-        verify(aiProvider, never()).chat(any());
+        verify(aiProvider, never()).chat(any(), anyString());
     }
 
     @Test
@@ -208,7 +209,7 @@ class AiTutorConversationIntegrationTest {
                         () -> conversationService.sendMessage(
                                 OWNER, spaceId, conversationId, "after archive"));
         assertEquals(409, ex.getStatusCode().value());
-        verify(aiProvider, never()).chat(any());
+        verify(aiProvider, never()).chat(any(), anyString());
     }
 
     @Test
@@ -218,7 +219,7 @@ class AiTutorConversationIntegrationTest {
                         () -> conversationService.sendMessage(
                                 "biz-ai-other-user", spaceId, conversationId, "intrude"));
         assertEquals(404, ex.getStatusCode().value());
-        verify(aiProvider, never()).chat(any());
+        verify(aiProvider, never()).chat(any(), anyString());
     }
 
     private Long insertSpace(String owner, String name) {

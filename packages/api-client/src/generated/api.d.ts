@@ -4,6 +4,24 @@
  */
 
 export interface paths {
+    "/api/v1/settings/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get my AI provider settings (never returns the API key) */
+        get: operations["getSettings"];
+        /** Update my AI provider settings; omit apiKey to keep the stored secret */
+        put: operations["updateSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{subject}/roles": {
         parameters: {
             query?: never;
@@ -404,6 +422,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/ai/study-coach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read-only study coach: recommend next study steps */
+        post: operations["studyCoach"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ai/explanations/practice-answers/{answerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Explain a submitted practice answer (post-submit only) */
+        post: operations["explainPracticeAnswer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ai/explanations/exam-answers/{answerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Explain a submitted exam answer (post-submit only) */
+        post: operations["explainExamAnswer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces/{spaceId}/ai/conversations": {
         parameters: {
             query?: never;
@@ -451,6 +520,23 @@ export interface paths {
         put?: never;
         /** Archive one of my AI conversations */
         post: operations["archiveConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/ai/test-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test my provider connectivity from the backend */
+        post: operations["testConnection"];
         delete?: never;
         options?: never;
         head?: never;
@@ -990,10 +1076,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/ai/api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete my stored AI API key */
+        delete: operations["deleteApiKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Write-only update. Omit apiKey to keep the stored secret. */
+        UpdateAiProviderSettingsRequest: {
+            enabled?: boolean;
+            provider?: string;
+            preset?: string;
+            baseUrl?: string;
+            model?: string;
+            apiKey?: string;
+        };
+        AiProviderSettingsView: {
+            enabled?: boolean;
+            provider?: string;
+            preset?: string;
+            baseUrl?: string;
+            model?: string;
+            apiKeyConfigured?: boolean;
+        };
         UpdateUserRolesRequest: {
             roles: string[];
         };
@@ -1456,6 +1576,31 @@ export interface components {
             /** Format: date-time */
             answeredAt?: string;
         };
+        StudyCoachRequest: {
+            question?: string;
+        };
+        ContextReference: {
+            type?: string;
+            /** Format: int64 */
+            id?: number;
+            title?: string;
+            snippet?: string;
+            locator?: string;
+        };
+        StudyCoachResponse: {
+            summary?: string;
+            recommendedNextActions?: string[];
+            focusKnowledgePointIds?: number[];
+            rationale?: string;
+            contextReferences?: components["schemas"]["ContextReference"][];
+        };
+        ExplanationResponse: {
+            explanation?: string;
+            keyConcepts?: string[];
+            reviewSuggestions?: string[];
+            relatedKnowledgePointIds?: number[];
+            contextReferences?: components["schemas"]["ContextReference"][];
+        };
         CreateConversationRequest: {
             title?: string;
         };
@@ -1476,13 +1621,6 @@ export interface components {
         SendMessageRequest: {
             content?: string;
         };
-        ContextReference: {
-            type?: string;
-            /** Format: int64 */
-            id?: number;
-            title?: string;
-            snippet?: string;
-        };
         MessageView: {
             /** Format: int64 */
             id?: number;
@@ -1500,6 +1638,7 @@ export interface components {
             totalTokens?: number;
             /** Format: date-time */
             createdAt?: string;
+            references?: components["schemas"]["ContextReference"][];
         };
         SendMessageResponse: {
             /** Format: int64 */
@@ -1507,6 +1646,13 @@ export interface components {
             userMessage?: components["schemas"]["MessageView"];
             assistantMessage?: components["schemas"]["MessageView"];
             contextReferences?: components["schemas"]["ContextReference"][];
+        };
+        TestConnectionResponse: {
+            success?: boolean;
+            provider?: string;
+            model?: string;
+            /** Format: int64 */
+            latencyMs?: number;
         };
         RefreshTokenRequest: {
             refreshToken?: string;
@@ -1818,6 +1964,50 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiProviderSettingsView"];
+                };
+            };
+        };
+    };
+    updateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAiProviderSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiProviderSettingsView"];
+                };
+            };
+        };
+    };
     updateRoles: {
         parameters: {
             query?: never;
@@ -2668,6 +2858,78 @@ export interface operations {
             };
         };
     };
+    studyCoach: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StudyCoachRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyCoachResponse"];
+                };
+            };
+        };
+    };
+    explainPracticeAnswer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                answerId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExplanationResponse"];
+                };
+            };
+        };
+    };
+    explainExamAnswer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                answerId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExplanationResponse"];
+                };
+            };
+        };
+    };
     listConversations: {
         parameters: {
             query?: {
@@ -2791,6 +3053,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationView"];
+                };
+            };
+        };
+    };
+    testConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestConnectionResponse"];
                 };
             };
         };
@@ -3571,6 +3853,24 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["AdminUserDetail"];
                 };
+            };
+        };
+    };
+    deleteApiKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -28,8 +28,9 @@ services:
 
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile
+      # Maven project root is server/; Dockerfile expects .mvn/mvnw/pom/src there.
+      context: ../server
+      dockerfile: ../Dockerfile
     container_name: aistudy-backend
     restart: unless-stopped
     depends_on:
@@ -46,6 +47,14 @@ services:
       AISTUDY_BOOTSTRAP_ADMIN_ENABLED: "true"
       AISTUDY_BOOTSTRAP_ADMIN_USERNAME: "${AISTUDY_BOOTSTRAP_ADMIN_USERNAME:?set AISTUDY_BOOTSTRAP_ADMIN_USERNAME in .env}"
       AISTUDY_BOOTSTRAP_ADMIN_PASSWORD: "${AISTUDY_BOOTSTRAP_ADMIN_PASSWORD:?set AISTUDY_BOOTSTRAP_ADMIN_PASSWORD in .env}"
+      # AI-001 optional env defaults. Leave AISTUDY_AI_ENABLED=false unless a
+      # provider key is supplied via .env / secrets platform — never bake keys.
+      AISTUDY_AI_ENABLED: "${AISTUDY_AI_ENABLED:-false}"
+      AISTUDY_AI_PROVIDER: "${AISTUDY_AI_PROVIDER:-openai-compatible}"
+      AISTUDY_AI_BASE_URL: "${AISTUDY_AI_BASE_URL:-}"
+      AISTUDY_AI_MODEL: "${AISTUDY_AI_MODEL:-}"
+      AISTUDY_AI_API_KEY: "${AISTUDY_AI_API_KEY:-}"
+      AISTUDY_AI_SECRET_KEY: "${AISTUDY_AI_SECRET_KEY:-}"
     volumes:
       - aistudy_resources:/var/lib/aistudy/resources
     networks:
