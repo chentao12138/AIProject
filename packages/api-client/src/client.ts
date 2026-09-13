@@ -44,6 +44,15 @@ type CreateIngestionJobRequest =
 type LinkKnowledgePointSourcesRequest =
   components['schemas']['LinkKnowledgePointSourcesRequest'];
 
+type UpdateAiProviderSettingsRequest =
+  components['schemas']['UpdateAiProviderSettingsRequest'];
+
+type CreateConversationRequest =
+  components['schemas']['CreateConversationRequest'];
+
+type SendMessageRequest =
+  components['schemas']['SendMessageRequest'];
+
 /**
  * Multipart wire body for {@code uploadSourceAsset} (BUSINESS-004).
  *
@@ -360,6 +369,102 @@ export function createApiClient(baseUrl: string, tokenProvider: TokenProvider) {
         '/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/sources',
         {
           params: { path: { spaceId, knowledgePointId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET /api/v1/settings/ai — my AI provider settings (never returns the API key) */
+    async getAiSettings() {
+      return client.GET('/api/v1/settings/ai', {
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * PUT /api/v1/settings/ai — update my AI provider settings.
+     * Omit body.apiKey to keep the stored secret.
+     */
+    async putAiSettings(body: UpdateAiProviderSettingsRequest) {
+      return client.PUT('/api/v1/settings/ai', {
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** POST /api/v1/settings/ai/test-connection — backend-originated provider probe */
+    async testAiConnection() {
+      return client.POST('/api/v1/settings/ai/test-connection', {
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** DELETE /api/v1/settings/ai/api-key — delete my stored AI API key */
+    async deleteAiApiKey() {
+      return client.DELETE('/api/v1/settings/ai/api-key', {
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET .../ai/conversations — list my ACTIVE AI conversations (paged) */
+    async listConversations(
+      spaceId: number,
+      query?: { page?: number; size?: number }
+    ) {
+      return client.GET('/api/v1/spaces/{spaceId}/ai/conversations', {
+        params: { path: { spaceId }, query },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** POST .../ai/conversations — create an AI tutor conversation */
+    async createConversation(
+      spaceId: number,
+      body?: CreateConversationRequest
+    ) {
+      return client.POST('/api/v1/spaces/{spaceId}/ai/conversations', {
+        params: { path: { spaceId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET .../ai/conversations/{conversationId} — one of my conversations */
+    async getConversation(spaceId: number, conversationId: number) {
+      return client.GET(
+        '/api/v1/spaces/{spaceId}/ai/conversations/{conversationId}',
+        {
+          params: { path: { spaceId, conversationId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * POST .../ai/conversations/{conversationId}/messages — send a user
+     * message and receive the AI tutor reply (USER + ASSISTANT + refs).
+     */
+    async sendMessage(
+      spaceId: number,
+      conversationId: number,
+      body: SendMessageRequest
+    ) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/ai/conversations/{conversationId}/messages',
+        {
+          params: { path: { spaceId, conversationId } },
+          body,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../ai/conversations/{conversationId}/archive — ACTIVE → ARCHIVED */
+    async archiveConversation(spaceId: number, conversationId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/ai/conversations/{conversationId}/archive',
+        {
+          params: { path: { spaceId, conversationId } },
           headers: await bearerHeaders(tokenProvider),
         }
       );
