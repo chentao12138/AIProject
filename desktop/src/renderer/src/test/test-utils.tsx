@@ -16,6 +16,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ApiClient } from '@aistudy/api-client';
 import { ApiClientProvider } from '../lib/api-context';
+import { AuthProvider } from '../lib/auth-context';
 
 /**
  * Test QueryClient (FE-001.5 PHASE 22): fresh per test, retries off so
@@ -58,6 +59,27 @@ export function createMockApiClient(): ApiClient {
     listKnowledgePoints: vi.fn(async () => noData),
     getKnowledgePoint: vi.fn(async () => noData),
     publishKnowledgePoint: vi.fn(async () => noData),
+    // FE-AI-001
+    getAiSettings: vi.fn(async () => noData),
+    putAiSettings: vi.fn(async () => noData),
+    testAiConnection: vi.fn(async () => noData),
+    deleteAiApiKey: vi.fn(async () => noData),
+    listConversations: vi.fn(async () => noData),
+    createConversation: vi.fn(async () => noData),
+    getConversation: vi.fn(async () => noData),
+    sendMessage: vi.fn(async () => noData),
+    archiveConversation: vi.fn(async () => noData),
+    // FE-AUTH-001
+    login: vi.fn(async () => noData),
+    refresh: vi.fn(async () => noData),
+    logout: vi.fn(async () => noData),
+    getCurrentUser: vi.fn(async () => noData),
+    // FE-ADMIN-001
+    adminListUsers: vi.fn(async () => noData),
+    adminGetUser: vi.fn(async () => noData),
+    adminUpdateRoles: vi.fn(async () => noData),
+    adminUpdateStatus: vi.fn(async () => noData),
+    adminReconcileStorage: vi.fn(async () => noData),
   } as unknown as ApiClient;
 }
 
@@ -80,6 +102,11 @@ interface RenderOptions {
   initialEntries?: string[];
   /** When set, the UI element is rendered under <Route path=...>. */
   routePath?: string;
+  /** AuthProvider start status (defaults to anonymous; bootstrap-flow
+   *  tests pass 'bootstrapping'). */
+  authInitialStatus?: 'bootstrapping' | 'anonymous' | 'authenticated';
+  /** Whether AuthProvider restores a persisted session on mount. */
+  authAutoBootstrap?: boolean;
 }
 
 export function renderWithProviders(
@@ -89,22 +116,30 @@ export function renderWithProviders(
     queryClient = createTestQueryClient(),
     initialEntries = ['/'],
     routePath,
+    authInitialStatus = 'anonymous',
+    authAutoBootstrap = false,
   }: RenderOptions = {}
 ) {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <ApiClientProvider client={apiClient}>
-          <MemoryRouter initialEntries={initialEntries}>
-            {routePath ? (
-              <Routes>
-                <Route path={routePath} element={children} />
-              </Routes>
-            ) : (
-              children
-            )}
-          </MemoryRouter>
-        </ApiClientProvider>
+        <AuthProvider
+          client={apiClient}
+          initialStatus={authInitialStatus}
+          autoBootstrap={authAutoBootstrap}
+        >
+          <ApiClientProvider client={apiClient}>
+            <MemoryRouter initialEntries={initialEntries}>
+              {routePath ? (
+                <Routes>
+                  <Route path={routePath} element={children} />
+                </Routes>
+              ) : (
+                children
+              )}
+            </MemoryRouter>
+          </ApiClientProvider>
+        </AuthProvider>
       </QueryClientProvider>
     );
   }

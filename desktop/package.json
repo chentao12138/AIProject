@@ -12,7 +12,13 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "icon:generate": "node scripts/generate-icon.mjs",
+    "pack": "electron-vite build && electron-builder --dir",
+    "dist": "electron-vite build && electron-builder",
+    "dist:win": "electron-vite build && electron-builder --win",
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "@aistudy/api-client": "file:../packages/api-client",
@@ -33,6 +39,7 @@
     "@vitejs/plugin-react": "^4.3.0",
     "@vitest/coverage-v8": "2.1",
     "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^5.2.0",
@@ -46,5 +53,66 @@
   },
   "engines": {
     "node": ">=22.12.0"
+  },
+  "author": "AIStudy",
+  "build": {
+    "appId": "com.aistudy.desktop",
+    "productName": "AIStudy",
+    "copyright": "Copyright © 2026 AIStudy",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json",
+      "!node_modules/**/*",
+      "!**/*.map",
+      "!**/*.{md,markdown}",
+      "!**/{.eslintrc,tsconfig,vitest}.config.*"
+    ],
+    "asar": true,
+    "compression": "maximum",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "AIStudy"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.education"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Education"
+    }
   }
 }

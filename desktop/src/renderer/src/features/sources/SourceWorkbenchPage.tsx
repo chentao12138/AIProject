@@ -447,6 +447,7 @@ function UploadSection({
       {activeJobId !== null && (
         <ActiveJobStatus
           spaceId={spaceId}
+          sourceId={sourceId}
           jobId={activeJobId}
           onTerminal={() => {
             void queryClient.invalidateQueries({
@@ -474,12 +475,14 @@ function UploadSection({
 
 function ActiveJobStatus({
   spaceId,
+  sourceId,
   jobId,
   onTerminal,
   onSucceeded,
   onFailed,
 }: {
   spaceId: number;
+  sourceId: number;
   jobId: number;
   onTerminal: () => void;
   onSucceeded: () => void;
@@ -535,7 +538,7 @@ function ActiveJobStatus({
         queryKey: queryKeys.ingestionJob(spaceId, jobId),
       });
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.ingestionJobs(spaceId, jobId),
+        queryKey: queryKeys.ingestionJobs(spaceId, sourceId),
       });
     },
   });

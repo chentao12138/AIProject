@@ -28,7 +28,7 @@ import { normalizeApiError, unwrap } from '../lib/api-error';
 import { queryKeys } from '../lib/query-keys';
 import { parsePositiveIdParam } from '../lib/ids';
 import { apiBaseUrl } from '../lib/api-client';
-import { DevelopmentSession } from '../features/auth/DevelopmentSession';
+import { UserMenu } from '../features/auth/UserMenu';
 
 function useCurrentSpaceId(): number | null {
   const params = useParams();
@@ -84,7 +84,7 @@ export function AppShell() {
           API target: {apiBaseUrl}
         </div>
         <div className="app-shell__auth">
-          <DevelopmentSession />
+          <UserMenu />
         </div>
       </header>
 
@@ -128,10 +128,27 @@ export function AppShell() {
                   >
                     Knowledge
                   </NavLink>
+                  <NavLink
+                    to={`/spaces/${spaceId}/ai`}
+                    className={({ isActive }) =>
+                      isActive ? 'nav-link nav-link--active' : 'nav-link'
+                    }
+                  >
+                    AI Tutor
+                  </NavLink>
                 </>
               )}
             </div>
           )}
+
+          <NavLink
+            to="/settings/ai"
+            className={({ isActive }) =>
+              isActive ? 'nav-link nav-link--active' : 'nav-link'
+            }
+          >
+            AI Settings
+          </NavLink>
         </nav>
 
         <main className="app-shell__main">

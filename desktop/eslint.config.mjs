@@ -40,6 +40,7 @@ export default tseslint.config(
     files: [
       'src/main/**/*.ts',
       'src/preload/**/*.ts',
+      'scripts/**/*.mjs',
       'electron.vite.config.ts',
       'vitest.config.ts',
     ],

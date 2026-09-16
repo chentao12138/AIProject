@@ -15,23 +15,11 @@ import {
 } from './api-error';
 
 describe('normalizeApiError — error classes', () => {
-  it('maps 401 to unauthorized with a dev build message', () => {
-    const normalized = normalizeApiError(new ApiRequestError(401), {
-      isDev: true,
-    });
+  it('maps 401 to unauthorized with a uniform re-login hint (FE-AUTH-001)', () => {
+    const normalized = normalizeApiError(new ApiRequestError(401));
     expect(normalized.kind).toBe('unauthorized');
     expect(normalized.status).toBe(401);
-    expect(normalized.message).toBe(
-      '当前开发会话未认证或令牌已失效。请更新 Development Session 令牌。'
-    );
-  });
-
-  it('maps 401 to the auth-pending placeholder in production builds', () => {
-    const normalized = normalizeApiError(new ApiRequestError(401), {
-      isDev: false,
-    });
-    expect(normalized.kind).toBe('unauthorized');
-    expect(normalized.message).toBe('Authentication integration pending.');
+    expect(normalized.message).toBe('登录状态已失效，请重新登录。');
   });
 
   it('maps 403 to forbidden', () => {

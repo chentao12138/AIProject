@@ -63,7 +63,7 @@ function pickFile(name: string, type = 'text/plain') {
 
 describe('Critical — source get errors', () => {
   it.each([
-    [401, /开发会话未认证|Authentication integration pending/],
+    [401, /登录状态已失效，请重新登录/],
     [403, /无权执行此操作/],
     [404, /资源不存在或当前不可访问/],
     [500, /服务器暂时无法完成请求/],
@@ -113,7 +113,7 @@ describe('Critical — invalid ids', () => {
 
 describe('Critical — upload errors', () => {
   it.each([
-    [401, /开发会话未认证|Authentication integration pending/],
+    [401, /登录状态已失效，请重新登录/],
     [403, /无权执行此操作/],
     [500, /服务器暂时无法完成请求/],
   ])('surfaces upload HTTP %s safely', async (status, pattern) => {
@@ -346,6 +346,51 @@ describe('Critical — retry semantics', () => {
     const retryButtons = await screen.findAllByRole('button', { name: 'Retry' });
     // Only the FAILED job gets a Retry button.
     expect(retryButtons).toHaveLength(1);
+  });
+
+  it('refetches the ingestion history after retry from the active-job panel', async () => {
+    const listIngestionJobs = vi.fn(async () => ({
+      data: [],
+      response: { status: 200 },
+    }));
+    renderWB(
+      baseApi({
+        listIngestionJobs,
+        uploadSourceAsset: vi.fn(async () => ({
+          data: { id: 90, originalName: 'a.txt' },
+          response: { status: 201 },
+        })),
+        createIngestionJob: vi.fn(async () => ({
+          data: { id: 55, status: 'FAILED', stage: 'QUEUED', errorCode: 'INVALID_PDF' },
+          response: { status: 201 },
+        })),
+        getIngestionJob: vi.fn(async () => ({
+          data: { id: 55, status: 'FAILED', stage: 'QUEUED', errorCode: 'INVALID_PDF' },
+          response: { status: 200 },
+        })),
+        retryIngestionJob: vi.fn(async () => ({
+          data: { id: 55, status: 'PENDING', stage: 'QUEUED' },
+          response: { status: 200 },
+        })),
+      })
+    );
+    await waitForm();
+    pickFile('a.txt');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
+
+    const retryButton = await screen.findByRole('button', {
+      name: /retry ingestion/i,
+    });
+    const before = listIngestionJobs.mock.calls.length;
+
+    await user.click(retryButton);
+
+    // 修复点：重试后必须按 (spaceId, sourceId) 失效任务列表缓存并重新拉取，
+    // 否则历史表格会一直显示旧的 FAILED 状态。
+    await waitFor(() => {
+      expect(listIngestionJobs.mock.calls.length).toBeGreaterThan(before);
+    });
   });
 });
 

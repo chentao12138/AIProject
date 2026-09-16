@@ -16,11 +16,20 @@
  * FE-001 has zero business IPC surface (preload exposes nothing).
  */
 
-import { app, BrowserWindow, net, protocol, session } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  net,
+  protocol,
+  safeStorage,
+  session,
+} from 'electron';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { cspFor } from './csp';
 import { isPermissionGranted } from './permissions';
+import { registerAuthVaultIpc } from './auth-vault';
 import { resolveApiBaseUrl } from '../shared/api-config';
 import {
   APP_ORIGIN,
@@ -172,6 +181,29 @@ app.whenReady().then(() => {
       return isPermissionGranted(permission, requestingOrigin);
     }
   );
+
+  // FE-AUTH-001 (ADR-026): encrypted refresh-token vault. Only the
+  // application's own renderer origin may call its IPC channels:
+  // app://aistudy in production, additionally the Vite dev server in
+  // development. safeStorage encrypts at rest via the OS keychain.
+  const vaultAllowedOrigins = [APP_ORIGIN];
+  if (DEV_SERVER_URL) {
+    try {
+      vaultAllowedOrigins.push(new URL(DEV_SERVER_URL).origin);
+    } catch {
+      // malformed dev URL: production origin only
+    }
+  }
+  registerAuthVaultIpc({
+    userDataPath: () => app.getPath('userData'),
+    isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+    encryptString: (plaintext) => safeStorage.encryptString(plaintext),
+    decryptString: (ciphertext) => safeStorage.decryptString(ciphertext),
+    handle: (channel, listener) => {
+      ipcMain.handle(channel, listener);
+    },
+    allowedOrigins: vaultAllowedOrigins,
+  });
 
   createMainWindow();
 

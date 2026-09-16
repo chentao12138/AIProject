@@ -1,11 +1,39 @@
 /**
- * AIStudy Desktop — Preload (FE-001).
+ * Preload bridge (FE-AUTH-001, ADR-026 / ADR-037).
  *
- * FE-001 declares ZERO business IPC surface (no requirement -> no IPC,
- * per ADR-037 and FE-001 PHASE B2).
+ * The renderer stays Node-free: the ONLY surface exposed is the
+ * encrypted refresh-token vault (three fixed IPC channels). Raw
+ * ipcRenderer is never leaked — the renderer cannot invent channels,
+ * cannot send arbitrary messages, and the main process additionally
+ * checks the sender frame origin on every call.
  *
- * Nothing is exposed to the renderer: no ipcRenderer, no fs, no path,
- * no process, no shell, no require. Revisit ONLY when FE-002 adds a
- * typed SourceAsset file picker via contextBridge.
+ * Sandbox-compatible: this module imports only `electron` and the
+ * Node-free shared contract.
  */
-export {};
+
+import { contextBridge, ipcRenderer } from 'electron';
+import {
+  AUTH_VAULT_CHANNELS,
+  normalizeRefreshToken,
+} from '../shared/auth-vault-contract';
+
+const authVault = {
+  /** Encrypt + persist the refresh token. Rejects on invalid input. */
+  save: (refreshToken: string): Promise<{ ok: true }> => {
+    const normalized = normalizeRefreshToken(refreshToken);
+    if (normalized === null) {
+      return Promise.reject(new Error('bad-payload'));
+    }
+    return ipcRenderer.invoke(AUTH_VAULT_CHANNELS.save, normalized);
+  },
+  /** Load + decrypt the persisted refresh token, or null if none. */
+  load: (): Promise<string | null> =>
+    ipcRenderer.invoke(AUTH_VAULT_CHANNELS.load),
+  /** Remove the persisted refresh token. */
+  clear: (): Promise<{ ok: true }> =>
+    ipcRenderer.invoke(AUTH_VAULT_CHANNELS.clear),
+};
+
+contextBridge.exposeInMainWorld('aistudyAuthVault', authVault);
+
+export type AuthVaultBridge = typeof authVault;

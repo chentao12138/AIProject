@@ -66,18 +66,22 @@ VITE_API_BASE_URL=http://localhost:8080
   CSP 为 `connect-src 'self' http://127.0.0.1:9090`。
 - 修改 `.env` 后需要重启 `npm run dev`（build 期内联，renderer/main 同源）。
 
-## Development Session（开发会话）
+## 正式登录与会话（ADR-026 / ADR-037）
 
-- **仅开发构建**显示：右上角可粘贴 Bearer access token，Apply/Clear。
-- **纯内存**：不写 localStorage/sessionStorage/cookie；刷新窗口即失；
-  令牌绝不进入日志/错误文案；输入框为 password 掩码。
-- Apply 对空/纯空白输入禁用；任何编辑都会清除旧状态消息。
-- Apply/Clear 是 **auth cache boundary**：触发 `queryClient.resetQueries()`，
-  上一 principal 的缓存数据不会残留。
-- **生产构建**：不显示令牌输入，显示 `Authentication integration pending`
-  （正式登录后续任务实现）。
-- 令牌限制：当前可用 token 来自后端 SPIKE JWT 服务（临时签发，5 分钟 TTL）。
-  这是临时限制，正式 auth 落地后消失。
+- 公开路由 `/login`：用户名/密码调用 `/api/v1/auth/login` 获取令牌对；
+  其余路由由 `RequireAuth` 守卫，未登录跳回登录页并记住目标地址。
+- **access token 只在 renderer 内存**；**refresh token 不进 renderer 磁盘**：
+  main 进程通过 Electron `safeStorage` 加密后写入 `userData/auth-refresh.bin`
+  （版本化信封、0600 权限；系统加密不可用时拒绝落盘）。
+- renderer 只经 `contextBridge` 暴露的 `window.aistudyAuthVault`
+  （save/load/clear 三个固定通道）与保险库通信，IPC 每次校验 senderFrame 来源；
+  preload 不泄漏 `ipcRenderer`。
+- **401 自动轮换**：`createRefreshingFetch` 单飞调用 `/auth/refresh`，仅对
+  GET/HEAD/OPTIONS 用新令牌重放一次；写操作只换令牌不重放；auth 端点自身不刷新。
+  后端每次轮换 refresh，复用旧 refresh 会吊销整个 family → 回到登录页。
+- 登录/退出/主体切换是 **auth cache boundary**：清空 React Query 缓存，
+  上一 principal 的数据不残留。
+- 令牌绝不进入 localStorage/sessionStorage/cookie、日志或错误文案。
 
 ## Electron 定制协议与 CORS
 
@@ -94,8 +98,8 @@ VITE_API_BASE_URL=http://localhost:8080
 
 ## 如何区分 401 与后端离线
 
-- 401：`当前开发会话未认证或令牌已失效。请更新 Development Session 令牌。`
-  （dev）/ `Authentication integration pending.`（prod）——查询不会重试。
+- 401：先触发一次 refresh 轮换；轮换失败或未登录时统一提示
+  `登录状态已失效，请重新登录。` 并回到 `/login`——auth 端点本身不重试。
 - 后端离线：`无法连接到后端服务。请确认服务已启动后重试。`——有界重试。
 - 其他：403/404/5xx 各有专属文案（见 `src/renderer/src/lib/api-error.ts`）。
 
@@ -106,8 +110,10 @@ VITE_API_BASE_URL=http://localhost:8080
 - `window.open` deny；`will-attach-webview` deny；`will-navigate` 仅应用 origin。
 - 浏览器权限 deny-by-default（`setPermissionRequestHandler` /
   `setPermissionCheckHandler` 全拒；无 camera/mic/geolocation/notification 需求）。
-- Preload 零 IPC 暴露（`export {}`）；main 进程无数据库/业务规则/AI key。
-- Renderer 不接触 Node API（静态扫描门禁）。
+- Preload 仅经 `contextBridge` 暴露 refresh-token 保险库三个固定通道
+  （save/load/clear，senderFrame 来源校验），不泄漏 `ipcRenderer`；
+  main 进程无数据库/业务规则/AI key。
+- Renderer 不接触 Node API（静态扫描门禁），令牌不进 localStorage。
 - 查询重试策略：401/403/404 不重试；network/5xx 有界重试；mutation 不自动重放。
 
 ## Scope
@@ -120,9 +126,29 @@ nav `end` 单 active、engines.node >=22.12.0、ESLint 直接依赖、ID 解析�
 （parseOptionalPositiveId）、Space unavailable 语义、StatusBadge 精确匹配。
 
 **尚未实现（后续任务）**：SourceAsset 文件上传（FE-002，含 multipart / file picker IPC
-——需 backend/shared-client 同步）、正式登录与 refresh-token、Admin Web、
-Question/Practice/Exam/AI Chat/Search/Notes、Playwright E2E、
-打包分发（electron-builder）、自动更新/tray/通知。
+——需 backend/shared-client 同步）、Question/Practice/Exam/AI Chat/Search/Notes、
+Playwright E2E、自动更新/tray/通知。
+
+已落地：正式登录与 refresh-token（ADR-026，见上节）、Admin Web
+（独立工程，见 `../admin-web/`，ADR-028）、electron-builder 打包分发（见下节）。
+
+## 打包分发（electron-builder）
+
+```powershell
+npm run icon:generate  # 零依赖重生成 build/icon.png 与 icon.ico（可复现）
+npm run pack           # electron-vite build + electron-builder --dir（免安装目录，自测）
+npm run dist:win       # NSIS 安装包（dist/，x64）
+npm run dist:mac       # dmg（x64 + arm64）
+npm run dist:linux     # AppImage
+```
+
+- 配置在 `package.json` 的 `build` 字段；应用 ID `com.aistudy.desktop`，
+  产品名 AIStudy。NSIS 非一键安装、可改安装目录、创建桌面/开始菜单快捷方式。
+- 打包只收 `out/` 与 `package.json`（renderer bundle 已自包含 React/openapi-fetch/
+  共享 client，故显式排除 `node_modules`，app.asar 约 0.6 MB；Electron 运行时另计）。
+- 产物在 `dist/`（gitignore）；`win-unpacked/AIStudy.exe` 为免安装可执行文件，
+  `*.exe` NSIS 安装包为分发给用户的成品。未做代码签名，Windows SmartScreen
+  首次运行会有未识别发布者提示（后续接签名证书）。
 
 ## Troubleshooting
 

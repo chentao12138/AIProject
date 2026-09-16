@@ -489,8 +489,72 @@ stash → merge → stash pop 无冲突。lint/typecheck/test/build 四项全绿
 - 只有用户真的输入新 Key 时才发送 `apiKey`
 - 绝不发送 `"********"` 占位符
 
-### 当前状态
+### 当前状态（已更新）
 
-- `packages/api-client` 已确认**无** AI Provider 方法
-- 等 AI-009 contract 稳定 + api-client 再生后接入
-- 架构约束已写入 frontend-current-task.md
+- AI-009 contract 已进入 stable api-client（9 个 wrapper 方法）
+- Scenario A：Settings + Tutor/Chat 全部可用
+
+## FE-AI-001 Implementation Checkpoint（2026-09-13）
+
+Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
+
+### 实现
+
+- `features/ai/AiSettingsPage.tsx`：Provider/Preset/BaseUrl/Model/API Key/Enabled
+  - apiKeyConfigured 状态展示
+  - 安全 Key 替换（未改则 omit，输入新 Key 才发送）
+  - 保存后立即清空 key input state
+  - 测试连接 + 结果展示
+  - 删除 Key 按钮
+- `features/ai/AiChatPage.tsx`：对话列表 + 聊天面板
+  - 创建/归档对话
+  - 消息 composer + 发送
+  - AI 回复渲染 + references
+  - 自动滚动到底部
+- 路由：`/settings/ai` + `/spaces/:id/ai` + `/spaces/:id/ai/:convId`
+- AppShell：AI Tutor 导航 + AI Settings 导航
+- Query keys：aiSettings / aiConversations / aiConversation / aiMessages
+- 测试：8 项 key 语义测试（GET 不填 Key / omit unchanged / 只在输入时发送 /
+  保存后清空 / 测试连接 / not-configured 状态）
+
+### 安全审计
+
+- 无 localStorage/sessionStorage 存 Key ✓
+- 无 renderer → StepFun 直连 ✓
+- 无 axios/direct fetch ✓
+- 无 Key 日志 ✓
+- GET 只返回 apiKeyConfigured ✓
+- SAVE 未改 Key 时 omit ✓
+- 保存后清空 key input ✓
+
+### Final gates
+
+- lint OK / typecheck OK / test:run **340/340**（27 files）/ build OK（588.90 kB）
+- 未 commit
+
+## FE-AI-001-PRE-COMMIT-FINALIZE-01（2026-09-13）
+
+### 补充实现
+
+- **Provider-not-configured flow**：AiChatPage 检查 `enabled + apiKeyConfigured`，
+  未配置时显示警告 + 「前往 AI Settings 配置」链接
+- **AiChatPage.test.tsx**：3 项（not-configured 警告、configured 无警告、placeholder）
+
+### 关键确认
+
+- `deleteAiApiKey()` 调用真实 `DELETE /settings/ai/api-key`，非 `apiKey:""` 模拟 ✓
+- `api.stepfun.com` 仅作为 UI placeholder 文字存在，无 renderer 直连 ✓
+- Streaming：contract 无 stream endpoint → NON-STREAMING，UI 为 Sending… → 完整响应
+- Context picker / Reference navigation：BLOCKED BY CONTRACT
+  （SendMessageRequest 无 context 输入；ContextReference 无 sourceId/pageId）
+
+### Real smoke
+
+- Settings / Provider / Chat smoke：PENDING — 无运行中 backend + 无安全测试 credential
+- Production app://：Electron 启动 PASS（12s）
+
+### Final gates
+
+- lint OK / typecheck OK / test:run **343/343**（28 files）/ build OK（589.54 kB）
+- Coverage：Statements 83.06% / Branches 81.36% / Functions 77.35%
+- 未 commit

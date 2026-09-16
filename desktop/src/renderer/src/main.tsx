@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { ApiClientProvider } from './lib/api-context';
 import { apiClient } from './lib/api-client';
+import { AuthProvider } from './lib/auth-context';
 import { shouldRetryQuery } from './lib/query-retry';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/global.css';
@@ -40,11 +41,13 @@ if (!container) {
 createRoot(container).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ApiClientProvider client={apiClient}>
-        <ErrorBoundary>
-          <App />
-        </ErrorBoundary>
-      </ApiClientProvider>
+      <AuthProvider>
+        <ApiClientProvider client={apiClient}>
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
+        </ApiClientProvider>
+      </AuthProvider>
     </QueryClientProvider>
   </StrictMode>
 );

@@ -38,4 +38,12 @@ export const queryKeys = {
     ['knowledge-point', spaceId, knowledgePointId] as const,
   knowledgePointSources: (spaceId: number, knowledgePointId: number) =>
     ['knowledge-point-sources', spaceId, knowledgePointId] as const,
+  // FE-AI-001
+  aiSettings: ['ai-settings'] as const,
+  aiConversations: (spaceId: number) =>
+    ['ai-conversations', spaceId] as const,
+  aiConversation: (spaceId: number, conversationId: number) =>
+    ['ai-conversation', spaceId, conversationId] as const,
+  aiMessages: (spaceId: number, conversationId: number) =>
+    ['ai-messages', spaceId, conversationId] as const,
 };

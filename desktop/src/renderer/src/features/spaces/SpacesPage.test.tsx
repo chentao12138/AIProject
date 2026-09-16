@@ -113,7 +113,7 @@ describe('SpacesPage', () => {
     renderWithProviders(<SpacesPage />, { apiClient });
 
     expect(
-      await screen.findByText(/当前开发会话未认证或令牌已失效/)
+      await screen.findByText(/登录状态已失效，请重新登录/)
     ).toBeInTheDocument();
   });
 

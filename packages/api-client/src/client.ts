@@ -53,6 +53,18 @@ type CreateConversationRequest =
 type SendMessageRequest =
   components['schemas']['SendMessageRequest'];
 
+// FE-AUTH-001 (ADR-026): formal login / refresh / logout + current user.
+type LoginRequest = components['schemas']['LoginRequest'];
+type RefreshTokenRequest = components['schemas']['RefreshTokenRequest'];
+type LogoutRequest = components['schemas']['LogoutRequest'];
+
+// FE-ADMIN-001 (ADR-028): admin user management + operations.
+type UpdateUserRolesRequest =
+  components['schemas']['UpdateUserRolesRequest'];
+type UpdateUserStatusRequest =
+  components['schemas']['UpdateUserStatusRequest'];
+type ReconcileRequest = components['schemas']['ReconcileRequest'];
+
 /**
  * Multipart wire body for {@code uploadSourceAsset} (BUSINESS-004).
  *
@@ -90,6 +102,12 @@ export interface TokenProvider {
   getAccessToken(): string | null | undefined | Promise<string | null | undefined>;
 }
 
+/** Extra wiring for the generated client (currently: custom fetch). */
+export interface CreateApiClientOptions {
+  /** Override the global fetch (e.g. 401 refresh-rotation wrapper). */
+  fetch?: typeof fetch;
+}
+
 /**
  * Creates the shared API client bound to a base URL and a token
  * provider. All business endpoints in this package go through this
@@ -97,8 +115,13 @@ export interface TokenProvider {
  *
  * @param baseUrl     e.g. http://localhost:8080
  * @param tokenProvider supplies the Authorization: Bearer value per request
+ * @param options     client wiring (custom fetch, ...)
  */
-export function createApiClient(baseUrl: string, tokenProvider: TokenProvider) {
+export function createApiClient(
+  baseUrl: string,
+  tokenProvider: TokenProvider,
+  options: CreateApiClientOptions = {}
+) {
   // NOTE (BUSINESS-004): NO global Content-Type is set on purpose.
   // openapi-fetch sets `application/json` automatically for JSON
   // request bodies, and multipart FormData bodies must NOT carry a
@@ -107,6 +130,7 @@ export function createApiClient(baseUrl: string, tokenProvider: TokenProvider) {
   // application/json header would corrupt multipart uploads.
   const client = createClient<paths>({
     baseUrl,
+    fetch: options.fetch,
   });
 
   return {
@@ -468,6 +492,92 @@ export function createApiClient(baseUrl: string, tokenProvider: TokenProvider) {
           headers: await bearerHeaders(tokenProvider),
         }
       );
+    },
+
+    /**
+     * POST /api/v1/auth/login — username/password -> token pair.
+     * PUBLIC endpoint: deliberately sends NO Authorization header (a
+     * stale/expired bearer must never be attached to a fresh login).
+     */
+    async login(body: LoginRequest) {
+      return client.POST('/api/v1/auth/login', {
+        body,
+        headers: {},
+      });
+    },
+
+    /**
+     * POST /api/v1/auth/refresh — rotate an opaque refresh token. The
+     * backend rotates on every success (old token invalidated; reuse of
+     * a rotated token revokes the whole refresh family -> 401, forcing
+     * a clean re-login). PUBLIC endpoint: NO Authorization header.
+     */
+    async refresh(body: RefreshTokenRequest) {
+      return client.POST('/api/v1/auth/refresh', {
+        body,
+        headers: {},
+      });
+    },
+
+    /**
+     * POST /api/v1/auth/logout — revoke the refresh session server
+     * side. Best-effort: the client clears local state regardless of
+     * the outcome. PUBLIC endpoint: NO Authorization header.
+     */
+    async logout(body: LogoutRequest) {
+      return client.POST('/api/v1/auth/logout', {
+        body,
+        headers: {},
+      });
+    },
+
+    /** GET /api/v1/auth/me — current principal (subject/username/roles) */
+    async getCurrentUser() {
+      return client.GET('/api/v1/auth/me', {
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET /api/v1/admin/users — paged user directory (ADMIN only) */
+    async adminListUsers(query?: { page?: number; size?: number }) {
+      return client.GET('/api/v1/admin/users', {
+        params: { query },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET /api/v1/admin/users/{subject} — one user (ADMIN only) */
+    async adminGetUser(subject: string) {
+      return client.GET('/api/v1/admin/users/{subject}', {
+        params: { path: { subject } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** PUT /api/v1/admin/users/{subject}/roles — replace role list (ADMIN only) */
+    async adminUpdateRoles(subject: string, body: UpdateUserRolesRequest) {
+      return client.PUT('/api/v1/admin/users/{subject}/roles', {
+        params: { path: { subject } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** PATCH /api/v1/admin/users/{subject}/status — ACTIVE/DISABLED (ADMIN only) */
+    async adminUpdateStatus(subject: string, body: UpdateUserStatusRequest) {
+      return client.PATCH('/api/v1/admin/users/{subject}/status', {
+        params: { path: { subject } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** POST /api/v1/admin/operations/storage/reconcile — orphan storage scan/cleanup (ADMIN only) */
+    async adminReconcileStorage(body?: ReconcileRequest) {
+      return client.POST('/api/v1/admin/operations/storage/reconcile', {
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
     },
   };
 }
