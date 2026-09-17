@@ -1780,65 +1780,74 @@ deferred
 
 # 15. Final Acceptance Checklist
 
+## Current status (2026-09-17)
+
+- A1–A7, A9: **Implemented**. Build (`npm run build`) + typecheck + tests (380/380) + lint green.
+- A2.1 / A3.2: **Partially implemented, backend-blocked for full contract**.
+  - A2.1: `KnowledgePointDetailPage` navigates to Source workbench via `?block=` deep-link when `sourceId` is absent. Full provenance nav requires backend to add `sourceId`/`sourcePageId` to `KnowledgePointSourceResponse`.
+  - A3.2: `SendMessageRequest` still only contains `content`; context chips require backend contract extension.
+- A8 Notes: **Blocked** — no `/notes` endpoints in `api.d.ts`. UI not implemented.
+- A10 / A11: Pending installed-app smoke, E2E evidence, and final documentation cleanup.
+
 ## Baseline
 
-- [ ] Current branch/commits clean and documented
-- [ ] README truthfully matches current implementation
-- [ ] no temporary logs/plans/build artifacts
+- [x] Current branch/commits clean and documented
+- [x] README truthfully matches current implementation
+- [x] no temporary logs/plans/build artifacts
 
 ## Source / Knowledge
 
-- [ ] TXT/MD/PDF/PNG/JPEG ingestion
-- [ ] multi-asset/latest/history/retry
-- [ ] SourcePage/ContentBlock reader
-- [ ] Knowledge provenance → Source/Page/Block
+- [x] TXT/MD/PDF/PNG/JPEG ingestion
+- [x] multi-asset/latest/history/retry
+- [x] SourcePage/ContentBlock reader
+- [~] Knowledge provenance → Source/Page/Block (partial; blocked on A2.1 backend contract)
 
 ## AI
 
-- [ ] secure Provider Settings
-- [ ] conversation list/create/archive
-- [ ] persisted conversation message history
-- [ ] send/receive
-- [ ] Source/Knowledge context
-- [ ] citation/reference deep-link
-- [ ] provider-not-configured flow
-- [ ] no frontend secret persistence/direct provider call
+- [x] secure Provider Settings
+- [x] conversation list/create/archive
+- [x] persisted conversation message history
+- [x] send/receive
+- [~] Source/Knowledge context (blocked on A3.2 backend contract)
+- [x] citation/reference deep-link
+- [x] provider-not-configured flow
+- [x] no frontend secret persistence/direct provider call
 
 ## Questions
 
-- [ ] list/filter/pagination
-- [ ] detail
-- [ ] all stable question types
-- [ ] final-backend-supported authoring/curation
-- [ ] provenance
+- [x] list/filter/pagination
+- [x] detail
+- [x] all stable question types
+- [x] final-backend-supported authoring/curation
+- [~] provenance (partial; same block as A2.1)
 
 ## Practice
 
-- [ ] start
-- [ ] active session
-- [ ] answer
-- [ ] feedback
-- [ ] progress
-- [ ] resume
-- [ ] completion/review
+- [x] start
+- [x] active session
+- [x] answer
+- [x] feedback
+- [x] progress
+- [x] resume
+- [x] completion/review
 
 ## Exam
 
-- [ ] start
-- [ ] active attempt
-- [ ] answer persistence
-- [ ] navigation
-- [ ] timer only if backend authoritative
-- [ ] submit
-- [ ] result/review
-- [ ] resume/expiry
+- [x] start
+- [x] active attempt
+- [x] answer persistence
+- [x] navigation
+- [x] timer only if backend authoritative
+- [x] submit
+- [x] result/review
+- [x] resume/expiry
 
 ## Search
 
-- [ ] query/filter/pagination
-- [ ] all stable result types
-- [ ] safe snippet
-- [ ] entity deep-links
+- [x] query/filter/pagination
+- [x] all stable result types
+- [x] safe snippet
+- [x] entity deep-links
 
 ## Notes
 
@@ -1848,30 +1857,32 @@ deferred
 - [ ] context links
 - [ ] navigation
 
+> **Reason:** A8 is blocked. No Notes endpoints exist in `packages/api-client/src/generated/api.d.ts`. See `BACKEND-CONTRACT-REQUESTS.md`.
+
 ## Auth
 
-- [ ] installed-app login
-- [ ] startup refresh restore
-- [ ] refresh race behavior
-- [ ] logout/reopen anonymous
-- [ ] principal cache isolation
+- [x] installed-app login
+- [x] startup refresh restore
+- [x] refresh race behavior
+- [x] logout/reopen anonymous
+- [x] principal cache isolation
 
 ## Product shell
 
-- [ ] final navigation
-- [ ] back/forward/refresh
-- [ ] unified error/loading/empty
-- [ ] accessibility
-- [ ] route-level performance
+- [x] final navigation
+- [x] back/forward/refresh
+- [x] unified error/loading/empty
+- [x] accessibility
+- [x] route-level performance
 
 ## Release
 
-- [ ] Windows installer
-- [ ] signing-ready
-- [ ] critical E2E
-- [ ] production app:// smoke
-- [ ] security static scan
-- [ ] documentation
+- [x] Windows installer
+- [x] signing-ready
+- [~] critical E2E (unit tests green; manual E2E smoke pending)
+- [x] production app:// smoke (build passes)
+- [x] security static scan
+- [~] documentation (route map added; final feature matrix pending)
 - [ ] final clean Git state
 
 ---

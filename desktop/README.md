@@ -125,9 +125,7 @@ FE-001.5 PRE-COMMIT FIX-01：API base/CSP 单一配置契约（src/shared/api-co
 nav `end` 单 active、engines.node >=22.12.0、ESLint 直接依赖、ID 解析分离
 （parseOptionalPositiveId）、Space unavailable 语义、StatusBadge 精确匹配。
 
-**尚未实现（后续任务）**：SourceAsset 文件上传（FE-002，含 multipart / file picker IPC
-——需 backend/shared-client 同步）、Question/Practice/Exam/AI Chat/Search/Notes、
-Playwright E2E、自动更新/tray/通知。
+**本轮最终开发范围**：Question/Practice/Exam/Search/Notes（Notes 后端 contract 见 BACKEND-CONTRACT-REQUESTS.md）、Playwright E2E。SourceAsset 文件上传与 AI Chat 已实现。
 
 已落地：正式登录与 refresh-token（ADR-026，见上节）、Admin Web
 （独立工程，见 `../admin-web/`，ADR-028）、electron-builder 打包分发（见下节）。
