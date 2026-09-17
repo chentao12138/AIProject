@@ -1782,12 +1782,14 @@ deferred
 
 ## Current status (2026-09-17)
 
-- A1–A7, A9: **Implemented**. Build (`npm run build`) + typecheck + tests (380/380) + lint green.
+- A1–A7, A9: **Implemented**. Build (`npm run build`) + typecheck + tests (391/391) + lint green.
 - A2.1 / A3.2: **Partially implemented, backend-blocked for full contract**.
   - A2.1: `KnowledgePointDetailPage` navigates to Source workbench via `?block=` deep-link when `sourceId` is absent. Full provenance nav requires backend to add `sourceId`/`sourcePageId` to `KnowledgePointSourceResponse`.
   - A3.2: `SendMessageRequest` still only contains `content`; context chips require backend contract extension.
+- A3.3: **Partially implemented** — AI citations navigate to Source/KnowledgePoint/Question; full page-level deep-links require `sourcePageId` in `AiReference`.
 - A8 Notes: **Blocked** — no `/notes` endpoints in `api.d.ts`. UI not implemented.
-- A10 / A11: Pending installed-app smoke, E2E evidence, and final documentation cleanup.
+- A10 / A11.3: Pending installed-app smoke + critical E2E smoke.
+- Documentation: route map, feature matrix, backend contract requests, smoke instructions complete.
 
 ## Baseline
 
@@ -1882,7 +1884,7 @@ deferred
 - [~] critical E2E (unit tests green; manual E2E smoke pending)
 - [x] production app:// smoke (build passes)
 - [x] security static scan
-- [~] documentation (route map added; final feature matrix pending)
+- [x] documentation (route map, feature matrix, backend contract requests, smoke instructions)
 - [ ] final clean Git state
 
 ---

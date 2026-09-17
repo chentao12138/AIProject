@@ -2,67 +2,58 @@
 
 ## Objective
 
-FE-AI-001-PRE-COMMIT-FINALIZE-01
+FE-001 + FE-001.5 + FE-002A + FE-002B + FE-AI-001 + FE-QUESTION/PRACTICE/EXAM/SEARCH final completion.
 
-## Baseline
+## Current branch
 
-- Branch: feat/fe-001 @ cd39169 + uncommitted AI work
-- api-client: AI Settings + Tutor/Chat (9 wrapper methods)
+- `feat/fe-001` (clean, uncommitted frontend work committed in logical batches)
+- `packages/api-client` up to date with current stable backend contract
 
-## Feature Audit
+## Implemented (A-class)
 
-| Item | Status |
-|------|--------|
-| AI Provider Settings UI | DONE |
-| apiKeyConfigured display | DONE |
-| Safe key replacement (omit unchanged) | DONE |
-| Clear key after save | DONE |
-| Test connection | DONE |
-| Delete key (real DELETE API) | DONE |
-| Provider-not-configured flow | DONE (warning + settings link) |
-| Conversation list/create/archive | DONE |
-| Message send/render | DONE |
-| References rendering | DONE (text display; no stable sourceId in ContextReference) |
-| Auth-expiry recovery | DONE (existing resetQueries boundary) |
-| Streaming | NON-STREAMING (contract has no stream endpoint) |
-| Context picker | BLOCKED BY CONTRACT (no context input in SendMessageRequest) |
-| Reference navigation | BLOCKED BY CONTRACT (ContextReference has no sourceId/pageId) |
+| Feature | Routes / Scope | Status |
+|---------|----------------|--------|
+| Spaces | `/spaces` | Implemented |
+| Sources + ingestion | `/spaces/:spaceId/sources`, `/spaces/:spaceId/sources/:sourceId` | Implemented (TXT/MD/PDF/PNG/JPEG) |
+| Knowledge | `/spaces/:spaceId/knowledge`, `/spaces/:spaceId/knowledge/:knowledgePointId` | Implemented |
+| AI Tutor | `/spaces/:spaceId/ai`, `/spaces/:spaceId/ai/:conversationId` | Implemented |
+| AI Settings | `/settings/ai` | Implemented |
+| Questions | `/spaces/:spaceId/questions`, `/spaces/:spaceId/questions/new`, `/spaces/:spaceId/questions/:questionId`, `/spaces/:spaceId/questions/:questionId/edit` | Implemented |
+| Practice | `/spaces/:spaceId/practice`, `/spaces/:spaceId/practice/:sessionId` | Implemented |
+| Exams | `/spaces/:spaceId/exams`, `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | Implemented |
+| Search | `/spaces/:spaceId/search` | Implemented |
+| Auth | `/login` | Implemented |
 
-## Security Audit
+## Blocked (A-class, pending backend contract)
 
-- deleteAiApiKey() → real DELETE /settings/ai/api-key ✓
-- No localStorage/sessionStorage for key ✓
-- No renderer → StepFun direct request ✓
-- api.stepfun.com only as display placeholder text ✓
-- No key logging ✓
+| Feature | Blocker | Contract request |
+|---------|---------|------------------|
+| Notes (A8) | No `/notes` endpoints in `api.d.ts` | See `BACKEND-CONTRACT-REQUESTS.md` |
+| AI context chips (A3.2) | `SendMessageRequest` only has `content` | See `BACKEND-CONTRACT-REQUESTS.md` |
+| Full provenance nav (A2.1) | `KnowledgePointSourceResponse` missing `sourceId`/`sourcePageId` | See `BACKEND-CONTRACT-REQUESTS.md` |
+| AI reference deep-links (A3.3) | `AiReference` missing `sourcePageId` for SOURCE/CONTENT_BLOCK | See `BACKEND-CONTRACT-REQUESTS.md` |
 
-## Real Smoke Status
+## Out of scope (B-class)
 
-| Smoke | Status |
-|-------|--------|
-| Settings backend smoke | PENDING — no running backend |
-| Provider connection smoke | PENDING — no safe test credential |
-| Chat request smoke | PENDING — no safe test credential |
-| Production app:// | PASS (Electron alive 12s) |
+See `AISTUDY-FRONTEND-FINAL-COMPLETION-MASTER-CHECKLIST.md` section 12.
 
-## Final Gates
+## Security contract
 
-- lint OK / typecheck OK / test:run **343/343**（28 files）/ build OK
-- Coverage: Statements 83.06% / Branches 81.36% / Functions 77.35%
-- Build: 589.54 kB
+- BrowserWindow: `contextIsolation=true`, `nodeIntegration=false`, `sandbox=true`, `webSecurity=true`
+- Renderer: no direct fetch/axios/XHR; no localStorage/sessionStorage token; no Node APIs
+- AI: renderer never contacts provider directly; keys backend-owned
+- Preload: `contextBridge` only; no `ipcRenderer` leak
 
-## Final Status
+## Final gates (current)
 
-AI Provider Settings IMPLEMENTED
-AI Tutor/Chat IMPLEMENTED
-Provider secrets backend-owned
-No frontend secret persistence
-No renderer direct provider access
-REAL PROVIDER SMOKE PENDING — NO SAFE TEST CREDENTIAL
-WINDOWS GATES VERIFIED
-AWAITING USER REVIEW AND COMMIT
+- lint: PASS
+- typecheck: PASS
+- tests: 37 files / 391 pass
+- build: PASS (renderer bundle ~693 kB + CSS)
 
-## Deferred
+## Remaining work
 
-- Real backend smoke (needs running backend + test credential)
-- Formal Auth / Exam / Practice / Search / Notes
+1. Backend stable contract for A8/A2.1/A3.2 → frontend wiring
+2. A10 installed-app auth smoke (manual)
+3. A11.3 critical E2E smoke (manual)
+4. Final docs/smoke instructions below

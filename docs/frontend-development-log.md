@@ -558,3 +558,24 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
 - lint OK / typecheck OK / test:run **343/343**（28 files）/ build OK（589.54 kB）
 - Coverage：Statements 83.06% / Branches 81.36% / Functions 77.35%
 - 未 commit
+
+## FE-QUESTION/PRACTICE/EXAM/SEARCH/REVIEW Checkpoint (2026-09-17)
+
+- 新增业务模块：Questions / Practice / Exams / Search
+- api-client 新增 wrapper：listQuestions/createQuestion/publishQuestion、
+  listPracticeSessions/createPracticeSession/startPracticeSession/finishPracticeSession/submitPracticeAnswer、
+  listExams/createExam/getExam/publishExam/createExamAttempt/startExamAttempt/getExamAttempt/submitExamAttempt/getExamResult/getExamDiagnosis/submitExamAnswer、
+  search/studyCoach/explainPracticeAnswer/explainExamAnswer
+- 新增页面：QuestionsPage/QuestionDetailPage/QuestionForm/QuestionRenderer、
+  PracticePage/PracticeSessionPage、ExamsPage/ExamAttemptPage、SearchPage
+- AppShell nav 扩展：Questions/Practice/Exams/Search/AI Tutor
+- AiChatPage：conversation history persistence（listMessages + useQuery）
+- KnowledgePointDetailPage：provenance deep-link via `?block=`（A2.1 partial）
+- AI citation deep-links：SOURCE/QUESTION/KNOWLEDGE_POINT → entity routes（A3.3 partial）
+- query-keys 扩展：questions（含 filter 维度）、practiceSessions/practiceSession/exams/exam/examAttempt/search
+- 测试新增 5 文件（Questions/Practice/Exams/Search/PracticeSession）+ 回归修复
+- Final gates：lint OK / typecheck OK / test:run 391/391 / build OK
+- BACKEND CONTRACT REQUESTS 更新：A8 Notes / A2.1 provenance / A3.2 AI context / A3.3 AI reference IDs
+- Git：分 4 个 commit 合入 feat/fe-001（api-client / feature pages / app shell+routes / tests+docs）
+- 未 push
+
