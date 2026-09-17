@@ -55,9 +55,6 @@ export function ExamsPage() {
         navigate(`/spaces/${spaceId}/exams/${exam.id}`);
       }
     },
-    onError: (error) => {
-      console.error('create exam failed', error);
-    },
   });
 
   if (!spaceId) {
