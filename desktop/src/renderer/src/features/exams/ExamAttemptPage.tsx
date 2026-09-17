@@ -228,7 +228,7 @@ function ActiveExam({
   return (
     <div className="page">
       <PageHeader
-        title={`Exam Attempt #${attempt.id}`}
+        title={`Exam Attempt #${(attempt as Record<string, unknown>).id ?? '?'}`}
         actions={
           <Button type="button" variant="primary" onClick={onSubmit} disabled={submitting}>
             {submitting ? 'Submitting…' : 'Submit Exam'}

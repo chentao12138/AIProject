@@ -230,11 +230,13 @@ export function KnowledgePointDetailPage() {
               const hasSourceNav =
                 isPositiveId(sourceId) && isPositiveId(blockId);
               const hasBlockOnly = isPositiveId(blockId) && !hasSourceNav;
+              const pageParam = isPositiveId(sourcePageId) ? `?page=${sourcePageId}` : '';
+              const blockParam = `&block=${blockId}`;
               return (
                 <li key={link.id ?? `prov-${index}`}>
                   {hasSourceNav ? (
                     <Link
-                      to={`/spaces/${spaceId}/sources/${sourceId}?page=${sourcePageId}&block=${blockId}`}
+                      to={`/spaces/${spaceId}/sources/${sourceId}${pageParam}${blockParam}`}
                       className="nav-link"
                     >
                       Content block #{blockId}

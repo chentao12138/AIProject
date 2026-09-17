@@ -228,7 +228,7 @@ function ActiveSession({
   return (
     <div className="page">
       <PageHeader
-        title={`Practice #${session.id}`}
+        title={`Practice #${(session as Record<string, unknown>).id ?? '?'}`}
         actions={
           <Button type="button" variant="primary" onClick={onFinish} disabled={finishing}>
             {finishing ? 'Finishing…' : 'Finish'}

@@ -125,9 +125,11 @@ export function ExamsPage() {
                   <td>{exam.timeLimitMinutes ?? '—'}</td>
                   <td>{exam.questions?.length ?? '—'}</td>
                   <td>
-                    <Button type="button" onClick={() => navigate(`/spaces/${spaceId}/exams/${exam.id}`)}>
-                      View
-                    </Button>
+                    {spaceId !== null && (
+                      <Button type="button" onClick={() => navigate(`/spaces/${spaceId}/exams/${exam.id}`)}>
+                        View
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}
