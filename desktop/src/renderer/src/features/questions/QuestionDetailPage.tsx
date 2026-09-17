@@ -141,13 +141,13 @@ export function QuestionDetailPage() {
           <ul className="point-list">
             {q.knowledgePointIds.map((kpId) => (
               <li key={kpId}>
-                {isPositiveId(kpId) ? (
-                  <Link to={`/spaces/${spaceId}/knowledge/${kpId}`} className="nav-link">
-                    Knowledge Point #{kpId}
-                  </Link>
-                ) : (
-                  <span className="muted">#{kpId}</span>
-                )}
+                  {isPositiveId(kpId) && spaceId !== null ? (
+                    <Link to={`/spaces/${spaceId}/knowledge/${kpId}`} className="nav-link">
+                      Knowledge Point #{kpId}
+                    </Link>
+                  ) : (
+                    <span className="muted">#{kpId}</span>
+                  )}
               </li>
             ))}
           </ul>

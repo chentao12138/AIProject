@@ -148,7 +148,7 @@ export function QuestionsPage() {
                 <td>
                   <Button
                     type="button"
-                    onClick={() => navigate(`/spaces/${spaceId}/questions/${q.id}`)}
+                    onClick={() => spaceId !== null && navigate(`/spaces/${spaceId}/questions/${q.id}`)}
                   >
                     View
                   </Button>

@@ -10,7 +10,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
 import { normalizeApiError, unwrap } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
-import { parsePositiveIdParam } from '../../lib/ids';
+import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
 import { Button } from '../../components/Button';
 import type { components } from '@aistudy/api-client';
 type CreateQuestionRequest = components['schemas']['CreateQuestionRequest'];
@@ -31,17 +31,17 @@ export function QuestionForm() {
   const navigate = useNavigate();
   const { spaceId: spaceIdParam, questionId } = useParams();
   const spaceId = parsePositiveIdParam(spaceIdParam);
-  const isEdit = Boolean(questionId);
+  const isEdit = isPositiveId(Number(questionId));
 
   const existingQuery = useQuery({
-    queryKey: queryKeys.question(spaceId ?? 0, Number(questionId || '0')),
+    queryKey: queryKeys.question(spaceId ?? 0, Number(questionId) || 0),
     queryFn: () => {
-      if (spaceId === null || !questionId) {
+      if (spaceId === null || !questionId || !isPositiveId(Number(questionId))) {
         return Promise.reject(new Error('invalid ids'));
       }
       return api.getQuestion(spaceId, Number(questionId)).then(unwrap);
     },
-    enabled: isEdit && spaceId !== null && Boolean(questionId),
+    enabled: isEdit && spaceId !== null,
   });
 
   const [questionType, setQuestionType] = useState<QuestionType>('SINGLE_CHOICE');
@@ -89,10 +89,10 @@ export function QuestionForm() {
       };
       if (questionType === 'SINGLE_CHOICE') {
         body.correctOptionKey = correctSingle || undefined;
-        body.options = options.filter((o) => o.content.trim()).map((o) => ({ optionKey: o.optionKey, content: o.content }));
+        body.options = options.filter((o) => (o.content ?? '').trim()).map((o) => ({ optionKey: o.optionKey, content: o.content }));
       } else if (questionType === 'MULTIPLE_CHOICE') {
         body.correctOptionKeys = correctMultiple;
-        body.options = options.filter((o) => o.content.trim()).map((o) => ({ optionKey: o.optionKey, content: o.content }));
+        body.options = options.filter((o) => (o.content ?? '').trim()).map((o) => ({ optionKey: o.optionKey, content: o.content }));
       } else if (questionType === 'BOOLEAN') {
         body.correctBoolean = correctBoolean ?? undefined;
       } else if (questionType === 'TEXT_ANSWER') {
@@ -102,7 +102,9 @@ export function QuestionForm() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.questions(spaceId ?? 0) });
-      navigate(`/spaces/${spaceId}/questions`);
+      if (spaceId !== null) {
+        navigate(`/spaces/${spaceId}/questions`);
+      }
     },
     onError: (error) => {
       setServerError(normalizeApiError(error).message);
