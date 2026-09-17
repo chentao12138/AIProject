@@ -46,7 +46,8 @@ export const queryKeys = {
     ['ai-conversation', spaceId, conversationId] as const,
   aiMessages: (spaceId: number, conversationId: number) =>
     ['ai-messages', spaceId, conversationId] as const,
-  questions: (spaceId: number) => ['questions', spaceId] as const,
+  questions: (spaceId: number, status?: string, questionType?: string, knowledgePointId?: number) =>
+    ['questions', spaceId, status, questionType, knowledgePointId] as const,
   question: (spaceId: number, questionId: number) =>
     ['question', spaceId, questionId] as const,
   practiceSessions: (spaceId: number) =>

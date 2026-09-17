@@ -34,7 +34,12 @@ export function QuestionsPage() {
     : undefined;
 
   const listQuery = useQuery({
-    queryKey: queryKeys.questions(spaceId ?? 0),
+    queryKey: queryKeys.questions(
+      spaceId ?? 0,
+      status || undefined,
+      questionType || undefined,
+      isPositiveId(knowledgePointId) ? knowledgePointId : undefined
+    ),
     queryFn: () => {
       if (spaceId === null) {
         return Promise.reject(new Error('invalid space id'));
