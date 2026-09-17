@@ -46,4 +46,18 @@ export const queryKeys = {
     ['ai-conversation', spaceId, conversationId] as const,
   aiMessages: (spaceId: number, conversationId: number) =>
     ['ai-messages', spaceId, conversationId] as const,
+  questions: (spaceId: number) => ['questions', spaceId] as const,
+  question: (spaceId: number, questionId: number) =>
+    ['question', spaceId, questionId] as const,
+  practiceSessions: (spaceId: number) =>
+    ['practice-sessions', spaceId] as const,
+  practiceSession: (spaceId: number, sessionId: number) =>
+    ['practice-session', spaceId, sessionId] as const,
+  exams: (spaceId: number) => ['exams', spaceId] as const,
+  exam: (spaceId: number, examId: number) =>
+    ['exam', spaceId, examId] as const,
+  examAttempt: (spaceId: number, attemptId: number) =>
+    ['exam-attempt', spaceId, attemptId] as const,
+  search: (spaceId: number, query: string) =>
+    ['search', spaceId, query] as const,
 };

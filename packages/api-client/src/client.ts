@@ -53,6 +53,24 @@ type CreateConversationRequest =
 type SendMessageRequest =
   components['schemas']['SendMessageRequest'];
 
+type CreateQuestionRequest =
+  components['schemas']['CreateQuestionRequest'];
+
+type CreatePracticeSessionRequest =
+  components['schemas']['CreatePracticeSessionRequest'];
+
+type PracticeAnswerRequest =
+  components['schemas']['PracticeAnswerRequest'];
+
+type CreateExamRequest =
+  components['schemas']['CreateExamRequest'];
+
+type ExamAnswerRequest =
+  components['schemas']['ExamAnswerRequest'];
+
+type StudyCoachRequest =
+  components['schemas']['StudyCoachRequest'];
+
 // FE-AUTH-001 (ADR-026): formal login / refresh / logout + current user.
 type LoginRequest = components['schemas']['LoginRequest'];
 type RefreshTokenRequest = components['schemas']['RefreshTokenRequest'];
@@ -495,7 +513,323 @@ export function createApiClient(
     },
 
     /**
-     * POST /api/v1/auth/login — username/password -> token pair.
+     * GET .../ai/conversations/{conversationId}/messages — paged message history.
+     */
+    async listMessages(
+      spaceId: number,
+      conversationId: number,
+      query?: { page?: number; size?: number }
+    ) {
+      return client.GET(
+        '/api/v1/spaces/{spaceId}/ai/conversations/{conversationId}/messages',
+        {
+          params: { path: { spaceId, conversationId }, query },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * GET .../questions — list questions in MY space (filterable).
+     */
+    async listQuestions(
+      spaceId: number,
+      query?: { status?: string; questionType?: string; knowledgePointId?: number }
+    ) {
+      return client.GET('/api/v1/spaces/{spaceId}/questions', {
+        params: { path: { spaceId }, query },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * GET .../questions/{questionId} — one question of MY space.
+     */
+    async getQuestion(spaceId: number, questionId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/questions/{questionId}', {
+        params: { path: { spaceId, questionId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST .../questions — create a question in MY space.
+     */
+    async createQuestion(spaceId: number, body: CreateQuestionRequest) {
+      return client.POST('/api/v1/spaces/{spaceId}/questions', {
+        params: { path: { spaceId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST .../questions/{questionId}/publish — DRAFT → PUBLISHED.
+     */
+    async publishQuestion(spaceId: number, questionId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/questions/{questionId}/publish',
+        {
+          params: { path: { spaceId, questionId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * GET .../practice-sessions — list my practice sessions.
+     */
+    async listPracticeSessions(spaceId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/practice-sessions', {
+        params: { path: { spaceId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST .../practice-sessions — create a practice session.
+     */
+    async createPracticeSession(spaceId: number, body: CreatePracticeSessionRequest) {
+      return client.POST('/api/v1/spaces/{spaceId}/practice-sessions', {
+        params: { path: { spaceId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * GET .../practice-sessions/{sessionId} — one of my sessions.
+     */
+    async getPracticeSession(spaceId: number, sessionId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/practice-sessions/{sessionId}', {
+        params: { path: { spaceId, sessionId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST .../practice-sessions/{sessionId}/start — begin answering.
+     */
+    async startPracticeSession(spaceId: number, sessionId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/start',
+        {
+          params: { path: { spaceId, sessionId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * POST .../practice-sessions/{sessionId}/finish — finish and score.
+     */
+    async finishPracticeSession(spaceId: number, sessionId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/finish',
+        {
+          params: { path: { spaceId, sessionId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * POST .../practice-sessions/{sessionId}/answers — submit one answer.
+     */
+    async submitPracticeAnswer(
+      spaceId: number,
+      sessionId: number,
+      body: PracticeAnswerRequest
+    ) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/answers',
+        {
+          params: { path: { spaceId, sessionId } },
+          body,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * GET .../exams — list exams in MY space.
+     */
+    async listExams(spaceId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/exams', {
+        params: { path: { spaceId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST .../exams — create an exam in MY space.
+     */
+    async createExam(spaceId: number, body: CreateExamRequest) {
+      return client.POST('/api/v1/spaces/{spaceId}/exams', {
+        params: { path: { spaceId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * GET .../exams/{examId} — one exam of MY space.
+     */
+    async getExam(spaceId: number, examId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/exams/{examId}', {
+        params: { path: { spaceId, examId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST .../exams/{examId}/publish — DRAFT → PUBLISHED.
+     */
+    async publishExam(spaceId: number, examId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/exams/{examId}/publish',
+        {
+          params: { path: { spaceId, examId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * POST .../exams/{examId}/sessions — create an exam attempt.
+     */
+    async createExamAttempt(spaceId: number, examId: number) {
+      return client.POST('/api/v1/spaces/{spaceId}/exams/{examId}/sessions', {
+        params: { path: { spaceId, examId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST .../exam-attempts/{attemptId}/start — begin answering.
+     */
+    async startExamAttempt(spaceId: number, attemptId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}/start',
+        {
+          params: { path: { spaceId, attemptId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * GET .../exam-attempts/{attemptId} — one of my exam attempts.
+     */
+    async getExamAttempt(spaceId: number, attemptId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}', {
+        params: { path: { spaceId, attemptId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST .../exam-attempts/{attemptId}/submit — submit for grading.
+     */
+    async submitExamAttempt(spaceId: number, attemptId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}/submit',
+        {
+          params: { path: { spaceId, attemptId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * GET .../exam-attempts/{attemptId}/result — graded result.
+     */
+    async getExamResult(spaceId: number, attemptId: number) {
+      return client.GET(
+        '/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}/result',
+        {
+          params: { path: { spaceId, attemptId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * GET .../exam-attempts/{attemptId}/diagnosis — detailed diagnosis.
+     */
+    async getExamDiagnosis(spaceId: number, attemptId: number) {
+      return client.GET(
+        '/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}/diagnosis',
+        {
+          params: { path: { spaceId, attemptId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * POST .../exam-attempts/{attemptId}/answers — submit one exam answer.
+     */
+    async submitExamAnswer(spaceId: number, attemptId: number, body: ExamAnswerRequest) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}/answers',
+        {
+          params: { path: { spaceId, attemptId } },
+          body,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * GET /api/v1/spaces/{spaceId}/search — unified keyword search.
+     */
+    async search(
+      spaceId: number,
+      query: { q: string; types?: string; page?: number; size?: number }
+    ) {
+      return client.GET('/api/v1/spaces/{spaceId}/search', {
+        params: { path: { spaceId }, query },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST /api/v1/spaces/{spaceId}/ai/study-coach — read-only study coach.
+     */
+    async studyCoach(spaceId: number, body?: StudyCoachRequest) {
+      return client.POST('/api/v1/spaces/{spaceId}/ai/study-coach', {
+        params: { path: { spaceId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST /api/v1/spaces/{spaceId}/ai/explanations/practice-answers/{answerId} —
+     * explain a submitted practice answer.
+     */
+    async explainPracticeAnswer(spaceId: number, answerId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/ai/explanations/practice-answers/{answerId}',
+        {
+          params: { path: { spaceId, answerId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    async explainExamAnswer(spaceId: number, answerId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/ai/explanations/exam-answers/{answerId}',
+        {
+          params: { path: { spaceId, answerId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET /api/v1/auth/login — username/password -> token pair.
      * PUBLIC endpoint: deliberately sends NO Authorization header (a
      * stale/expired bearer must never be attached to a fresh login).
      */

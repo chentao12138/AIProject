@@ -69,7 +69,8 @@ export function createMockApiClient(): ApiClient {
     getConversation: vi.fn(async () => noData),
     sendMessage: vi.fn(async () => noData),
     archiveConversation: vi.fn(async () => noData),
-    // FE-AUTH-001
+    listMessages: vi.fn(async () => noData),
+    // FE-ADMIN-001
     login: vi.fn(async () => noData),
     refresh: vi.fn(async () => noData),
     logout: vi.fn(async () => noData),
@@ -80,6 +81,36 @@ export function createMockApiClient(): ApiClient {
     adminUpdateRoles: vi.fn(async () => noData),
     adminUpdateStatus: vi.fn(async () => noData),
     adminReconcileStorage: vi.fn(async () => noData),
+    // Questions
+    listQuestions: vi.fn(async () => noData),
+    getQuestion: vi.fn(async () => noData),
+    createQuestion: vi.fn(async () => noData),
+    publishQuestion: vi.fn(async () => noData),
+    // Practice
+    listPracticeSessions: vi.fn(async () => noData),
+    createPracticeSession: vi.fn(async () => noData),
+    getPracticeSession: vi.fn(async () => noData),
+    startPracticeSession: vi.fn(async () => noData),
+    finishPracticeSession: vi.fn(async () => noData),
+    submitPracticeAnswer: vi.fn(async () => noData),
+    // Exams
+    listExams: vi.fn(async () => noData),
+    createExam: vi.fn(async () => noData),
+    getExam: vi.fn(async () => noData),
+    publishExam: vi.fn(async () => noData),
+    createExamAttempt: vi.fn(async () => noData),
+    startExamAttempt: vi.fn(async () => noData),
+    getExamAttempt: vi.fn(async () => noData),
+    submitExamAttempt: vi.fn(async () => noData),
+    getExamResult: vi.fn(async () => noData),
+    getExamDiagnosis: vi.fn(async () => noData),
+    submitExamAnswer: vi.fn(async () => noData),
+    // Search
+    search: vi.fn(async () => noData),
+    // Study Coach
+    studyCoach: vi.fn(async () => noData),
+    explainPracticeAnswer: vi.fn(async () => noData),
+    explainExamAnswer: vi.fn(async () => noData),
   } as unknown as ApiClient;
 }
 
