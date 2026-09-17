@@ -95,6 +95,10 @@ describe('AI Chat — conversation switching', () => {
           },
           response: { status: 200 },
         })),
+        listMessages: vi.fn(async () => ({
+          data: { content: [], page: 0, size: 50, totalElements: 0, totalPages: 0 },
+          response: { status: 200 },
+        })),
         sendMessage: vi.fn(async () => ({
           data: {
             userMessage: { id: 11, role: 'USER', content: 'MSG-CONV-ONE' },
@@ -107,18 +111,58 @@ describe('AI Chat — conversation switching', () => {
       routePath: '/spaces/:spaceId/ai/:conversationId',
     });
 
-    // 在会话 1 中发送一条消息，面板显示该会话的本地记录
     const textarea = await screen.findByLabelText('Message');
     await user.type(textarea, 'MSG-CONV-ONE');
     await user.click(screen.getByRole('button', { name: '发送' }));
     expect(await screen.findByText('REPLY-CONV-ONE')).toBeInTheDocument();
 
-    // 切换到会话 2：ChatPanel 必须重挂载，不得残留会话 1 的消息
     await user.click(await screen.findByRole('link', { name: '对话二' }));
     await waitFor(() => {
       expect(screen.queryByText('REPLY-CONV-ONE')).not.toBeInTheDocument();
     });
     expect(screen.queryByText('MSG-CONV-ONE')).not.toBeInTheDocument();
     expect(screen.getByText('发送第一条消息开始对话。')).toBeInTheDocument();
+  });
+});
+
+describe('AI Chat — message history persistence', () => {
+  it('loads existing messages from server when opening a conversation', async () => {
+    renderWithProviders(<AiChatPage />, {
+      apiClient: mockApiClient({
+        getAiSettings: vi.fn(async () => ({
+          data: { enabled: true, apiKeyConfigured: true },
+          response: { status: 200 },
+        })),
+        listConversations: vi.fn(async () => ({
+          data: {
+            content: [{ id: 1, title: '历史对话', status: 'ACTIVE' }],
+            page: 0,
+            size: 20,
+            totalElements: 1,
+            totalPages: 1,
+          },
+          response: { status: 200 },
+        })),
+        listMessages: vi.fn(async () => ({
+          data: {
+            content: [
+              { id: 101, role: 'USER', content: '旧问题', createdAt: '2024-01-01T00:00:00Z' },
+              { id: 102, role: 'ASSISTANT', content: '旧回答', createdAt: '2024-01-01T00:00:01Z' },
+            ],
+            page: 0,
+            size: 50,
+            totalElements: 2,
+            totalPages: 1,
+          },
+          response: { status: 200 },
+        })),
+      }),
+      initialEntries: ['/spaces/7/ai/1'],
+      routePath: '/spaces/:spaceId/ai/:conversationId',
+    });
+
+    expect(await screen.findByText('旧问题')).toBeInTheDocument();
+    expect(await screen.findByText('旧回答')).toBeInTheDocument();
+    expect(screen.getByTestId('ai-messages').querySelectorAll('.ai-message')).toHaveLength(2);
   });
 });

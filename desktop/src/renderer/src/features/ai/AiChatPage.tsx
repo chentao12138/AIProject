@@ -56,7 +56,6 @@ export function AiChatPage() {
 
       <div className="ai-layout">
         <ConversationList spaceId={spaceId} activeId={conversationId} />
-        {/* key={conversationId}：切换会话时强制重挂载 ChatPanel，重置状态 */}
         {conversationId !== null ? (
           <ChatPanel
             key={conversationId}
@@ -113,7 +112,6 @@ function ConversationList({
       void queryClient.invalidateQueries({
         queryKey: queryKeys.aiConversations(spaceId),
       });
-      // 修复：如果归档的是当前打开的会话，重置路由到会话首页
       if (activeId === archivedId) {
         navigate(`/spaces/${spaceId}/ai`);
       }
@@ -206,16 +204,24 @@ function ChatPanel({
   const [sendError, setSendError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // 修复 1：加载远端历史消息（若你 api-client 中有获取消息的方法，可取消注释 queryKey 与 queryFn）
-  // 如果当前 api-client 没有 listMessages，可直接保留下述空回退状态
+  const messagesQuery = useQuery({
+    queryKey: queryKeys.aiMessages(spaceId, conversationId),
+    queryFn: () => api.listMessages(spaceId, conversationId).then(unwrap),
+    enabled: conversationId !== null,
+  });
   const [messages, setMessages] = useState<MessageItem[]>([]);
+
+  useEffect(() => {
+    if (messagesQuery.data?.content) {
+      setMessages(messagesQuery.data.content as MessageItem[]);
+    }
+  }, [messagesQuery.data]);
 
   const send = useMutation({
     mutationFn: (content: string) =>
       api.sendMessage(spaceId, conversationId, { content }).then(unwrap),
     onMutate: async (content: string) => {
       setSendError(null);
-      // 优化 2：乐观更新 - 立即在界面添加用户问题与“AI思考中”占位
       const tempUserMsg: MessageItem = {
         id: Date.now(),
         role: 'USER',
@@ -226,23 +232,22 @@ function ChatPanel({
       setPrompt('');
     },
     onSuccess: (data) => {
-      // 收到真实响应后，用后端返回的真实消息替换/追加
       if (data?.userMessage && data?.assistantMessage) {
         setMessages((prev) => {
-          // 移除乐观添加的临时消息，换成服务端的标准消息
           const withoutOptimistic = prev.slice(0, -1);
           return [...withoutOptimistic, data.userMessage!, data.assistantMessage!];
         });
       } else if (data?.assistantMessage) {
         setMessages((prev) => [...prev, data.assistantMessage!]);
       }
-
       void queryClient.invalidateQueries({
         queryKey: queryKeys.aiConversations(spaceId),
       });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.aiMessages(spaceId, conversationId),
+      });
     },
     onError: (error) => {
-      // 发送失败时移除乐观添加的消息
       setMessages((prev) => prev.slice(0, -1));
       setSendError(normalizeApiError(error).message);
     },
@@ -257,7 +262,6 @@ function ChatPanel({
 
   const busy = send.isPending;
 
-  // 优化 3：支持 Enter 发送，Shift + Enter 换行
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -271,7 +275,16 @@ function ChatPanel({
   return (
     <section className="ai-chat" aria-label="Chat">
       <div className="ai-messages" data-testid="ai-messages">
-        {messages.length === 0 && !busy && (
+        {messagesQuery.isPending && messages.length === 0 && !busy && (
+          <LoadingState text="加载消息…" />
+        )}
+        {messagesQuery.isError && (
+          <ErrorState
+            message={normalizeApiError(messagesQuery.error).message}
+            onRetry={() => void messagesQuery.refetch()}
+          />
+        )}
+        {messages.length === 0 && !messagesQuery.isPending && !messagesQuery.isError && !busy && (
           <p className="muted">发送第一条消息开始对话。</p>
         )}
         {messages.map((msg, i) => (
@@ -290,19 +303,43 @@ function ChatPanel({
               <div className="ai-message__refs" data-testid="ai-refs">
                 <p className="muted">引用：</p>
                 <ul>
-                  {msg.references.map((ref, ri) => (
-                    <li key={ri}>
-                      {ref.title ?? `#${ref.id ?? '?'}`}
-                      {ref.snippet ? ` — ${ref.snippet.slice(0, 80)}` : ''}
-                    </li>
-                  ))}
+                  {msg.references.map((ref, ri) => {
+                    const refId = ref.id;
+                    let href: string | undefined;
+                    if (ref.type === 'SOURCE' && isPositiveId(refId)) {
+                      href = `/spaces/${spaceId}/sources/${refId}`;
+                    } else if (
+                      ref.type === 'KNOWLEDGE_POINT' &&
+                      isPositiveId(refId)
+                    ) {
+                      href = `/spaces/${spaceId}/knowledge/${refId}`;
+                    } else if (
+                      ref.type === 'QUESTION' &&
+                      isPositiveId(refId)
+                    ) {
+                      href = `/spaces/${spaceId}/questions/${refId}`;
+                    }
+                    return (
+                      <li key={ri}>
+                        {href ? (
+                          <Link to={href} className="nav-link">
+                            {ref.title ?? `#${refId}`}
+                          </Link>
+                        ) : (
+                          <>
+                            {ref.title ?? `#${refId ?? '?'}`}
+                          </>
+                        )}
+                        {ref.snippet ? ` — ${ref.snippet.slice(0, 80)}` : ''}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
           </article>
         ))}
 
-        {/* 思考中状态气泡 */}
         {busy && (
           <article className="ai-message ai-message--assistant" style={{ opacity: 0.7 }}>
             <p className="ai-message__role muted">AI</p>

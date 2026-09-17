@@ -129,6 +129,38 @@ export function AppShell() {
                     Knowledge
                   </NavLink>
                   <NavLink
+                    to={`/spaces/${spaceId}/questions`}
+                    className={({ isActive }) =>
+                      isActive ? 'nav-link nav-link--active' : 'nav-link'
+                    }
+                  >
+                    Questions
+                  </NavLink>
+                  <NavLink
+                    to={`/spaces/${spaceId}/practice`}
+                    className={({ isActive }) =>
+                      isActive ? 'nav-link nav-link--active' : 'nav-link'
+                    }
+                  >
+                    Practice
+                  </NavLink>
+                  <NavLink
+                    to={`/spaces/${spaceId}/exams`}
+                    className={({ isActive }) =>
+                      isActive ? 'nav-link nav-link--active' : 'nav-link'
+                    }
+                  >
+                    Exams
+                  </NavLink>
+                  <NavLink
+                    to={`/spaces/${spaceId}/search`}
+                    className={({ isActive }) =>
+                      isActive ? 'nav-link nav-link--active' : 'nav-link'
+                    }
+                  >
+                    Search
+                  </NavLink>
+                  <NavLink
                     to={`/spaces/${spaceId}/ai`}
                     className={({ isActive }) =>
                       isActive ? 'nav-link nav-link--active' : 'nav-link'

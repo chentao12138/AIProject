@@ -13,7 +13,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useApiClient } from '../../lib/api-context';
 import { unwrap, normalizeApiError } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
@@ -224,12 +224,33 @@ export function KnowledgePointDetailPage() {
         {provenanceQuery.isSuccess && provenanceLinks.length > 0 && (
           <ul className="point-list">
             {provenanceLinks.map((link, index) => {
-              // The contract exposes contentBlockId; source navigation
-              // is only offered when we can form a real route. We do
-              // NOT invent a content-block detail route in FE-002A.
+              const blockId = link.contentBlockId;
+              const sourceId = (link as unknown as { sourceId?: number }).sourceId;
+              const sourcePageId = (link as unknown as { sourcePageId?: number }).sourcePageId;
+              const hasSourceNav =
+                isPositiveId(sourceId) && isPositiveId(blockId);
+              const hasBlockOnly = isPositiveId(blockId) && !hasSourceNav;
               return (
-                <li key={link.id ?? `prov-${index}`} className="muted">
-                  Content block #{link.contentBlockId ?? '—'}
+                <li key={link.id ?? `prov-${index}`}>
+                  {hasSourceNav ? (
+                    <Link
+                      to={`/spaces/${spaceId}/sources/${sourceId}?page=${sourcePageId}&block=${blockId}`}
+                      className="nav-link"
+                    >
+                      Content block #{blockId}
+                    </Link>
+                  ) : hasBlockOnly ? (
+                    <Link
+                      to={`/spaces/${spaceId}/sources?block=${blockId}`}
+                      className="nav-link"
+                    >
+                      Content block #{blockId}
+                    </Link>
+                  ) : (
+                    <span className="muted">
+                      Content block #{blockId ?? '—'}
+                    </span>
+                  )}
                   {link.relationType ? ` · ${link.relationType}` : ''}
                 </li>
               );
