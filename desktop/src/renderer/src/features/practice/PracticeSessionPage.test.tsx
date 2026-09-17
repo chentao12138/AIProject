@@ -74,7 +74,12 @@ describe('PracticeSessionPage', () => {
       response: { status: 200 },
     } as const;
 
-    const getPracticeSession = vi.fn(async () => inProgressData);
+    let callCount = 0;
+    const getPracticeSession = vi.fn(async () => {
+      callCount += 1;
+      if (callCount >= 3) return completedData;
+      return inProgressData;
+    });
 
     renderWithProviders(<PracticeSessionPage />, {
       apiClient: mockApiClient({
@@ -88,9 +93,6 @@ describe('PracticeSessionPage', () => {
       initialEntries: ['/spaces/7/practice/1'],
       routePath: '/spaces/:spaceId/practice/:sessionId',
     });
-
-    getPracticeSession.mockImplementationOnce(async () => inProgressData as any);
-    getPracticeSession.mockImplementationOnce(async () => completedData as any);
 
     await user.click(await screen.findByRole('button', { name: 'Alpha' }));
     await user.click(screen.getByRole('button', { name: 'Submit' }));

@@ -12,6 +12,8 @@ import { normalizeApiError, unwrap } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
 import { parsePositiveIdParam } from '../../lib/ids';
 import { Button } from '../../components/Button';
+import type { components } from '@aistudy/api-client';
+type CreateQuestionRequest = components['schemas']['CreateQuestionRequest'];
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
@@ -76,7 +78,7 @@ export function QuestionForm() {
   const create = useMutation({
     mutationFn: () => {
       if (spaceId === null) return Promise.reject(new Error('invalid space id'));
-      const body: Record<string, unknown> = {
+      const body: CreateQuestionRequest = {
         questionType,
         stem,
         explanation: explanation || undefined,
@@ -92,11 +94,11 @@ export function QuestionForm() {
         body.correctOptionKeys = correctMultiple;
         body.options = options.filter((o) => o.content.trim()).map((o) => ({ optionKey: o.optionKey, content: o.content }));
       } else if (questionType === 'BOOLEAN') {
-        body.correctBoolean = correctBoolean;
+        body.correctBoolean = correctBoolean ?? undefined;
       } else if (questionType === 'TEXT_ANSWER') {
         body.referenceAnswer = referenceAnswer || undefined;
       }
-      return api.createQuestion(spaceId, body as any).then(unwrap);
+      return api.createQuestion(spaceId, body).then(unwrap);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.questions(spaceId ?? 0) });
