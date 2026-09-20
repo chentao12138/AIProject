@@ -23,6 +23,41 @@ export const DEFAULT_API_BASE_URL = 'http://localhost:8080';
 const HTTP_PROTOCOLS = new Set(['http:', 'https:']);
 
 /**
+ * Normalize a raw base URL candidate WITHOUT applying the default: returns
+ * undefined when the value is missing, unparsable, non-http(s) or has a
+ * host that would be nonsense (or wildcard-ish) in a CSP source.
+ */
+export function normalizeApiBaseUrl(
+  raw: string | undefined | null
+): string | undefined {
+  const trimmed = (raw ?? '').trim();
+  if (trimmed === '') {
+    return undefined;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return undefined;
+  }
+  if (!HTTP_PROTOCOLS.has(parsed.protocol)) {
+    return undefined;
+  }
+  // The WHATWG parser is lenient about the authority: 'http:///x'
+  // silently becomes host 'x'. Require the canonical scheme://host form
+  // (case-insensitive prefix, no extra slash before the host).
+  if (!/^https?:\/\/[^/]/i.test(trimmed)) {
+    return undefined;
+  }
+  // URL.parse also accepts hosts like '*' or '' that would be nonsense
+  // (or worse, wildcard-ish) in a CSP source — reject them.
+  if (parsed.hostname === '' || parsed.hostname.includes('*')) {
+    return undefined;
+  }
+  return trimmed.replace(/\/+$/, '');
+}
+
+/**
  * Normalize a raw VITE_API_BASE_URL value into the renderer base URL.
  *
  * - undefined / empty / whitespace-only  -> DEFAULT_API_BASE_URL
@@ -34,31 +69,7 @@ const HTTP_PROTOCOLS = new Set(['http:', 'https:']);
  *   append endpoint paths to it; only the CSP drops the path)
  */
 export function resolveApiBaseUrl(raw: string | undefined | null): string {
-  const trimmed = (raw ?? '').trim();
-  if (trimmed === '') {
-    return DEFAULT_API_BASE_URL;
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    return DEFAULT_API_BASE_URL;
-  }
-  if (!HTTP_PROTOCOLS.has(parsed.protocol)) {
-    return DEFAULT_API_BASE_URL;
-  }
-  // The WHATWG parser is lenient about the authority: 'http:///x'
-  // silently becomes host 'x'. Require the canonical scheme://host form
-  // (case-insensitive prefix, no extra slash before the host).
-  if (!/^https?:\/\/[^/]/i.test(trimmed)) {
-    return DEFAULT_API_BASE_URL;
-  }
-  // URL.parse also accepts hosts like '*' or '' that would be nonsense
-  // (or worse, wildcard-ish) in a CSP source — reject them.
-  if (parsed.hostname === '' || parsed.hostname.includes('*')) {
-    return DEFAULT_API_BASE_URL;
-  }
-  return trimmed.replace(/\/+$/, '');
+  return normalizeApiBaseUrl(raw) ?? DEFAULT_API_BASE_URL;
 }
 
 /**

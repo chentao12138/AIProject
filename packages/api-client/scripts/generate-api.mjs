@@ -75,4 +75,26 @@ try {
   process.exit(1);
 }
 
+// Record what the committed pair is derived from, so `check-api.mjs` can
+// tell a refreshed spec, a hand-edited type file and an untouched baseline
+// apart without contacting the server.
+const manifest = {
+  generatedFrom: {
+    url: OPENAPI_URL,
+    openapi: JSON.parse(openapiJson).openapi ?? null,
+    infoVersion: JSON.parse(openapiJson).info?.version ?? null,
+  },
+  recordedAt: new Date().toISOString(),
+  files: {
+    'openapi.json': `sha256-${createHash('sha256').update(readFileSync(TMP_FILE)).digest('hex')}`,
+    'api.d.ts': `sha256-${createHash('sha256').update(readFileSync(OUT_FILE)).digest('hex')}`,
+  },
+};
+writeFileSync(
+  join(OUT_DIR, 'manifest.json'),
+  `${JSON.stringify(manifest, null, 2)}
+`,
+  'utf8'
+);
+
 console.log(`[api:generate] DONE: ${OUT_FILE}`);

@@ -6,7 +6,9 @@
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "npm run typecheck && electron-vite build",
+    "api:check": "node ../packages/api-client/scripts/check-api.mjs",
+    "api:record": "node ../packages/api-client/scripts/check-api.mjs --record",
+    "build": "npm run typecheck && npm run api:check && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

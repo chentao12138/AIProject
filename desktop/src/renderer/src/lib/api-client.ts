@@ -13,7 +13,11 @@
  */
 
 import { createApiClient } from '@aistudy/api-client';
-import { resolveApiBaseUrl } from '../../../shared/api-config';
+import type { ApiClient } from '@aistudy/api-client';
+import {
+  normalizeApiBaseUrl,
+  resolveApiBaseUrl,
+} from '../../../shared/api-config';
 import { authSession } from './auth-session';
 import { createRefreshingFetch } from './authed-fetch';
 
@@ -26,21 +30,48 @@ export {
   type AuthUser,
 } from './auth-session';
 
-export const apiBaseUrl = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+/**
+ * The backend target. Seeded from the build-time `VITE_API_BASE_URL` and
+ * replaced by `configureApiBaseUrl()` with the value main resolved at runtime
+ * (ADR-047) — an object so the shell header and the client always read the
+ * same live value instead of two snapshots.
+ */
+export const apiConfig: { baseUrl: string } = {
+  baseUrl: resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL),
+};
 
-export const apiClient = createApiClient(apiBaseUrl, authSession, {
-  fetch: createRefreshingFetch({
-    refreshAccessToken: async () => {
-      const renewed = await authSession.rotateRefresh(apiClientLazy());
-      return renewed ? authSession.getAccessToken() : null;
-    },
-  }),
-});
+let client: ApiClient | null = null;
+
+/** Lazily built so it always carries the currently configured base URL. */
+export function getApiClient(): ApiClient {
+  client ??= createApiClient(apiConfig.baseUrl, authSession, {
+    fetch: createRefreshingFetch({
+      refreshAccessToken: async () => {
+        const renewed = await authSession.rotateRefresh(getApiClient());
+        return renewed ? authSession.getAccessToken() : null;
+      },
+    }),
+  });
+  return client;
+}
 
 /**
- * Breaks the constructor cycle: the refresh callback is only invoked
- * after a network response, by which point the singleton is assigned.
+ * Read the runtime-resolved base URL from the main process before the first
+ * request. Without the bridge (unit tests, plain browser) or when main
+ * refuses, the build-time value stands — it is what the CSP was built for in
+ * that case anyway.
  */
-function apiClientLazy(): typeof apiClient {
-  return apiClient;
+export async function configureApiBaseUrl(): Promise<string> {
+  let raw: string | undefined;
+  try {
+    raw = await window.aistudyConfig?.getApiBaseUrl();
+  } catch {
+    raw = undefined;
+  }
+  const resolved = normalizeApiBaseUrl(raw);
+  if (resolved && resolved !== apiConfig.baseUrl) {
+    apiConfig.baseUrl = resolved;
+    client = null;
+  }
+  return apiConfig.baseUrl;
 }

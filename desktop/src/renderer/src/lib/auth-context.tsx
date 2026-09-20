@@ -32,7 +32,7 @@ import {
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ApiClient } from '@aistudy/api-client';
-import { apiClient, authSession } from './api-client';
+import { authSession, getApiClient } from './api-client';
 import { AuthLoginError, type AuthUser } from './auth-session';
 
 export type AuthStatus =
@@ -54,7 +54,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({
   children,
-  client = apiClient,
+  client = getApiClient(),
   initialStatus = 'bootstrapping',
   autoBootstrap = true,
 }: {

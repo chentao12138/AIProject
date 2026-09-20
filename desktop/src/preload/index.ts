@@ -15,9 +15,14 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   AUTH_VAULT_CHANNELS,
   normalizeRefreshToken,
+  type AuthVaultBridge,
 } from '../shared/auth-vault-contract';
+import {
+  APP_CONFIG_CHANNELS,
+  type AppConfigBridge,
+} from '../shared/runtime-config';
 
-const authVault = {
+const authVault: AuthVaultBridge = {
   /** Encrypt + persist the refresh token. Rejects on invalid input. */
   save: (refreshToken: string): Promise<{ ok: true }> => {
     const normalized = normalizeRefreshToken(refreshToken);
@@ -34,6 +39,10 @@ const authVault = {
     ipcRenderer.invoke(AUTH_VAULT_CHANNELS.clear),
 };
 
-contextBridge.exposeInMainWorld('aistudyAuthVault', authVault);
+const appConfig: AppConfigBridge = {
+  /** The base URL main resolved (and allowed in the CSP). Read-only. */
+  getApiBaseUrl: () => ipcRenderer.invoke(APP_CONFIG_CHANNELS.getApiBaseUrl),
+};
 
-export type AuthVaultBridge = typeof authVault;
+contextBridge.exposeInMainWorld('aistudyAuthVault', authVault);
+contextBridge.exposeInMainWorld('aistudyConfig', appConfig);

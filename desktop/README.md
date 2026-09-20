@@ -39,32 +39,49 @@ npm run lint:fix       # 只修可自动修复项
 npm run typecheck      # tsc --noEmit（node + web 两个 project）
 npm run test:run       # Vitest 单次运行（jsdom + Testing Library）
 npm run test:coverage  # Vitest + v8 coverage（text 报告）
-npm run build          # typecheck + electron-vite build（out/）
+npm run api:check      # OpenAPI 生成物一致性（ADR-048；不连后端）
+npm run build          # typecheck + api:check + electron-vite build（out/）
 ```
 
-质量门禁顺序：`lint` → `typecheck` → `test:run` → `build`。全绿才可交付。
+质量门禁顺序：`lint` → `typecheck` → `test:run` → `build`（build 内含 `api:check`）。
+全绿才可交付。
 
-## API base URL（单一配置契约）
+## API base URL（运行期单一契约，ADR-047）
 
-Renderer 只通过共享 `@aistudy/api-client` 调用后端；base URL 由环境变量控制：
+Renderer 只通过共享 `@aistudy/api-client` 调用后端；地址由 **main 在启动时解析一次**，
+renderer 经 `window.aistudyConfig.getApiBaseUrl()`（只读 IPC 通道）读取同一个值。
 
-```
-VITE_API_BASE_URL=http://localhost:8080
-```
+优先级（高→低）：
 
-（复制 `.env.example` 为本地 `.env`，**不要提交** `.env`。）
+1. 环境变量 `AISTUDY_API_BASE_URL`
+2. `<userData>/config.json` → `{ "apiBaseUrl": "https://api.example.com" }`
+3. 构建期 `VITE_API_BASE_URL`（复制 `.env.example` 为本地 `.env`，**不要提交** `.env`）
+4. `http://localhost:8080`
+
+开发时改 `.env` 仍需重启 `npm run dev`（构建期内联）；打包后的安装用
+`config.json` 或环境变量即可指向别的后端，**不需要重新构建**。
 
 **契约（`src/shared/api-config.ts` 是唯一 normalization 来源）**：
 
-- 只接受 `http:` / `https:` 后端 URL；缺失/空值/非法值安全回退到
-  `http://localhost:8080` —— 绝不产生 `connect-src *` 或未经验证的 origin。
-- **main 进程 CSP 与 renderer client 使用同一个值**：`connect-src` 只取
-  origin（scheme + host + port），base URL 的路径（如 `/api`）不会进入 CSP；
-  dev/prod 两条策略都从同一 resolution 派生。
-- 例如 `VITE_API_BASE_URL=http://127.0.0.1:9090/api` →
-  client base URL 为 `http://127.0.0.1:9090/api`，
-  CSP 为 `connect-src 'self' http://127.0.0.1:9090`。
-- 修改 `.env` 后需要重启 `npm run dev`（build 期内联，renderer/main 同源）。
+- 只接受 `http:` / `https:` 后端 URL；任一层缺失/空/非法值都降级到下一层，
+  最终安全回退到 `http://localhost:8080` —— 绝不产生 `connect-src *` 或未经验证的 origin。
+- **main 的 CSP 与 renderer client 使用同一次解析结果**：`connect-src` 只取
+  origin（scheme + host + port），base URL 的路径（如 `/api`）不会进入 CSP。
+- 例如 `apiBaseUrl=http://127.0.0.1:9090/api` → client base 为
+  `http://127.0.0.1:9090/api`，CSP 为 `connect-src 'self' http://127.0.0.1:9090`。
+- 外壳 header 显示当前 API target；`config.json` 只认 `apiBaseUrl` 一个键。
+
+## 契约漂移门禁（ADR-048）
+
+```powershell
+npm run api:check   # openapi.json ↔ api.d.ts ↔ manifest.json 必须一致
+```
+
+`npm run build` 已包含该检查。生成物只能由
+`npm --prefix ../packages/api-client run api:generate`（需后端在跑）产生，
+**不得手改** `api.d.ts`；renderer 领域类型统一由
+`src/renderer/src/lib/types.ts` 从 client 反推（页面禁止 `as unknown as`
+与平行 DTO，由 `renderer-conventions.test.ts` 扫描强制）。
 
 ## 正式登录与会话（ADR-026 / ADR-037）
 

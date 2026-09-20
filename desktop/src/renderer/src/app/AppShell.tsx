@@ -28,7 +28,7 @@ import { normalizeApiError } from '../lib/api-error';
 import { spaceQuery } from '../lib/queries';
 import { useSpaceId } from '../lib/space-scope';
 import { queryKeys } from '../lib/query-keys';
-import { apiBaseUrl } from '../lib/api-client';
+import { apiConfig } from '../lib/api-client';
 import { UserMenu } from '../features/auth/UserMenu';
 
 export function AppShell() {
@@ -60,8 +60,8 @@ export function AppShell() {
     <div className="app-shell">
       <header className="app-shell__header">
         <div className="app-shell__brand">AIStudy</div>
-        <div className="app-shell__api-target" title={apiBaseUrl}>
-          API target: {apiBaseUrl}
+        <div className="app-shell__api-target" title={apiConfig.baseUrl}>
+          API target: {apiConfig.baseUrl}
         </div>
         <div className="app-shell__auth">
           <UserMenu />

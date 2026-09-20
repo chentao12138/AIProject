@@ -1,0 +1,12 @@
+{
+  "generatedFrom": {
+    "url": "http://localhost:8080/v3/api-docs",
+    "openapi": "3.1.0",
+    "infoVersion": "v0"
+  },
+  "recordedAt": "2026-09-20T17:15:51.920Z",
+  "files": {
+    "openapi.json": "sha256-1090584425823cbbc9005e734cd1c4ae212567270990e6373115c86927fd8f58",
+    "api.d.ts": "sha256-85c381257261189d1987771dbac568a911696eb408e8eee0b1e47525fde28fa9"
+  }
+}

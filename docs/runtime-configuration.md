@@ -1,7 +1,7 @@
 # Runtime Configuration
 
-This document lists environment variables actually bound by the AIStudy server.
-Do not document variables that are not implemented.
+This document lists configuration actually bound by the AIStudy server and the
+Desktop client. Do not document variables that are not implemented.
 
 Unless noted, variables are consumed via `application.yml` / profile YAML
 and override the Spring Boot defaults declared there.
@@ -12,6 +12,33 @@ and override the Spring Boot defaults declared there.
 | --- | --- | --- | --- | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | all | no | (none) | profile name(s), comma-separated | no |
 
+## Desktop client (Electron)
+
+The Desktop resolves its backend target **at runtime**, once, in the main
+process; the renderer reads that same value over a read-only IPC channel and
+the CSP `connect-src` is derived from it (ADR-047). Highest precedence wins.
+
+| Variable / file | Required | Default | Format | Secret? |
+| --- | --- | --- | --- | --- |
+| `AISTUDY_API_BASE_URL` | no | (unset) | absolute http(s) URL, e.g. `https://api.example.com` | no |
+| `<userData>/config.json` -> `apiBaseUrl` | no | (absent) | `{ "apiBaseUrl": "https://api.example.com" }` | no |
+| `VITE_API_BASE_URL` (build time) | no | `http://localhost:8080` | absolute http(s) URL; a path such as `/api` is allowed | no |
+
+Rules:
+
+- An invalid value at any layer (non-http(s), unparsable, wildcard-ish host)
+  is ignored and the next layer applies; the final fallback is
+  `http://localhost:8080`. No layer can produce a wildcard CSP source.
+- `config.json` honors **only** `apiBaseUrl`, and a malformed file is ignored
+  rather than fatal. It is not a general settings bag: new writable settings
+  need their own ADR.
+- The shell header shows the effective target, so a mis-set URL is observable
+  in a packaged build instead of only under CSP forensics.
+- Restart the app after editing `config.json`: resolution happens once at
+  startup.
+- Contract freshness (ADR-048): `npm run api:check` verifies that
+  `openapi.json`, `api.d.ts` and `manifest.json` agree; `npm run build` in
+  `desktop/` runs it.
 ## Database
 
 | Variable | Profiles | Required | Default | Format / Unit | Secret? |

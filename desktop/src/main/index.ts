@@ -32,7 +32,9 @@ import { cspFor } from './csp';
 import { isPermissionGranted } from './permissions';
 import { buildWebPreferences } from './window-options';
 import { registerAuthVaultIpc } from './auth-vault';
-import { resolveApiBaseUrl } from '../shared/api-config';
+import { DEFAULT_API_BASE_URL } from '../shared/api-config';
+import { resolveRuntimeApiBaseUrl } from './runtime-config';
+import { registerAppConfigIpc } from './config-ipc';
 import {
   APP_ORIGIN,
   APP_SCHEME,
@@ -43,13 +45,13 @@ import {
 
 const DEV_SERVER_URL = process.env['ELECTRON_RENDERER_URL'];
 
-// Single API base URL contract (FE-001.5 PRE-COMMIT REVIEW FIX-01):
-// the SAME VITE_API_BASE_URL resolution the renderer client uses
-// (electron-vite exposes VITE_* env vars to the main build too, and
-// tsconfig.node.json types import.meta.env via vite/client). The CSP
-// connect-src origin derives from it, so the policy always allows the
-// origin the renderer actually talks to — never a hardcoded duplicate.
-const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+// Single API base URL contract (FE-001.5 FIX-01, extended by ADR-047):
+// main resolves the URL ONCE at startup (env -> userData/config.json ->
+// build-time VITE_API_BASE_URL -> default) and is the only authority. The
+// CSP connect-src origin is derived from that value and the renderer reads
+// the very same value over a read-only IPC channel, so policy and traffic can
+// never disagree — and the target is no longer welded into the binary.
+let apiBaseUrl = DEFAULT_API_BASE_URL;
 
 // One process must own the refresh-token vault: the vault is a single file
 // slot and the backend rotates on every exchange, so a second instance
@@ -147,6 +149,17 @@ function createMainWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // Resolution happens here (not at module scope) because userData is only
+  // reliable once the app is ready.
+  const runtime = resolveRuntimeApiBaseUrl({
+    userDataPath: () => app.getPath('userData'),
+    buildDefault: import.meta.env.VITE_API_BASE_URL,
+  });
+  apiBaseUrl = runtime.url;
+  // Startup diagnostic: the shell header shows the same value, so a
+  // mis-set/typo'd target is visible without a CSP forensics session.
+  console.log(`[aistudy] API base URL: ${runtime.url} (source: ${runtime.source})`);
+
   // The default menu exposes reload / force-reload / toggle-devtools and is
   // summonable with Alt even with autoHideMenuBar; the product has no menu
   // commands, so a packaged build ships without one.
@@ -170,7 +183,7 @@ app.whenReady().then(() => {
     }
     const response = await net.fetch(pathToFileURL(filePath).toString());
     const headers = new Headers(response.headers);
-    headers.set('Content-Security-Policy', cspFor(false, { apiBaseUrl: API_BASE_URL }));
+    headers.set('Content-Security-Policy', cspFor(false, { apiBaseUrl }));
     return new Response(response.body, {
       status: response.status,
       headers,
@@ -186,7 +199,7 @@ app.whenReady().then(() => {
           'Content-Security-Policy': [
             cspFor(true, {
               devServerUrl: DEV_SERVER_URL ?? undefined,
-              apiBaseUrl: API_BASE_URL,
+              apiBaseUrl,
             }),
           ],
         },
@@ -230,6 +243,16 @@ app.whenReady().then(() => {
       ipcMain.handle(channel, listener);
     },
     allowedOrigins: vaultAllowedOrigins,
+  });
+
+  // ADR-047: publish the resolved target to the renderer (read-only, same
+  // origin allowlist as the token vault).
+  registerAppConfigIpc({
+    apiBaseUrl: () => apiBaseUrl,
+    allowedOrigins: vaultAllowedOrigins,
+    handle: (channel, listener) => {
+      ipcMain.handle(channel, listener);
+    },
   });
 
   createMainWindow();

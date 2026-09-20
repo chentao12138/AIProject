@@ -59,3 +59,13 @@ export function normalizeRefreshToken(value: unknown): string | null {
   }
   return trimmed;
 }
+/**
+ * The ONLY surface preload exposes for the vault, declared here so the
+ * preload implementation and src/preload/index.d.ts cannot drift — they
+ * previously restated it side by side and nothing proved they matched.
+ */
+export interface AuthVaultBridge {
+  save: (refreshToken: string) => Promise<{ ok: true }>;
+  load: () => Promise<string | null>;
+  clear: () => Promise<{ ok: true }>;
+}

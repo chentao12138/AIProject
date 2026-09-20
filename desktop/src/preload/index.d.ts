@@ -1,20 +1,20 @@
 /**
- * Renderer type for the preload-exposed bridge (FE-AUTH-001).
+ * Renderer types for the preload-exposed bridges (FE-AUTH-001, ADR-047).
  *
- * Kept structurally identical to src/preload/index.ts without importing
- * the preload module itself (renderer and preload compile under
- * different tsconfig projects / environments).
+ * Both interfaces come from src/shared so the preload implementation and
+ * this declaration cannot drift apart — previously this file restated the
+ * shape by hand and only a comment claimed they matched.
  */
 
-export interface AuthVaultBridge {
-  save: (refreshToken: string) => Promise<{ ok: true }>;
-  load: () => Promise<string | null>;
-  clear: () => Promise<{ ok: true }>;
-}
+import type { AuthVaultBridge } from '../shared/auth-vault-contract';
+import type { AppConfigBridge } from '../shared/runtime-config';
+
+export type { AuthVaultBridge, AppConfigBridge };
 
 declare global {
   interface Window {
     aistudyAuthVault?: AuthVaultBridge;
+    aistudyConfig?: AppConfigBridge;
   }
 }
 

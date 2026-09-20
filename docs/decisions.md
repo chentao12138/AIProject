@@ -20,13 +20,13 @@
 
 当前统计：
 
-- ADR 总数：**46**（ADR-001 ~ ADR-046）
-- Accepted：**27**
+- ADR 总数：**48**（ADR-001 ~ ADR-048）
+- Accepted：**29**
 - Superseded：**15**
 - Provisional：**4**
 
 Accepted：
-`ADR-005、010、013、022、023、024、025、026、027、028、029、030、031、032、033、035、036、037、038、039、040、041、042、043、044、045、046`
+`ADR-005、010、013、022、023、024、025、026、027、028、029、030、031、032、033、035、036、037、038、039、040、041、042、043、044、045、046、047、048`
 
 Superseded：
 `ADR-001、002、003、004、008、009、011、014、015、016、017、018、019、020、021`
@@ -895,6 +895,42 @@ Desktop file/folder selection
   - Full `mvnw.cmd clean test` 7/7 PASS（SPIKE-001 1 + SPIKE-002 2 + SPIKE-003 3 + SpikeHealth 1）。
 - **状态**：`Accepted`
 - **Supersede**：ADR-025 中"若决定接入 Flyway，新增 ADR 记录"的开放项由本 ADR 落地。ADR-025 关于版本化 SQL 的规范与规则继续有效。
+
+---
+
+## ADR-047：Desktop 后端地址在运行期解析并由 main 单点分发
+
+- **背景**：ADR-029 规定 Desktop 的 API 地址"从配置读取"，并预期未来从 `http://127.0.0.1:8080` 切换到 `https://api.<domain>`。实际实现把 `VITE_API_BASE_URL` 在**构建期**内联进 main 与 renderer 两个 bundle（构建产物中 `import.meta` 出现 0 次），仓库又不提交 `.env`，因此干净检出直接 `npm run dist:win` 会静默烤入 `http://localhost:8080`；又因为 CSP `connect-src` 由同一个构建期值派生，切换远端后的失败形态是"renderer 打到远端、策略只放行 localhost"，且在打包环境里不可观测。
+- **决策**：Desktop 后端地址在**运行期**由 main 进程解析一次，main 是唯一权威；renderer 通过只读 IPC 通道获取同一个值。
+- **优先级（从高到低）**：
+  1. 环境变量 `AISTUDY_API_BASE_URL`（运维/CI，不落盘）。
+  2. `<userData>/config.json` 的 `apiBaseUrl` 字段（安装后可改；只认这一个键，未知键忽略）。
+  3. 构建期 `VITE_API_BASE_URL`。
+  4. `DEFAULT_API_BASE_URL`（`http://localhost:8080`）。
+- **规范**：
+  - 每一层候选都必须经过 `desktop/src/shared/api-config.ts` 的同一个校验器（`normalizeApiBaseUrl`）：只接受 http/https，拒绝通配与空 host；任一层给出非法值即降级到下一层，最终必落到默认值。**绝不**产生 `connect-src *` 或未经验证的 origin。
+  - CSP `connect-src` 与 renderer 实际请求的 base URL 必须来自同一次解析结果；不允许第二处再次读取 `import.meta.env` 自行决定。
+  - renderer 通过 `window.aistudyConfig.getApiBaseUrl()`（preload `contextBridge`，单一固定 channel，senderFrame origin 白名单与令牌保险库相同）读取；该通道**只读**，不提供写入能力。
+  - 首屏渲染前完成这一次读取；桥缺失（单测、纯浏览器）或调用失败时保留构建期默认值，绝不阻塞启动。
+  - 应用外壳 header 显示当前 API target，作为打包环境下的可见诊断。
+- **边界**：`config.json` 不是通用设置袋，也不承载业务配置，只允许 `apiBaseUrl`。任何新增的可写配置能力（代理、日志级别等）必须另立 ADR。
+- **状态**：`Accepted`
+- **关系**：落实 ADR-029 的"API 地址从配置读取"；延续 ADR-037 的最小 IPC 面（新增一个只读通道，不泄漏 `ipcRenderer`）。
+
+---
+
+## ADR-048：OpenAPI 生成物一致性作为可执行门禁
+
+- **背景**：ADR-030 要求 Desktop/Admin 复用从服务端 OpenAPI 生成的 TypeScript client，禁止各端手写同义 DTO。`api:generate` 需要**运行中的服务端**，仓库没有 CI，也没有任何东西能证明提交上来的 `api.d.ts` 确实由提交上来的 `openapi.json` 生成；实际审计还发现 renderer 的 `lib/types.ts` 只派生了 FE-001 领域，新特性（questions/practice/exams/search/ai）改用手写平行 DTO 与 `as unknown as`，等于绕过契约。
+- **决策**：`packages/api-client/src/generated/` 三件套（`openapi.json`、`api.d.ts`、`manifest.json`）必须一致，并由脚本门禁化。
+- **规范**：
+  - `api:generate` 成功后写入 `manifest.json`：来源 URL、openapi 版本、`info.version`、抓取时间与两个文件的 `sha256-` 摘要。
+  - `api:check`（`packages/api-client/scripts/check-api.mjs`）本地校验：spec 摘要与 manifest 不符 → 失败（换了 spec 没重生成类型）；types 摘要不符 → 失败（生成物被手改）；若本地已安装 `openapi-typescript`，再从 `openapi.json` 重新生成到临时目录并与提交的 `api.d.ts` 逐字节比对。
+  - `check-api.mjs --record` 只用于在一次真实 `api:generate` 之后建立基线，不是绕过手段。
+  - Desktop 的 `npm run build` 必须包含 `api:check`，使契约漂移成为交付门禁的一部分。
+  - renderer 领域类型只能由 `desktop/src/renderer/src/lib/types.ts` 通过 `ResultData<ApiClient['…']>` 从 client 反推；页面不得再声明 `*Response` / `*View` 平行 DTO，也不得用 `Record<string, unknown>` / `as unknown as` 绕过契约（由 `desktop/src/renderer/src/app/renderer-conventions.test.ts` 扫描强制）。契约中确实尚未存在的字段（如 A2.1 的 `sourceId`/`sourcePageId`）集中在 `lib/types.ts` 里以命名 shim 暴露。
+- **状态**：`Accepted`
+- **关系**：不改变 ADR-030 的契约规则，而是把它从口头约定升级为可失败的门禁。
 
 ---
 
