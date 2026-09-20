@@ -579,3 +579,22 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
 - Git：分 4 个 commit 合入 feat/fe-001（api-client / feature pages / app shell+routes / tests+docs）
 - 未 push
 
+
+## FE-ARCH-HARDENING-01（2026-09-21）
+
+- 触发：对 desktop 前端做架构评审（对照 ADR-029/030/031/037/044），结论是进程边界
+  与安全骨架成立，但 renderer 内部缺三层收口，且若干不变量只写在注释里。
+- Stage A（commit cb615ca）：`auth-session` 区分「凭证已死」(400/401/403) 与
+  「后端不可用」(5xx/网络)：后者保留 safeStorage 中的 refresh token，新增
+  `restore-unavailable` 状态与 RequireAuth 重试面板；`AuthProvider` 在任意离开
+  authenticated 的转换上清空 React Query 缓存（补齐文档声明的缓存边界）；
+  main 增加 `requestSingleInstanceLock`，消除双实例竞争同一 vault 槽。
+- Stage B（commit 596e1c5）：新增 `ExamDetailPage`（`getExam`/`publishExam`/
+  `createExamAttempt` 此前在 renderer 零调用）；移除不可达且只会创建重复题的
+  `questions/:questionId/edit`，缺失的更新动词登记为 A4.5 合同请求；4 处
+  `window.location.hash` 改 `useNavigate`；新增 `route-contract.test.ts`
+  （router ↔ 全部 navigate/Link 目标，并禁止绕过 router）。
+- 门禁：lint OK / typecheck OK / test:run 405 passed (40 files) / build OK。
+- 剩余（同一评审的后续阶段）：Stage C 数据访问层与 `useSpaceId`；Stage D 类型契约
+  补全 + eslint 边界与安全基线门禁；Stage E 运行期 API base 配置 + codegen 漂移门禁
+  + ADR。

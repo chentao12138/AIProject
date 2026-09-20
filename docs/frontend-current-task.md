@@ -18,9 +18,9 @@ FE-001 + FE-001.5 + FE-002A + FE-002B + FE-AI-001 + FE-QUESTION/PRACTICE/EXAM/SE
 | Knowledge | `/spaces/:spaceId/knowledge`, `/spaces/:spaceId/knowledge/:knowledgePointId` | Implemented |
 | AI Tutor | `/spaces/:spaceId/ai`, `/spaces/:spaceId/ai/:conversationId` | Implemented |
 | AI Settings | `/settings/ai` | Implemented |
-| Questions | `/spaces/:spaceId/questions`, `/spaces/:spaceId/questions/new`, `/spaces/:spaceId/questions/:questionId`, `/spaces/:spaceId/questions/:questionId/edit` | Implemented |
+| Questions | `/spaces/:spaceId/questions`, `/spaces/:spaceId/questions/new`, `/spaces/:spaceId/questions/:questionId` | Implemented (create + publish only; see Blocked for the update verb) |
 | Practice | `/spaces/:spaceId/practice`, `/spaces/:spaceId/practice/:sessionId` | Implemented |
-| Exams | `/spaces/:spaceId/exams`, `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | Implemented |
+| Exams | `/spaces/:spaceId/exams`, `/spaces/:spaceId/exams/:examId`, `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | Implemented |
 | Search | `/spaces/:spaceId/search` | Implemented |
 | Auth | `/login` | Implemented |
 
@@ -32,6 +32,7 @@ FE-001 + FE-001.5 + FE-002A + FE-002B + FE-AI-001 + FE-QUESTION/PRACTICE/EXAM/SE
 | AI context chips (A3.2) | `SendMessageRequest` only has `content` | See `BACKEND-CONTRACT-REQUESTS.md` |
 | Full provenance nav (A2.1) | `KnowledgePointSourceResponse` missing `sourceId`/`sourcePageId` | See `BACKEND-CONTRACT-REQUESTS.md` |
 | AI reference deep-links (A3.3) | `AiReference` missing `sourcePageId` for SOURCE/CONTENT_BLOCK | See `BACKEND-CONTRACT-REQUESTS.md` |
+| Question edit (A4.5) | No `PUT`/`PATCH /questions/{questionId}`; a "save" could only create a duplicate, so the edit route was removed | See `BACKEND-CONTRACT-REQUESTS.md` |
 
 ## Out of scope (B-class)
 
