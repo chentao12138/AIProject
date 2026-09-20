@@ -16,17 +16,20 @@ import { ErrorState } from '../../components/ErrorState';
 import { Input } from '../../components/Input';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
+import type { components } from '@aistudy/api-client';
+import type { AiConnectionTest } from '../../lib/types';
 
+type UpdateAiProviderSettingsRequest =
+  components['schemas']['UpdateAiProviderSettingsRequest'];
+
+/*
+ * Form prefill only. The provider catalog is server-owned (`preset` /
+ * `baseUrl` / `model` arrive on AiProviderSettingsView); this map just saves
+ * typing for the one preset the Desktop offers, and sends nothing on its own.
+ */
 const PRESETS: Record<string, { baseUrl: string; model: string }> = {
   STEPFUN: { baseUrl: 'https://api.stepfun.com/v1', model: 'step-3.5-flash' },
 };
-
-interface TestResult {
-  success?: boolean;
-  provider?: string;
-  model?: string;
-  latencyMs?: number;
-}
 
 export function AiSettingsPage() {
   const api = useApiClient();
@@ -46,7 +49,7 @@ export function AiSettingsPage() {
   const [keyDirty, setKeyDirty] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testResult, setTestResult] = useState<AiConnectionTest | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,14 +73,13 @@ export function AiSettingsPage() {
 
   const save = useMutation({
     mutationFn: () => {
-      const body: {
-        enabled: boolean;
-        provider: string;
-        preset: string;
-        baseUrl: string;
-        model: string;
-        apiKey?: string;
-      } = { enabled, provider, preset, baseUrl, model };
+      const body: UpdateAiProviderSettingsRequest = {
+        enabled,
+        provider,
+        preset,
+        baseUrl,
+        model,
+      };
       if (keyDirty && apiKey.trim() !== '') {
         body.apiKey = apiKey.trim();
       }
@@ -101,7 +103,7 @@ export function AiSettingsPage() {
   const testConnection = useMutation({
     mutationFn: () => api.testAiConnection().then(unwrap),
     onSuccess: (data) => {
-      setTestResult(data as TestResult);
+      setTestResult(data);
       setTestError(null);
     },
     onError: (error) => {

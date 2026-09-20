@@ -58,3 +58,56 @@ export type ExamDetail = ResultData<ApiClient['getExam']>;
 
 /** One started attempt, inferred from createExamAttempt(). */
 export type ExamAttempt = ResultData<ApiClient['createExamAttempt']>;
+
+/** Attempt as re-read from the server (question paper + deadlines). */
+export type ExamAttemptDetail = ResultData<ApiClient['getExamAttempt']>;
+
+/** Graded exam result. */
+export type ExamResult = ResultData<ApiClient['getExamResult']>;
+
+/** Practice session detail: status, counts and its question paper. */
+export type PracticeSessionDetail = ResultData<ApiClient['getPracticeSession']>;
+
+/**
+ * Practice score summary. NOTE: only `finishPracticeSession` returns this —
+ * the session detail does NOT carry score/answered/correct counts, so a
+ * finished session re-read from the server has no score to display. See
+ * BACKEND-CONTRACT-REQUESTS.md (A5.3).
+ */
+export type PracticeSubmitSummary = ResultData<
+  ApiClient['finishPracticeSession']
+>;
+
+/** Question as stored (options + answer key + provenance ids). */
+export type QuestionDetail = ResultData<ApiClient['getQuestion']>;
+
+/** One paged search hit-set, inferred from search(). */
+export type SearchPageResult = ResultData<ApiClient['search']>;
+
+/** AI provider settings as the server reports them (never the key). */
+export type AiProviderSettings = ResultData<ApiClient['getAiSettings']>;
+
+/** Outcome of the backend-originated provider probe. */
+export type AiConnectionTest = ResultData<ApiClient['testAiConnection']>;
+
+/** Paged AI conversation list / message page. */
+export type AiConversationPage = ResultData<ApiClient['listConversations']>;
+export type AiMessagePage = ResultData<ApiClient['listMessages']>;
+
+/**
+ * Provenance link fields that are NOT in the contract yet: the backend does
+ * not return `sourceId` / `sourcePageId` on KnowledgePointSourceResponse
+ * (BACKEND-CONTRACT-REQUESTS.md A2.1), so the deep link can only be built
+ * when they appear. This is the one sanctioned place to look for them —
+ * pages must not scatter `as unknown as` over contract fields.
+ */
+export interface ProvenanceLinkExtras {
+  sourceId?: number;
+  sourcePageId?: number;
+}
+
+export function provenanceExtras(
+  link: KnowledgePointSourceLink
+): ProvenanceLinkExtras {
+  return link as unknown as ProvenanceLinkExtras;
+}

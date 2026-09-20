@@ -64,6 +64,39 @@ export default tseslint.config(
     },
   },
 
+  // Layering (FE-ARCH stage D). `src/shared` is compiled by BOTH
+  // tsconfig.node.json and tsconfig.web.json, so a `node:fs` import there
+  // passes typecheck and only explodes at preload runtime inside the
+  // sandbox. Feature-isolation and the components/lib → features rules are
+  // enforced in app/renderer-conventions.test.ts, which resolves relative
+  // specifiers exactly (glob depth is too coarse for that here).
+  {
+    files: ['src/shared/**/*.ts'],
+    ignores: ['src/shared/**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                'node:*',
+                'electron',
+                'fs',
+                'path',
+                'os',
+                'crypto',
+                'child_process',
+              ],
+              message:
+                'src/shared is imported by main, preload and renderer: keep it platform-free or the sandboxed preload breaks at runtime.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // React fast refresh: only components may be exported from .tsx
   // files. lib/ and test files are exempt (they export hooks, fakes
   // and helpers by design).

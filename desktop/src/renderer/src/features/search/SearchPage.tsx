@@ -18,28 +18,8 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
+import type { SearchPageResult } from '../../lib/types';
 
-interface SearchResultItem {
-  type?: string;
-  id?: number;
-  title?: string;
-  snippet?: string;
-  score?: number;
-  sourceId?: number;
-  sourceAssetId?: number;
-  sourcePageId?: number;
-  pageNumber?: number;
-  knowledgePointId?: number;
-  questionId?: number;
-}
-
-interface SearchPageResponse {
-  content?: SearchResultItem[];
-  page?: number;
-  size?: number;
-  totalElements?: number;
-  totalPages?: number;
-}
 
 const PAGE_SIZE = 20;
 
@@ -56,7 +36,7 @@ export function SearchPage() {
   // Key and request read the very same values: a key without `types`/
   // `page`/`size` made page 2 overwrite page 1's cache entry.
   const searchQuery = useQuery({
-    ...spaceQuery<SearchPageResponse>(
+    ...spaceQuery<SearchPageResult>(
       spaceId,
       queryKeys.search(spaceId, rawQuery, {
         types,

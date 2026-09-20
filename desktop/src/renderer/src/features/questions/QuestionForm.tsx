@@ -157,17 +157,15 @@ export function QuestionForm() {
             {options.map((opt, idx) => (
               <div key={idx} className="form__row">
                 <input
-                  className="input"
+                  className="input form__row-key"
                   value={opt.optionKey}
                   onChange={(e) => updateOptionKey(idx, e.target.value)}
-                  style={{ width: '3rem' }}
                   maxLength={1}
                 />
                 <input
-                  className="input"
+                  className="input form__row-main"
                   value={opt.content}
                   onChange={(e) => updateOptionContent(idx, e.target.value)}
-                  style={{ flex: 1 }}
                   placeholder={`Option ${opt.optionKey}`}
                 />
                 <Button

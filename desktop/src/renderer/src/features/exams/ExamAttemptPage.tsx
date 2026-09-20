@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
 import {
@@ -16,13 +16,14 @@ import {
 import { entityQuery } from '../../lib/queries';
 import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
-import { parsePositiveIdParam } from '../../lib/ids';
+import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
+import { formatDateTime } from '../../lib/format';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
-import { QuestionRenderer, type QuestionPayload } from '../questions/QuestionRenderer';
+import { QuestionRenderer, type QuestionPayload } from '../../components/QuestionRenderer';
 
 interface ExamQuestion {
   examQuestionId: number;
@@ -120,20 +121,13 @@ export function ExamAttemptPage() {
   }
 
   if (status === 'SUBMITTED' || status === 'GRADED') {
-    return (
-      <ExamResult
-        spaceId={spaceId}
-        attemptId={attemptId}
-        attempt={attempt}
-      />
-    );
+    return <ExamResult spaceId={spaceId} attemptId={attemptId} />;
   }
 
   return (
     <ActiveExam
       spaceId={spaceId}
       attemptId={attemptId}
-      attempt={attempt}
       questions={rawQuestions}
       onSubmit={() => submitAttempt.mutate()}
       submitting={submitAttempt.isPending}
@@ -144,14 +138,12 @@ export function ExamAttemptPage() {
 function ActiveExam({
   spaceId,
   attemptId,
-  attempt,
   questions,
   onSubmit,
   submitting,
 }: {
   spaceId: number;
   attemptId: number;
-  attempt: Record<string, unknown>;
   questions: ExamQuestion[];
   onSubmit: () => void;
   submitting: boolean;
@@ -231,7 +223,7 @@ function ActiveExam({
   return (
     <div className="page">
       <PageHeader
-        title={`Exam Attempt #${(attempt as Record<string, unknown>).id ?? '?'}`}
+        title={`Exam Attempt #${attemptId}`}
         actions={
           <Button type="button" variant="primary" onClick={onSubmit} disabled={submitting}>
             {submitting ? 'Submitting…' : 'Submit Exam'}
@@ -304,11 +296,9 @@ function ActiveExam({
 function ExamResult({
   spaceId,
   attemptId,
-  attempt,
 }: {
   spaceId: number;
   attemptId: number;
-  attempt: Record<string, unknown>;
 }) {
   const api = useApiClient();
   const navigate = useNavigate();
@@ -327,32 +317,21 @@ function ExamResult({
     );
   }
 
-  const result = resultQuery.data as {
-    score?: number;
-    maxScore?: number;
-    correctCount?: number;
-    wrongCount?: number;
-    unansweredCount?: number;
-    items?: Array<{
-      stem?: string;
-      questionId?: number;
-      isCorrect?: boolean;
-      score?: number;
-      maxScore?: number;
-      correctAnswer?: string;
-      explanation?: string;
-    }>;
-  } | null;
-  const score = (result?.score ?? (attempt as Record<string, unknown>).score ?? '—') as string | number;
-  const maxScore = (result?.maxScore ?? '—') as string | number;
+  /*
+   * ExamResultView is the only authority for a graded attempt: the previous
+   * version invented a local shape and fell back to `attempt.score` /
+   * `item.stem`, neither of which the contract returns.
+   */
+  const result = resultQuery.data;
   const items = result?.items ?? [];
 
-  const attemptIdValue = (attempt as Record<string, unknown>).id as number | undefined;
   return (
     <div className="page">
-      <PageHeader title={`Exam Attempt #${String(attemptIdValue ?? '?')} — Result`} />
+      <PageHeader title={`Exam Attempt #${attemptId} — Result`} />
       <div className="practice-result">
-        <p>Score: {score} / {maxScore}</p>
+        <p>
+          Score: {result?.score ?? '—'} / {result?.maxScore ?? '—'}
+        </p>
         <p>
           Correct: {result?.correctCount ?? '—'} · Wrong: {result?.wrongCount ?? '—'} ·
           Unanswered: {result?.unansweredCount ?? '—'}
@@ -363,8 +342,20 @@ function ExamResult({
         <section className="workbench-section" aria-label="Per-question review">
           <h2 className="section-title">Review</h2>
           {items.map((item, idx) => (
-            <div key={idx} className="question-renderer" style={{ marginBottom: '1rem' }}>
-              <p><strong>Q{idx + 1}:</strong> {item.stem ?? `Question ${item.questionId}`}</p>
+            <div key={idx} className="result-item">
+              <p>
+                <strong>Q{idx + 1}:</strong>{' '}
+                {isPositiveId(item.questionId) ? (
+                  <Link
+                    className="nav-link"
+                    to={`/spaces/${spaceId}/questions/${item.questionId}`}
+                  >
+                    题目 #{item.questionId}
+                  </Link>
+                ) : (
+                  '题目 —'
+                )}
+              </p>
               <p>
                 {item.isCorrect ? 'Correct' : 'Incorrect'} ·
                 {item.score ?? 0} / {item.maxScore ?? 0}
@@ -387,11 +378,4 @@ function ExamResult({
       </div>
     </div>
   );
-}
-
-function formatDateTime(value?: string) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString();
 }

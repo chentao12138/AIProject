@@ -1181,3 +1181,27 @@ code,
   color: var(--color-text-muted);
   font-size: 12px;
 }
+
+/* ------------------------------------------------------------------ */
+/* FE-ARCH stage D: layout helpers that replaced inline style attributes.
+   csp.ts documents "no inline styles in the renderer" as an invariant; the
+   four `style={{…}}` sites were the exception, now they are classes.        */
+/* ------------------------------------------------------------------ */
+
+.form__row-key {
+  flex: 0 0 auto;
+  width: 3rem;
+}
+
+.form__row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-item {
+  margin-bottom: var(--space-4);
+}
+
+.ai-message--pending {
+  opacity: 0.7;
+}

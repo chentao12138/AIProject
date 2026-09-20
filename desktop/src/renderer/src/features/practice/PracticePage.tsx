@@ -19,6 +19,11 @@ import { spaceQuery } from '../../lib/queries';
 import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { parseOptionalPositiveId } from '../../lib/ids';
+import { formatDateTime } from '../../lib/format';
+import type { components } from '@aistudy/api-client';
+
+type CreatePracticeSessionRequest =
+  components['schemas']['CreatePracticeSessionRequest'];
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
@@ -41,9 +46,11 @@ export function PracticePage() {
 
   const start = useMutation({
     mutationFn: () => {
-      const body: Record<string, unknown> = { count };
       const kpId = parseOptionalPositiveId(knowledgePointId);
-      if (kpId !== undefined) body.knowledgePointId = kpId;
+      const body: CreatePracticeSessionRequest = {
+        count,
+        knowledgePointId: kpId,
+      };
       return api
         .createPracticeSession(requireId(spaceId, 'space id'), body)
         .then(unwrap);
@@ -175,11 +182,4 @@ function PracticeHistory({ spaceId }: { spaceId: number }) {
       </tbody>
     </table>
   );
-}
-
-function formatDateTime(value?: string) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString();
 }

@@ -24,6 +24,7 @@ import { entityQuery, spaceQuery } from '../../lib/queries';
 import { requireId, useSpaceId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { formatDateTime } from '../../lib/format';
+import { provenanceExtras } from '../../lib/types';
 import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
@@ -223,8 +224,10 @@ export function KnowledgePointDetailPage() {
           <ul className="point-list">
             {provenanceLinks.map((link, index) => {
               const blockId = link.contentBlockId;
-              const sourceId = (link as unknown as { sourceId?: number }).sourceId;
-              const sourcePageId = (link as unknown as { sourcePageId?: number }).sourcePageId;
+              // A2.1: sourceId/sourcePageId are not in the contract yet, so
+              // the deep link appears only once the backend starts sending
+              // them. lib/types.ts owns that single escape hatch.
+              const { sourceId, sourcePageId } = provenanceExtras(link);
               const hasSourceNav =
                 isPositiveId(sourceId) && isPositiveId(blockId);
               // Built as a real query string: `?page=` is optional, so the

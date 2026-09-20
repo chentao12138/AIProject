@@ -17,12 +17,13 @@ import { entityQuery } from '../../lib/queries';
 import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { parsePositiveIdParam } from '../../lib/ids';
+import type { PracticeSubmitSummary } from '../../lib/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
-import { QuestionRenderer, type QuestionPayload } from '../questions/QuestionRenderer';
+import { QuestionRenderer, type QuestionPayload } from '../../components/QuestionRenderer';
 
 interface PracticeQuestion {
   practiceSessionQuestionId: number;
@@ -38,6 +39,11 @@ export function PracticeSessionPage() {
   const spaceId = useSpaceId();
   const { sessionId: sessionIdParam } = useParams();
   const sessionId = parsePositiveIdParam(sessionIdParam);
+  // Only `finishPracticeSession` returns a score summary; the session detail
+  // carries none, so this cannot be derived from the cache (A5.3).
+  const [submitSummary, setSubmitSummary] = useState<PracticeSubmitSummary | null>(
+    null
+  );
 
   const sessionQuery = useQuery(
     entityQuery(spaceId, sessionId, queryKeys.practiceSession(spaceId, sessionId), (id, entity) =>
@@ -68,7 +74,11 @@ export function PracticeSessionPage() {
           requireId(sessionId, 'session id')
         )
         .then(unwrap),
-    onSuccess: () => {
+    onSuccess: (summary) => {
+      // The score summary exists ONLY on this response — the session detail
+      // has no score fields — so it is kept as local state, and the contract
+      // gap for reading it back is recorded as A5.3.
+      setSubmitSummary(summary ?? null);
       void queryClient.invalidateQueries({
         queryKey: queryKeys.practiceSession(spaceId, sessionId),
       });
@@ -115,14 +125,20 @@ export function PracticeSessionPage() {
   }
 
   if (status === 'FINISHED' || status === 'COMPLETED') {
-    return <PracticeResult spaceId={spaceId} sessionId={sessionId} session={session} />;
+    return (
+      <PracticeResult
+        spaceId={spaceId}
+        sessionId={sessionId}
+        questionCount={session.questionCount ?? rawQuestions.length}
+        summary={submitSummary}
+      />
+    );
   }
 
   return (
     <ActiveSession
       spaceId={spaceId}
       sessionId={sessionId}
-      session={session}
       questions={rawQuestions}
       onFinish={() => finishSession.mutate()}
       finishing={finishSession.isPending}
@@ -133,14 +149,12 @@ export function PracticeSessionPage() {
 function ActiveSession({
   spaceId,
   sessionId,
-  session,
   questions,
   onFinish,
   finishing,
 }: {
   spaceId: number;
   sessionId: number;
-  session: Record<string, unknown>;
   questions: PracticeQuestion[];
   onFinish: () => void;
   finishing: boolean;
@@ -231,7 +245,7 @@ function ActiveSession({
   return (
     <div className="page">
       <PageHeader
-        title={`Practice #${(session as Record<string, unknown>).id ?? '?'}`}
+        title={`Practice #${sessionId}`}
         actions={
           <Button type="button" variant="primary" onClick={onFinish} disabled={finishing}>
             {finishing ? 'Finishing…' : 'Finish'}
@@ -310,39 +324,42 @@ function ActiveSession({
 function PracticeResult({
   spaceId,
   sessionId,
-  session,
+  questionCount,
+  summary,
 }: {
   spaceId: number;
   sessionId: number;
-  session: Record<string, unknown>;
+  questionCount: number;
+  summary: PracticeSubmitSummary | null;
 }) {
-  const submitView = session as {
-    id: number;
-    score?: number;
-    maxScore?: number;
-    answeredCount?: number;
-    correctCount?: number;
-    questionCount?: number;
-  };
-  const score = submitView.score;
-  const maxScore = submitView.maxScore;
-  const answeredCount = submitView.answeredCount ?? 0;
-  const correctCount = submitView.correctCount ?? 0;
   const navigate = useNavigate();
 
   return (
     <div className="page">
       <PageHeader title={`Practice #${sessionId} — Result`} />
       <div className="practice-result">
-        <p>
-          Score: {score ?? '—'} / {maxScore ?? '—'}
-        </p>
-        <p>
-          Answered: {answeredCount} / {submitView.questionCount ?? '—'}
-        </p>
-        <p>
-          Correct: {correctCount}
-        </p>
+        {summary ? (
+          <>
+            <p>
+              Score: {summary.score ?? '—'} / {summary.maxScore ?? '—'}
+            </p>
+            <p>
+              Answered: {summary.answeredCount ?? 0} /{' '}
+              {summary.questionCount ?? questionCount}
+            </p>
+            <p>Correct: {summary.correctCount ?? 0}</p>
+          </>
+        ) : (
+          /* A session finished in an earlier visit has no readable score:
+             the contract exposes no practice-result endpoint (A5.3), and
+             computing one here would copy server-side rules (ADR-031). */
+          <>
+            <p>Questions: {questionCount}</p>
+            <p className="page__note">
+              成绩汇总仅在交卷响应中返回，历史会话需要后端结果接口才能读取。
+            </p>
+          </>
+        )}
       </div>
       <div className="form__actions">
         <Button

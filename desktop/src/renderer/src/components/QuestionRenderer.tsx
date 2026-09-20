@@ -9,7 +9,7 @@
  */
 
 import { type KeyboardEvent } from 'react';
-import { Button } from '../../components/Button';
+import { Button } from './Button';
 
 export type QuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'BOOLEAN' | 'TEXT_ANSWER';
 

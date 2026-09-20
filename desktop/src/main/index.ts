@@ -20,6 +20,7 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  Menu,
   net,
   protocol,
   safeStorage,
@@ -29,6 +30,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { cspFor } from './csp';
 import { isPermissionGranted } from './permissions';
+import { buildWebPreferences } from './window-options';
 import { registerAuthVaultIpc } from './auth-vault';
 import { resolveApiBaseUrl } from '../shared/api-config';
 import {
@@ -107,13 +109,12 @@ function createMainWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     title: 'AIStudy',
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-    },
+    webPreferences: buildWebPreferences({
+      preloadPath: join(__dirname, '../preload/index.js'),
+      // A packaged renderer holds the access token in memory: DevTools would
+      // be a read path for it, and the shipped product needs neither.
+      allowDevTools: !app.isPackaged,
+    }),
   });
 
   mainWindow.on('ready-to-show', () => {
@@ -146,6 +147,13 @@ function createMainWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // The default menu exposes reload / force-reload / toggle-devtools and is
+  // summonable with Alt even with autoHideMenuBar; the product has no menu
+  // commands, so a packaged build ships without one.
+  if (app.isPackaged) {
+    Menu.setApplicationMenu(null);
+  }
+
   // Serve ONLY app://aistudy/** from the packaged renderer output.
   // Traversal / foreign-host / malformed URLs are rejected by
   // resolveAppUrlPath; net.fetch streams from disk (no whole-file

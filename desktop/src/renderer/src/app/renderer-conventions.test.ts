@@ -8,7 +8,7 @@
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /** Test helpers may fake anything; they are not application code. */
@@ -89,5 +89,77 @@ describe('renderer conventions', () => {
     expect(
       offenders(/from ['"]node:|require\(['"]|window\.require|process\./, ALL)
     ).toEqual([]);
+  });
+
+  it('never opts a value out of the generated contract', () => {
+    // ADR-030: the OpenAPI types are the contract. `as unknown as` and
+    // `Record<string, unknown>` in the UI layers mean a page is reading
+    // fields the server may not send (or renamed) with no compile error.
+    // The single sanctioned escape hatch lives in lib/types.ts.
+    expect(offenders(/as unknown as|Record<string, unknown>/, UI)).toEqual([]);
+  });
+
+  it('never re-declares a response shape that the client already types', () => {
+    // A local `*Response` / `*View` interface inside a feature is a
+    // hand-written DTO; derive it from lib/types.ts instead.
+    expect(offenders(/^(interface|type) \w*(Response|View)\b/, UI)).toEqual([]);
+  });
+});
+
+const RENDERER_ROOT = 'src/renderer/src';
+
+/** Every `from '…'` specifier of a file. */
+function specifiersOf(file: string): string[] {
+  return [
+    ...readFileSync(file, 'utf8').matchAll(/from\s+['"]([^'"]+)['"]/g),
+  ].map((match) => match[1]);
+}
+
+/**
+ * A module's area: `features/questions`, `lib`, `components`, `app`.
+ * Resolving the specifier (rather than glob-matching it) is what makes the
+ * two rules below precise enough to run in ESLint-free code.
+ */
+function areaOf(absolutePath: string): string {
+  const rel = relative(RENDERER_ROOT, absolutePath)
+    .split(sep)
+    .join('/');
+  const [first, second] = rel.split('/');
+  return first === 'features' ? `features/${second}` : first;
+}
+
+function importEdges(root: string): Array<{ from: string; to: string }> {
+  const edges: Array<{ from: string; to: string }> = [];
+  for (const file of sourceFiles(root)) {
+    for (const specifier of specifiersOf(file)) {
+      if (!specifier.startsWith('.')) {
+        continue;
+      }
+      edges.push({
+        from: areaOf(resolve(file, '..')),
+        to: areaOf(resolve(file, '..', specifier)),
+      });
+    }
+  }
+  return edges;
+}
+
+describe('renderer import graph', () => {
+  it('keeps features independent of each other', () => {
+    // A shared piece belongs in components/ (UI) or lib/ (logic) — otherwise
+    // practice and exams end up importing a file out of the questions feature.
+    const violations = importEdges('src/renderer/src/features').filter(
+      ({ from, to }) =>
+        to.startsWith('features/') && to !== from && !to.startsWith('features/undefined')
+    );
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps the shared layers below the features', () => {
+    const violations = [
+      ...importEdges('src/renderer/src/components'),
+      ...importEdges('src/renderer/src/lib'),
+    ].filter(({ to }) => to.startsWith('features/'));
+    expect(violations).toEqual([]);
   });
 });

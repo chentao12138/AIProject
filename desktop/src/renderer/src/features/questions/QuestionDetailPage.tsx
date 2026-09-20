@@ -16,12 +16,13 @@ import { queryKeys } from '../../lib/query-keys';
 import { entityQuery } from '../../lib/queries';
 import { requireId, useSpaceId } from '../../lib/space-scope';
 import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
+import { formatDateTime } from '../../lib/format';
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusBadge } from '../../components/StatusBadge';
-import { QuestionRenderer, type QuestionPayload } from './QuestionRenderer';
+import { QuestionRenderer, type QuestionPayload } from '../../components/QuestionRenderer';
 
 export function QuestionDetailPage() {
   const api = useApiClient();
@@ -169,11 +170,4 @@ export function QuestionDetailPage() {
       </section>
     </div>
   );
-}
-
-function formatDateTime(value?: string) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString();
 }

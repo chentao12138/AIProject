@@ -17,6 +17,7 @@ export default defineConfig({
     include: [
       'src/renderer/src/**/*.test.{ts,tsx}',
       'src/main/**/*.test.ts',
+      'src/preload/**/*.test.ts',
       'src/shared/**/*.test.ts',
     ],
     coverage: {
@@ -28,6 +29,7 @@ export default defineConfig({
       include: [
         'src/renderer/src/**/*.{ts,tsx}',
         'src/main/**/*.ts',
+        'src/preload/**/*.ts',
         'src/shared/**/*.ts',
       ],
       exclude: [

@@ -27,10 +27,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
-import type { components } from '@aistudy/api-client';
-
-/** Cache shape of one message page (the only source for the chat list). */
-type MessagePageResponse = components['schemas']['MessagePageResponse'];
+import type { AiMessagePage } from '../../lib/types';
 
 export function AiChatPage() {
   const api = useApiClient();
@@ -191,18 +188,6 @@ function ConversationList({
 
 /* ─────────────── Chat panel ─────────────── */
 
-interface MessageItem {
-  id?: number;
-  role?: string;
-  content?: string;
-  createdAt?: string;
-  references?: {
-    type?: string;
-    id?: number;
-    title?: string;
-    snippet?: string;
-  }[];
-}
 
 function ChatPanel({
   spaceId,
@@ -224,7 +209,7 @@ function ChatPanel({
       api.listMessages(id, convId)
     )
   );
-  const messages = (messagesQuery.data?.content ?? []) as MessageItem[];
+  const messages = messagesQuery.data?.content ?? [];
 
   const send = useMutation({
     mutationFn: (content: string) =>
@@ -232,8 +217,8 @@ function ChatPanel({
     onMutate: async (content: string) => {
       setSendError(null);
       const previous =
-        queryClient.getQueryData<MessagePageResponse>(messagesKey);
-      queryClient.setQueryData<MessagePageResponse>(messagesKey, (current) => ({
+        queryClient.getQueryData<AiMessagePage>(messagesKey);
+      queryClient.setQueryData<AiMessagePage>(messagesKey, (current) => ({
         ...current,
         content: [
           ...(current?.content ?? []),
@@ -253,7 +238,7 @@ function ChatPanel({
       if (userMessage && assistantMessage) {
         // The response carries the persisted pair, so writing it into the
         // cache IS the resync — a refetch here would race this update.
-        queryClient.setQueryData<MessagePageResponse>(
+        queryClient.setQueryData<AiMessagePage>(
           messagesKey,
           (current) => ({
             ...current,
@@ -265,7 +250,7 @@ function ChatPanel({
           })
         );
       } else if (assistantMessage) {
-        queryClient.setQueryData<MessagePageResponse>(
+        queryClient.setQueryData<AiMessagePage>(
           messagesKey,
           (current) => ({
             ...current,
@@ -283,7 +268,7 @@ function ChatPanel({
     },
     onError: (error, _content, context) => {
       if (context?.previous) {
-        queryClient.setQueryData<MessagePageResponse>(
+        queryClient.setQueryData<AiMessagePage>(
           messagesKey,
           context.previous
         );
@@ -382,7 +367,7 @@ function ChatPanel({
         ))}
 
         {busy && (
-          <article className="ai-message ai-message--assistant" style={{ opacity: 0.7 }}>
+          <article className="ai-message ai-message--assistant ai-message--pending">
             <p className="ai-message__role muted">AI</p>
             <div className="ai-message__content">思考中…</div>
           </article>

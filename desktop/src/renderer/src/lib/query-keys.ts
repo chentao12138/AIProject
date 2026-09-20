@@ -105,6 +105,12 @@ export const queryKeys = {
     ['practice-sessions', part(spaceId)] as const,
   practiceSession: (spaceId: number | null, sessionId: number | null) =>
     ['practice-session', part(spaceId), part(sessionId)] as const,
+  /**
+   * Score summary returned by `finishPracticeSession`. It is not part of the
+   * session detail, so it lives under its own key (see types.ts).
+   */
+  practiceSubmit: (spaceId: number | null, sessionId: number | null) =>
+    ['practice-submit', part(spaceId), part(sessionId)] as const,
   exams: (spaceId: number | null) => ['exams', part(spaceId)] as const,
   exam: (spaceId: number | null, examId: number | null) =>
     ['exam', part(spaceId), part(examId)] as const,
