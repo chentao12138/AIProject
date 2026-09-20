@@ -1,6 +1,8 @@
 # AIStudy Desktop Route Map
 
-Generated from `src/renderer/src/app/router.tsx`.
+Generated from `src/renderer/src/app/router.tsx`. `src/renderer/src/app/route-contract.test.ts`
+fails if a page navigates to a path that is not registered here, so this table
+cannot silently drift from the links.
 
 ## Public
 
@@ -30,12 +32,15 @@ Generated from `src/renderer/src/app/router.tsx`.
 | `/spaces/:spaceId/questions` | `QuestionsPage` | Question list / filters |
 | `/spaces/:spaceId/questions/new` | `QuestionForm` | Create question |
 | `/spaces/:spaceId/questions/:questionId` | `QuestionDetailPage` | Question detail + publish |
-| `/spaces/:spaceId/questions/:questionId/edit` | `QuestionForm` | Edit question |
 | `/spaces/:spaceId/practice` | `PracticePage` | Practice start + history |
 | `/spaces/:spaceId/practice/:sessionId` | `PracticeSessionPage` | Active practice session |
 | `/spaces/:spaceId/exams` | `ExamsPage` | Exam list + create |
+| `/spaces/:spaceId/exams/:examId` | `ExamDetailPage` | Exam paper review + publish + start attempt |
 | `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | `ExamAttemptPage` | Active exam attempt + result |
 | `/spaces/:spaceId/search` | `SearchPage` | Global/space search |
+
+There is no question *edit* route: the contract has no update verb, so
+`QuestionForm` is create-only (see `BACKEND-CONTRACT-REQUESTS.md` A4.5).
 
 ## Catch-all
 
@@ -47,6 +52,9 @@ Generated from `src/renderer/src/app/router.tsx`.
 
 - Source reader accepts `?page=<sourcePageId>&block=<contentBlockId>` to jump to a specific page and highlight a content block.
 - Search results navigate to entity routes using real backend IDs.
+- Exam flow: list → `exams/:examId` (review / publish) → `createExamAttempt` →
+  `exams/:examId/attempts/:attemptId`. The attempt ID always comes from the
+  backend response, never from a guess.
 - AI citations navigate to Source / KnowledgePoint / Question routes.
 
 ## Out of scope (B-class)

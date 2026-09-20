@@ -1,21 +1,23 @@
 /**
- * Question Authoring / Curation (A4.4).
+ * Question Authoring (A4.4) — create only.
  *
- * Supports create and edit for all stable question types.
+ * There is deliberately no edit mode: the contract exposes
+ * `POST /questions` and `POST /questions/{id}/publish` but no update
+ * endpoint, so a "save" could only ever create a duplicate. See
+ * BACKEND-CONTRACT-REQUESTS.md for the requested update verb.
  */
 
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { normalizeApiError, unwrap } from '../../lib/api-error';
+import { NOT_FOUND_MESSAGE, normalizeApiError, unwrap } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
-import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
+import { parsePositiveIdParam } from '../../lib/ids';
 import { Button } from '../../components/Button';
 import type { components } from '@aistudy/api-client';
 type CreateQuestionRequest = components['schemas']['CreateQuestionRequest'];
 import { ErrorState } from '../../components/ErrorState';
-import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
 
 type QuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'BOOLEAN' | 'TEXT_ANSWER';
@@ -29,20 +31,8 @@ export function QuestionForm() {
   const api = useApiClient();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { spaceId: spaceIdParam, questionId } = useParams();
+  const { spaceId: spaceIdParam } = useParams();
   const spaceId = parsePositiveIdParam(spaceIdParam);
-  const isEdit = isPositiveId(Number(questionId));
-
-  const existingQuery = useQuery({
-    queryKey: queryKeys.question(spaceId ?? 0, Number(questionId) || 0),
-    queryFn: () => {
-      if (spaceId === null || !questionId || !isPositiveId(Number(questionId))) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.getQuestion(spaceId, Number(questionId)).then(unwrap);
-    },
-    enabled: isEdit && spaceId !== null,
-  });
 
   const [questionType, setQuestionType] = useState<QuestionType>('SINGLE_CHOICE');
   const [stem, setStem] = useState('');
@@ -58,22 +48,6 @@ export function QuestionForm() {
   const [referenceAnswer, setReferenceAnswer] = useState('');
   const [knowledgePointIds, setKnowledgePointIds] = useState('');
   const [serverError, setServerError] = useState<string | null>(null);
-
-  if (isEdit && existingQuery.data) {
-    const q = existingQuery.data;
-    setQuestionType((q.questionType as QuestionType) ?? 'SINGLE_CHOICE');
-    setStem(q.stem ?? '');
-    setExplanation(q.explanation ?? '');
-    setDifficulty(q.difficulty ?? '');
-    if (q.options?.length) {
-      setOptions(q.options.map((o) => ({ optionKey: o.optionKey ?? '', content: o.content ?? '' })));
-    }
-    if (q.answer?.correctOptionKey) setCorrectSingle(q.answer.correctOptionKey);
-    if (q.answer?.correctOptionKeys?.length) setCorrectMultiple(q.answer.correctOptionKeys);
-    if (q.answer?.correctBoolean !== undefined && q.answer?.correctBoolean !== null) setCorrectBoolean(q.answer.correctBoolean);
-    if (q.answer?.referenceAnswer) setReferenceAnswer(q.answer.referenceAnswer);
-    setKnowledgePointIds((q.knowledgePointIds ?? []).join(','));
-  }
 
   const create = useMutation({
     mutationFn: () => {
@@ -111,16 +85,8 @@ export function QuestionForm() {
     },
   });
 
-  if (isEdit && existingQuery.isPending) {
-    return <LoadingState text="加载题目…" />;
-  }
-  if (isEdit && existingQuery.isError) {
-    return (
-      <ErrorState
-        message={normalizeApiError(existingQuery.error).message}
-        onRetry={() => void existingQuery.refetch()}
-      />
-    );
+  if (spaceId === null) {
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   function addOption() {
@@ -154,7 +120,7 @@ export function QuestionForm() {
 
   return (
     <div className="page">
-      <PageHeader title={isEdit ? 'Edit Question' : 'New Question'} />
+      <PageHeader title="新建题目" />
       <form className="form" onSubmit={handleSubmit}>
         <div className="form__field">
           <label htmlFor="q-type" className="form__label">Type</label>
@@ -341,7 +307,7 @@ export function QuestionForm() {
 
         <div className="form__actions">
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create')}
+            {busy ? 'Creating…' : 'Create'}
           </Button>
           <Button type="button" variant="secondary" onClick={() => navigate(`/spaces/${spaceId}/questions`)}>
             Cancel

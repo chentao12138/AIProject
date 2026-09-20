@@ -49,3 +49,12 @@ export type KnowledgePoint = ResultData<ApiClient['listKnowledgePoints']>[number
 
 /** Space detail (same shape as list entries in this contract). */
 export type SpaceDetail = ResultData<ApiClient['getLearningSpace']>;
+
+/** Single Exam, inferred from listExams(). */
+export type Exam = ResultData<ApiClient['listExams']>[number];
+
+/** Exam detail (question list included), inferred from getExam(). */
+export type ExamDetail = ResultData<ApiClient['getExam']>;
+
+/** One started attempt, inferred from createExamAttempt(). */
+export type ExamAttempt = ResultData<ApiClient['createExamAttempt']>;

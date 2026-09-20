@@ -61,7 +61,8 @@ export function unwrap<T>(result: OpenApiResult<T>): T {
 
 const UNAUTHORIZED_MESSAGE = '登录状态已失效，请重新登录。';
 const FORBIDDEN_MESSAGE = '当前会话无权执行此操作。';
-const NOT_FOUND_MESSAGE = '资源不存在或当前不可访问。';
+/** Anti-IDOR wording — exported so guards and pages share one source. */
+export const NOT_FOUND_MESSAGE = '资源不存在或当前不可访问。';
 const SERVER_MESSAGE = '服务器暂时无法完成请求，请稍后重试。';
 /** Also the copy for a session that cannot be confirmed because the
  * backend is unreachable — reused by RequireAuth so the wording has one source. */

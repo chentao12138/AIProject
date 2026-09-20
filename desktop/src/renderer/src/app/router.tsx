@@ -27,6 +27,7 @@ import { QuestionForm } from '../features/questions/QuestionForm';
 import { PracticePage } from '../features/practice/PracticePage';
 import { PracticeSessionPage } from '../features/practice/PracticeSessionPage';
 import { ExamsPage } from '../features/exams/ExamsPage';
+import { ExamDetailPage } from '../features/exams/ExamDetailPage';
 import { ExamAttemptPage } from '../features/exams/ExamAttemptPage';
 import { SearchPage } from '../features/search/SearchPage';
 
@@ -63,10 +64,10 @@ export const router = createHashRouter([
           { path: 'questions', element: <QuestionsPage /> },
           { path: 'questions/new', element: <QuestionForm /> },
           { path: 'questions/:questionId', element: <QuestionDetailPage /> },
-          { path: 'questions/:questionId/edit', element: <QuestionForm /> },
           { path: 'practice', element: <PracticePage /> },
           { path: 'practice/:sessionId', element: <PracticeSessionPage /> },
           { path: 'exams', element: <ExamsPage /> },
+          { path: 'exams/:examId', element: <ExamDetailPage /> },
           { path: 'exams/:examId/attempts/:attemptId', element: <ExamAttemptPage /> },
           { path: 'search', element: <SearchPage /> },
         ],

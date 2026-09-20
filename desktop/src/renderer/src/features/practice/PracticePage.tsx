@@ -120,6 +120,7 @@ export function PracticePage() {
 
 function PracticeHistory({ spaceId }: { spaceId: number }) {
   const api = useApiClient();
+  const navigate = useNavigate();
   const listQuery = useQuery({
     queryKey: queryKeys.practiceSessions(spaceId),
     queryFn: () => api.listPracticeSessions(spaceId).then(unwrap),
@@ -161,7 +162,7 @@ function PracticeHistory({ spaceId }: { spaceId: number }) {
             <td>
               <Button
                 type="button"
-                onClick={() => window.location.hash = `#/spaces/${spaceId}/practice/${s.id}`}
+                onClick={() => navigate(`/spaces/${spaceId}/practice/${s.id}`)}
               >
                 Open
               </Button>

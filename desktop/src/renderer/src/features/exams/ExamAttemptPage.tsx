@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
 import { normalizeApiError, unwrap } from '../../lib/api-error';
@@ -308,13 +308,10 @@ function ExamResult({
   attempt: Record<string, unknown>;
 }) {
   const api = useApiClient();
+  const navigate = useNavigate();
   const resultQuery = useQuery({
-    queryKey: ['exam-result', spaceId, attemptId],
-    queryFn: () => {
-      if (spaceId === null || attemptId === null) return Promise.reject(new Error('invalid ids'));
-      return api.getExamResult(spaceId, attemptId).then(unwrap);
-    },
-    enabled: spaceId !== null && attemptId !== null,
+    queryKey: queryKeys.examResult(spaceId, attemptId),
+    queryFn: () => api.getExamResult(spaceId, attemptId).then(unwrap),
   });
 
   if (resultQuery.isPending) return <LoadingState text="加载成绩…" />;
@@ -381,7 +378,7 @@ function ExamResult({
       )}
 
       <div className="form__actions">
-        <Button type="button" variant="primary" onClick={() => window.location.hash = `#/spaces/${spaceId}/exams`}>
+        <Button type="button" variant="primary" onClick={() => navigate(`/spaces/${spaceId}/exams`)}>
           Back to Exams
         </Button>
       </div>

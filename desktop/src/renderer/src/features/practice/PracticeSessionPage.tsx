@@ -5,7 +5,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
 import { normalizeApiError, unwrap } from '../../lib/api-error';
@@ -325,11 +325,11 @@ function PracticeResult({
   const maxScore = submitView.maxScore;
   const answeredCount = submitView.answeredCount ?? 0;
   const correctCount = submitView.correctCount ?? 0;
+  const navigate = useNavigate();
 
-  const sessionIdValue = (session as Record<string, unknown>).id as number | undefined;
   return (
     <div className="page">
-      <PageHeader title={`Practice #${sessionIdValue ?? '?'} — Result`} />
+      <PageHeader title={`Practice #${sessionId} — Result`} />
       <div className="practice-result">
         <p>
           Score: {score ?? '—'} / {maxScore ?? '—'}
@@ -345,15 +345,9 @@ function PracticeResult({
         <Button
           type="button"
           variant="primary"
-          onClick={() => window.location.hash = `#/spaces/${spaceId}/practice`}
+          onClick={() => navigate(`/spaces/${spaceId}/practice`)}
         >
           New Practice
-        </Button>
-        <Button
-          type="button"
-          onClick={() => window.location.hash = `#/spaces/${spaceId}/practice/${sessionId}`}
-        >
-          Review Session
         </Button>
       </div>
     </div>

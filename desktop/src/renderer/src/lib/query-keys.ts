@@ -59,6 +59,8 @@ export const queryKeys = {
     ['exam', spaceId, examId] as const,
   examAttempt: (spaceId: number, attemptId: number) =>
     ['exam-attempt', spaceId, attemptId] as const,
+  examResult: (spaceId: number, attemptId: number) =>
+    ['exam-result', spaceId, attemptId] as const,
   search: (spaceId: number, query: string) =>
     ['search', spaceId, query] as const,
 };

@@ -14,6 +14,7 @@ Each item maps to a specific checklist section.
 | A2.1 provenance nav | Partial | Deep-link via `?block=` added; full nav needs `sourceId`/`sourcePageId` in `KnowledgePointSourceResponse`. |
 | A3.2 AI context | Blocked | `SendMessageRequest` only contains `content`; context chips require optional context ID fields. |
 | A8 Notes | Blocked | No `/notes` endpoints in `api.d.ts`. UI not implemented. |
+| A4.5 Question update | Blocked | No `PUT`/`PATCH` on `/questions/{questionId}`; the form is create-only and the edit route was removed. |
 
 ---
 
@@ -191,11 +192,33 @@ The frontend `QuestionDetailPage.tsx` is ready to accept an additional `delete` 
 
 ---
 
+## A4.5 Question authoring — update endpoint
+
+**Checklist:** A4.4
+**Current gap:** the contract exposes `GET`/`POST /api/v1/spaces/{spaceId}/questions`
+and `POST .../questions/{questionId}/publish`, but no update verb. An "edit
+question" screen can therefore only POST a new question and leave the original
+untouched — a silent duplicate.
+
+**Request:** add `PUT /api/v1/spaces/{spaceId}/questions/{questionId}` taking the
+same `CreateQuestionRequest` body (full replace, DRAFT-only), returning the
+existing Question response schema; or `PATCH` with a partial body if partial
+editing is what the product wants.
+
+**Frontend state:** the unreachable `questions/:questionId/edit` route and the
+`QuestionForm` edit branch were removed instead of being left half-wired, and
+`route-contract.test.ts` now fails if a route is registered that nothing can
+reach. When the verb lands: give `QuestionForm` an `initialValue`, add the update
+mutation, re-register the route and link it from `QuestionDetailPage`.
+
+---
+
 ## Resolution order
 
 1. A8 Notes — highest priority (entire feature blocked).
 2. A2.1 provenance — unblock full Source/Page/Block navigation.
 3. A3.2 AI context — unblock context-aware AI Tutor.
 4. A3.3 AI reference IDs — polish citation deep-links (can follow A3.2).
+5. A4.5 Question update — unblocks question correction before content is published.
 
 Once the above contracts are reflected in `packages/api-client/src/generated/api.d.ts` and typecheck passes, the frontend will implement the remaining UI in a single follow-up pass.
