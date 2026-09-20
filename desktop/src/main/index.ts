@@ -49,6 +49,25 @@ const DEV_SERVER_URL = process.env['ELECTRON_RENDERER_URL'];
 // origin the renderer actually talks to — never a hardcoded duplicate.
 const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
+// One process must own the refresh-token vault: the vault is a single file
+// slot and the backend rotates on every exchange, so a second instance
+// restoring concurrently would reuse a rotated token and revoke the whole
+// refresh family (ADR-026). Later launches just focus the running window.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const [window] = BrowserWindow.getAllWindows();
+    if (!window) {
+      return;
+    }
+    if (window.isMinimized()) {
+      window.restore();
+    }
+    window.focus();
+  });
+}
+
 // Must run BEFORE app ready. standard+secure gives app://aistudy a real,
 // non-opaque origin; supportFetchAPI lets the renderer fetch over it;
 // corsEnabled makes the scheme participate in CORS as a normal origin.

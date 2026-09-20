@@ -126,13 +126,29 @@ describe('AuthSession.login', () => {
     );
   });
 
-  it('resets locally when /auth/me fails after a successful login', async () => {
+  it('keeps the issued pair when /auth/me is only temporarily failing', async () => {
     const vault = installVault();
     const client = fakeClient({
       getCurrentUser: vi.fn(async () => ({
         data: undefined,
         error: {},
         response: { status: 500 },
+      })),
+    });
+    await expect(session.login(client, 'a', 'b')).rejects.toThrow();
+    expect(session.isAuthenticated()).toBe(false);
+    expect(session.snapshot().restoreUnavailable).toBe(true);
+    // Recoverable: the encrypted token survives so a retry can confirm it.
+    expect(vault.clear).not.toHaveBeenCalled();
+  });
+
+  it('clears local state when /auth/me rejects the fresh credential', async () => {
+    const vault = installVault();
+    const client = fakeClient({
+      getCurrentUser: vi.fn(async () => ({
+        data: undefined,
+        error: {},
+        response: { status: 401 },
       })),
     });
     await expect(session.login(client, 'a', 'b')).rejects.toThrow();
@@ -177,6 +193,54 @@ describe('AuthSession.bootstrap', () => {
     const snapshot = await session.bootstrap(client);
     expect(snapshot.authenticated).toBe(false);
     expect(vault.clear).toHaveBeenCalled();
+  });
+
+  it('keeps the encrypted token when the backend 5xxs, and restores on retry', async () => {
+    installVault('stored-refresh');
+    const vault = window.aistudyAuthVault!;
+    const session = new AuthSession();
+    const refresh = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: { accessToken: null, refreshToken: null },
+        error: {},
+        response: { status: 503 },
+      })
+      .mockResolvedValueOnce({ data: PAIR, response: { status: 200 } });
+    const client = fakeClient({ refresh });
+
+    const failed = await session.bootstrap(client);
+    expect(failed.authenticated).toBe(false);
+    expect(failed.restoreUnavailable).toBe(true);
+    expect(vault.clear).not.toHaveBeenCalled();
+
+    const recovered = await session.bootstrap(client);
+    expect(recovered.authenticated).toBe(true);
+    expect(recovered.restoreUnavailable).toBe(false);
+  });
+
+  it('treats a thrown transport failure as recoverable', async () => {
+    installVault('stored-refresh');
+    const vault = window.aistudyAuthVault!;
+    const session = new AuthSession();
+    const client = fakeClient({
+      refresh: vi.fn(async () => {
+        throw new TypeError('fetch failed');
+      }),
+    });
+    const snapshot = await session.bootstrap(client);
+    expect(snapshot.restoreUnavailable).toBe(true);
+    expect(vault.clear).not.toHaveBeenCalled();
+  });
+
+  it('does not rotate again once the session is already restored', async () => {
+    installVault('stored-refresh');
+    const session = new AuthSession();
+    const client = fakeClient();
+    await session.bootstrap(client);
+    const calls = vi.mocked(client.refresh).mock.calls.length;
+    await session.bootstrap(client);
+    expect(vi.mocked(client.refresh)).toHaveBeenCalledTimes(calls);
   });
 });
 
@@ -234,6 +298,25 @@ describe('AuthSession.rotateRefresh (single-flight)', () => {
     expect(await session.rotateRefresh(client)).toBe(false);
     expect(session.isAuthenticated()).toBe(false);
     expect(session.getAccessToken()).toBeNull();
+  });
+
+  it('keeps the session material when rotation only hits a server error', async () => {
+    const vault = installVault();
+    const session = new AuthSession();
+    const client = fakeClient({
+      refresh: vi.fn(async () => ({
+        data: { accessToken: null, refreshToken: null },
+        error: {},
+        response: { status: 503 },
+      })),
+    });
+    await session.login(client, 'alice', 'pw');
+    vault.clear.mockClear();
+
+    expect(await session.rotateRefresh(client)).toBe(false);
+    // The refresh token was never rejected: keep it so the next 401 retries.
+    expect(session.getAccessToken()).toBe('access-1');
+    expect(vault.clear).not.toHaveBeenCalled();
   });
 });
 

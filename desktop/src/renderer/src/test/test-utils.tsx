@@ -16,7 +16,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ApiClient } from '@aistudy/api-client';
 import { ApiClientProvider } from '../lib/api-context';
-import { AuthProvider } from '../lib/auth-context';
+import { AuthProvider, type AuthStatus } from '../lib/auth-context';
 
 /**
  * Test QueryClient (FE-001.5 PHASE 22): fresh per test, retries off so
@@ -135,7 +135,7 @@ interface RenderOptions {
   routePath?: string;
   /** AuthProvider start status (defaults to anonymous; bootstrap-flow
    *  tests pass 'bootstrapping'). */
-  authInitialStatus?: 'bootstrapping' | 'anonymous' | 'authenticated';
+  authInitialStatus?: AuthStatus;
   /** Whether AuthProvider restores a persisted session on mount. */
   authAutoBootstrap?: boolean;
 }

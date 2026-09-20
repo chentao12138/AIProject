@@ -79,6 +79,12 @@ VITE_API_BASE_URL=http://localhost:8080
 - **401 自动轮换**：`createRefreshingFetch` 单飞调用 `/auth/refresh`，仅对
   GET/HEAD/OPTIONS 用新令牌重放一次；写操作只换令牌不重放；auth 端点自身不刷新。
   后端每次轮换 refresh，复用旧 refresh 会吊销整个 family → 回到登录页。
+- **可恢复 vs 已死亡**：只有凭证被拒绝（400/401/403）才清除保险库里的
+  refresh token；5xx / 网络不可达保留令牌，`RequireAuth` 显示离线面板并提供
+  重试（`retryRestore`），后端恢复即可继续，不需要重新登录。
+- **单实例锁**：`app.requestSingleInstanceLock()` 保证同一时刻只有一个进程
+  持有 vault 槽；再次启动只聚焦已有窗口（避免两个 renderer 并发轮换同一
+  refresh token 导致整个 family 被吊销）。
 - 登录/退出/主体切换是 **auth cache boundary**：清空 React Query 缓存，
   上一 principal 的数据不残留。
 - 令牌绝不进入 localStorage/sessionStorage/cookie、日志或错误文案。

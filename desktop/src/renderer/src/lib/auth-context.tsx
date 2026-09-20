@@ -7,12 +7,17 @@
  *    by the OS vault (app start). The UI shows a neutral loading screen;
  *    no business query runs before this settles.
  *  - 'anonymous': no session -> RequireAuth redirects to /login.
+ *  - 'restore-unavailable': a refresh token is held but the backend could
+ *    not confirm it -> RequireAuth offers retry / re-login instead of
+ *    silently discarding the session.
  *  - 'authenticated': access token in memory + current user loaded.
  *
  * Cache boundary (same rule the old DevelopmentSession established):
  * whenever the principal CHANGES — login, logout, or an unrecoverable
  * refresh-family rejection — ALL TanStack Query server state is cleared,
  * so a previous principal's data can never survive under a new identity.
+ * The rule is enforced on every transition out of 'authenticated', so a
+ * silent session loss (rotateRefresh rejection) cannot leave data behind.
  */
 
 import {
@@ -30,13 +35,19 @@ import type { ApiClient } from '@aistudy/api-client';
 import { apiClient, authSession } from './api-client';
 import { AuthLoginError, type AuthUser } from './auth-session';
 
-export type AuthStatus = 'bootstrapping' | 'anonymous' | 'authenticated';
+export type AuthStatus =
+  | 'bootstrapping'
+  | 'anonymous'
+  | 'restore-unavailable'
+  | 'authenticated';
 
 interface AuthContextValue {
   status: AuthStatus;
   user: AuthUser | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Re-run the restore exchange (offline panel retry) without re-logging in. */
+  retryRestore: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -59,12 +70,24 @@ export function AuthProvider({
   const [status, setStatus] = useState<AuthStatus>(initialStatus);
   const [user, setUser] = useState<AuthUser | null>(null);
   const startedRef = useRef(false);
+  const statusRef = useRef<AuthStatus>(initialStatus);
 
   const syncFromSession = useCallback(() => {
     const snapshot = authSession.snapshot();
-    setStatus(snapshot.authenticated ? 'authenticated' : 'anonymous');
+    const next: AuthStatus = snapshot.authenticated
+      ? 'authenticated'
+      : snapshot.restoreUnavailable
+        ? 'restore-unavailable'
+        : 'anonymous';
+    // Every transition out of an authenticated principal is the cache
+    // boundary — including a refresh-family rejection nobody "logged out".
+    if (statusRef.current === 'authenticated' && next !== 'authenticated') {
+      queryClient.clear();
+    }
+    statusRef.current = next;
+    setStatus(next);
     setUser(snapshot.user);
-  }, []);
+  }, [queryClient]);
 
   // Subscribe FIRST, then bootstrap, so transitions made during the
   // restore can never be missed.
@@ -101,14 +124,21 @@ export function AuthProvider({
   );
 
   const logout = useCallback(async () => {
+    // syncFromSession drops the query cache: logout leaves 'authenticated'.
     await authSession.logout(client);
-    queryClient.clear();
     syncFromSession();
-  }, [client, queryClient, syncFromSession]);
+  }, [client, syncFromSession]);
+
+  const retryRestore = useCallback(async () => {
+    statusRef.current = 'bootstrapping';
+    setStatus('bootstrapping');
+    await authSession.bootstrap(client);
+    syncFromSession();
+  }, [client, syncFromSession]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, login, logout }),
-    [status, user, login, logout]
+    () => ({ status, user, login, logout, retryRestore }),
+    [status, user, login, logout, retryRestore]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
