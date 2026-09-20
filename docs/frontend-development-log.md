@@ -598,3 +598,32 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
 - 剩余（同一评审的后续阶段）：Stage C 数据访问层与 `useSpaceId`；Stage D 类型契约
   补全 + eslint 边界与安全基线门禁；Stage E 运行期 API base 配置 + codegen 漂移门禁
   + ADR。
+
+## FE-ARCH-HARDENING-01（2026-09-21，续 Stage C/D/E）
+
+- Stage C（commit c47c92f）：新增 `lib/space-scope.ts`（`useSpaceId` 单点读取 URL
+  中的 space，畸形 param 不再退化成数字前缀）与 `lib/queries.ts`
+  （`spaceQuery`/`entityQuery` 统一 key + `enabled` + 守卫 + `unwrap`）；
+  `query-keys.ts` 接受 `number | null`（编码为 `'none'`，消灭 31 处 `?? 0`），
+  过滤条件改为带标签槽位，使 `questions(spaceId)` 成为过滤键的前缀从而能真正
+  invalidate；SearchPage 的 key 补上 `types/page/size`（此前第 2 页覆盖第 1 页
+  缓存槽）；AiChatPage 改为以 Query 缓存为唯一消息来源（`setQueryData` + 失败回滚）；
+  provenance deep link 用 `URLSearchParams` 构造（旧写法在缺少 pageId 时生成
+  `/sources/5&block=9`）；新增 `renderer-conventions.test.ts` 把 README/ADR 里的
+  文字约束（无内联 id 守卫、除 client 外不得 fetch、令牌不落 storage、renderer
+  不碰 Node）变成对真实源码的扫描。
+- Stage D（commit 293da31）：`lib/types.ts` 按既有 `ResultData<ApiClient['…']>`
+  方式补齐 Question/Practice/Exam/Search/AI 派生类型，features 内
+  `as unknown as` 与 `Record<string, unknown>` 清零，并暴露两个真实缺陷：
+  `PracticeResult` 读取的 score 字段并不存在于 `PracticeSessionDetail`（只在
+  finish 响应里 → 登记 A5.3），`ExamResult` 依赖 `attempt.score` / `item.stem`
+  这两个契约里没有的字段；`QuestionRenderer` 移入 `components/`，eslint 与
+  约定测试共同禁止 feature 互访（按解析后的真实路径判定）；
+  `webPreferences` 抽成 `main/window-options.ts` 并由测试固定 ADR-037 四个开关，
+  打包版关闭 DevTools 且移除默认菜单；preload 进入 vitest include 并补桥面测试。
+- Stage E（commit e9802fd）：后端地址改为 main 运行期解析（env → userData
+  `config.json` → 构建期值 → 默认），renderer 经只读 `aistudyConfig` 通道取得同一
+  值，CSP 与 client 由此不可能分歧；桥类型下沉到 `src/shared`；新增
+  `api:check`（openapi.json ↔ api.d.ts ↔ manifest.json）并纳入 `npm run build`；
+  记录 ADR-047 / ADR-048。
+- 门禁：lint OK / typecheck OK / test:run 449 passed (48 files) / build OK。

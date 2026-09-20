@@ -43,14 +43,21 @@ See `AISTUDY-FRONTEND-FINAL-COMPLETION-MASTER-CHECKLIST.md` section 12.
 - BrowserWindow: `contextIsolation=true`, `nodeIntegration=false`, `sandbox=true`, `webSecurity=true`
 - Renderer: no direct fetch/axios/XHR; no localStorage/sessionStorage token; no Node APIs
 - AI: renderer never contacts provider directly; keys backend-owned
-- Preload: `contextBridge` only; no `ipcRenderer` leak
+- Preload: `contextBridge` only; no `ipcRenderer` leak — the exposed surface
+  (vault save/load/clear + read-only `aistudyConfig.getApiBaseUrl`) is asserted
+  by `src/preload/index.test.ts`
+- Backend target resolved at runtime by main (ADR-047):
+  `AISTUDY_API_BASE_URL` -> `<userData>/config.json` -> `VITE_API_BASE_URL` ->
+  default; CSP `connect-src` and the renderer client share that one value
+- Single-instance lock: no second process may race the refresh-token vault
+- Packaged builds: DevTools off, default menu removed (ADR-037)
 
 ## Final gates (current)
 
-- lint: PASS
+- lint: PASS（含 feature 互不 import、src/shared 平台无关等边界规则）
 - typecheck: PASS
-- tests: 37 files / 391 pass
-- build: PASS (renderer bundle ~693 kB + CSS)
+- tests: 48 files / 449 pass
+- build: PASS（typecheck + `api:check` 契约漂移门禁 + electron-vite build，renderer bundle ~698 kB + CSS）
 
 ## Remaining work
 

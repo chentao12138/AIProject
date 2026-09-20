@@ -15,6 +15,7 @@ Each item maps to a specific checklist section.
 | A3.2 AI context | Blocked | `SendMessageRequest` only contains `content`; context chips require optional context ID fields. |
 | A8 Notes | Blocked | No `/notes` endpoints in `api.d.ts`. UI not implemented. |
 | A4.5 Question update | Blocked | No `PUT`/`PATCH` on `/questions/{questionId}`; the form is create-only and the edit route was removed. |
+| A5.3 Practice result | Blocked | `PracticeSessionDetail` carries no score; only the `finish` response does, so a past session cannot show its result. |
 
 ---
 
@@ -192,6 +193,33 @@ The frontend `QuestionDetailPage.tsx` is ready to accept an additional `delete` 
 
 ---
 
+## A5.3 Practice session result endpoint
+
+**Checklist:** A5.3 (Completion)
+**Current gap:** `POST /practice-sessions/{sessionId}/finish` returns
+`PracticeSubmitView` (`score`, `maxScore`, `answeredCount`, `correctCount`,
+`questionCount`), but `GET /practice-sessions/{sessionId}` returns
+`PracticeSessionDetail`, which carries **none** of those fields, and there is
+no result/diagnosis resource for practice the way exams have
+`/exam-attempts/{attemptId}/result`. The Desktop can therefore only show a
+score during the same page visit in which the session was finished; reopening a
+finished session renders an empty summary. Computing the score client-side is
+forbidden by ADR-031.
+
+**Request:** add `GET /api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/result`
+returning the `PracticeSubmitView` shape (same fields, so the renderer can reuse
+it), or extend `PracticeSessionDetail` with those fields once the session is
+finished. A per-question list (`PracticeAnswerView[]`) in the same response
+would additionally let the UI show which items were wrong without re-deriving
+anything locally.
+
+**Frontend state:** `PracticeResult` reads the summary from the finish
+response held in component state and says so when it is absent
+(`features/practice/PracticeSessionPage.tsx`); the derived types live in
+`lib/types.ts` (`PracticeSubmitSummary`).
+
+---
+
 ## A4.5 Question authoring — update endpoint
 
 **Checklist:** A4.4
@@ -220,5 +248,6 @@ mutation, re-register the route and link it from `QuestionDetailPage`.
 3. A3.2 AI context — unblock context-aware AI Tutor.
 4. A3.3 AI reference IDs — polish citation deep-links (can follow A3.2).
 5. A4.5 Question update — unblocks question correction before content is published.
+6. A5.3 Practice result — makes a finished practice session readable again.
 
 Once the above contracts are reflected in `packages/api-client/src/generated/api.d.ts` and typecheck passes, the frontend will implement the remaining UI in a single follow-up pass.
