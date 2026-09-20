@@ -13,46 +13,40 @@
  * share one TanStack Query cache entry — no second source of truth.
  */
 
-import { Outlet, useParams } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useApiClient } from '../lib/api-context';
-import { unwrap, normalizeApiError } from '../lib/api-error';
+import { NOT_FOUND_MESSAGE, normalizeApiError } from '../lib/api-error';
+import { spaceQuery } from '../lib/queries';
+import { useSpaceId } from '../lib/space-scope';
 import { queryKeys } from '../lib/query-keys';
-import { parsePositiveIdParam } from '../lib/ids';
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 
 export function SpaceScopeGuard() {
   const api = useApiClient();
-  const { spaceId: spaceIdParam } = useParams();
-
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceId = useSpaceId();
   const spaceIdValid = spaceId !== null;
 
-  const spaceQuery = useQuery({
-    queryKey: queryKeys.space(spaceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.getLearningSpace(spaceId).then(unwrap);
-    },
-    enabled: spaceIdValid,
-  });
+  const spaceDetailQuery = useQuery(
+    spaceQuery(spaceId, queryKeys.space(spaceId), (id) =>
+      api.getLearningSpace(id)
+    )
+  );
 
   if (!spaceIdValid) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
-  if (spaceQuery.isPending) {
+  if (spaceDetailQuery.isPending) {
     return <LoadingState text="加载空间…" />;
   }
 
-  if (spaceQuery.isError || !spaceQuery.data) {
+  if (spaceDetailQuery.isError || !spaceDetailQuery.data) {
     return (
       <ErrorState
-        message={normalizeApiError(spaceQuery.error).message}
-        onRetry={() => void spaceQuery.refetch()}
+        message={normalizeApiError(spaceDetailQuery.error).message}
+        onRetry={() => void spaceDetailQuery.refetch()}
       />
     );
   }

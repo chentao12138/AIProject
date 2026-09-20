@@ -16,6 +16,8 @@ import {
   normalizeApiError,
   unwrap,
 } from '../../lib/api-error';
+import { entityQuery } from '../../lib/queries';
+import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { parsePositiveIdParam } from '../../lib/ids';
 import { formatDateTime } from '../../lib/format';
@@ -30,50 +32,50 @@ export function ExamDetailPage() {
   const api = useApiClient();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { spaceId: spaceIdParam, examId: examIdParam } = useParams();
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceId = useSpaceId();
+  const { examId: examIdParam } = useParams();
   const examId = parsePositiveIdParam(examIdParam);
 
-  const examQuery = useQuery({
-    queryKey: queryKeys.exam(spaceId ?? 0, examId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || examId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.getExam(spaceId, examId).then(unwrap);
-    },
-    enabled: spaceId !== null && examId !== null,
-  });
+  const examQuery = useQuery(
+    entityQuery(
+      spaceId,
+      examId,
+      queryKeys.exam(spaceId, examId),
+      (id, exam) => api.getExam(id, exam)
+    )
+  );
 
   const publish = useMutation({
-    mutationFn: () => {
-      if (spaceId === null || examId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.publishExam(spaceId, examId).then(unwrap);
-    },
+    mutationFn: () =>
+      api
+        .publishExam(
+          requireId(spaceId, 'space id'),
+          requireId(examId, 'exam id')
+        )
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.exam(spaceId ?? 0, examId ?? 0),
+        queryKey: queryKeys.exam(spaceId, examId),
       });
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.exams(spaceId ?? 0),
+        queryKey: queryKeys.exams(spaceId),
       });
     },
   });
 
   const startAttempt = useMutation({
-    mutationFn: () => {
-      if (spaceId === null || examId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.createExamAttempt(spaceId, examId).then(unwrap);
-    },
+    mutationFn: () =>
+      api
+        .createExamAttempt(
+          requireId(spaceId, 'space id'),
+          requireId(examId, 'exam id')
+        )
+        .then(unwrap),
     onSuccess: (attempt) => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.examAttempt(spaceId ?? 0, attempt?.id ?? 0),
-      });
       if (attempt?.id) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.examAttempt(spaceId, attempt.id),
+        });
         navigate(
           `/spaces/${spaceId}/exams/${examId}/attempts/${attempt.id}`
         );

@@ -22,7 +22,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { normalizeApiError, unwrap } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
+import { entityQuery } from '../../lib/queries';
+import { useSpaceId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { formatBytes, formatDateTime } from '../../lib/format';
 import { isPositiveId, parsePositiveIdParam } from '../../lib/ids';
@@ -60,62 +66,54 @@ const POLL_INTERVAL_MS = 2000;
 export function SourceWorkbenchPage() {
   const api = useApiClient();
   const navigate = useNavigate();
-  const { spaceId: spaceIdParam, sourceId: sourceIdParam } = useParams();
+  const spaceId = useSpaceId();
+  const { sourceId: sourceIdParam } = useParams();
   const [searchParams] = useSearchParams();
 
-  const spaceId = parsePositiveIdParam(spaceIdParam);
   const sourceId = parsePositiveIdParam(sourceIdParam);
 
-  const sourceQuery = useQuery({
-    queryKey: queryKeys.source(spaceId ?? 0, sourceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || sourceId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.getSource(spaceId, sourceId).then(unwrap);
-    },
-    enabled: spaceId !== null && sourceId !== null,
-  });
+  const sourceQuery = useQuery(
+    entityQuery(
+      spaceId,
+      sourceId,
+      queryKeys.source(spaceId, sourceId),
+      (id, sid) => api.getSource(id, sid)
+    )
+  );
 
-  const assetsQuery = useQuery({
-    queryKey: queryKeys.sourceAssets(spaceId ?? 0, sourceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || sourceId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.listSourceAssets(spaceId, sourceId).then(unwrap);
-    },
-    enabled: spaceId !== null && sourceId !== null,
-  });
+  const assetsQuery = useQuery(
+    entityQuery(
+      spaceId,
+      sourceId,
+      queryKeys.sourceAssets(spaceId, sourceId),
+      (id, sid) => api.listSourceAssets(id, sid)
+    )
+  );
 
-  const jobsQuery = useQuery({
-    queryKey: queryKeys.ingestionJobs(spaceId ?? 0, sourceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || sourceId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.listIngestionJobs(spaceId, sourceId).then(unwrap);
-    },
-    enabled: spaceId !== null && sourceId !== null,
-  });
+  const jobsQuery = useQuery(
+    entityQuery(
+      spaceId,
+      sourceId,
+      queryKeys.ingestionJobs(spaceId, sourceId),
+      (id, sid) => api.listIngestionJobs(id, sid)
+    )
+  );
 
-  const pagesQuery = useQuery({
-    queryKey: queryKeys.sourcePages(spaceId ?? 0, sourceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || sourceId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.listSourcePages(spaceId, sourceId).then(unwrap);
-    },
-    enabled: spaceId !== null && sourceId !== null,
-  });
+  const pagesQuery = useQuery(
+    entityQuery(
+      spaceId,
+      sourceId,
+      queryKeys.sourcePages(spaceId, sourceId),
+      (id, sid) => api.listSourcePages(id, sid)
+    )
+  );
 
   // Deep-link: ?page=<id>&block=<id> from provenance or refresh.
   const deepLinkPageId = parsePositiveIdParam(searchParams.get('page') ?? undefined);
   const deepLinkBlockId = parsePositiveIdParam(searchParams.get('block') ?? undefined);
 
   if (spaceId === null || sourceId === null) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   if (sourceQuery.isPending) {
@@ -494,12 +492,7 @@ function ActiveJobStatus({
 
   const jobQuery = useQuery({
     queryKey: queryKeys.ingestionJob(spaceId, jobId),
-    queryFn: () => {
-      if (!isPositiveId(jobId)) {
-        return Promise.reject(new Error('invalid job id'));
-      }
-      return api.getIngestionJob(spaceId, jobId).then(unwrap);
-    },
+    queryFn: () => api.getIngestionJob(spaceId, jobId).then(unwrap),
     enabled: isPositiveId(jobId),
     refetchInterval: (query) => {
       const status = query.state.data?.status;

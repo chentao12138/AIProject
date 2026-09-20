@@ -9,13 +9,18 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useApiClient } from '../../lib/api-context';
-import { unwrap, normalizeApiError } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
+import { spaceQuery } from '../../lib/queries';
+import { requireId, useSpaceId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { buildCategoryTree } from '../../lib/category-tree';
 import {
-  parsePositiveIdParam,
   isPositiveId,
   parseOptionalInteger,
   parseOptionalPositiveId,
@@ -37,33 +42,25 @@ export function KnowledgePage() {
   const api = useApiClient();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { spaceId: spaceIdParam } = useParams();
+  const spaceId = useSpaceId();
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [creatingPoint, setCreatingPoint] = useState(false);
 
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const categoriesQuery = useQuery(
+    spaceQuery(
+      spaceId,
+      queryKeys.knowledgeCategories(spaceId),
+      (id) => api.listKnowledgeCategories(id)
+    )
+  );
 
-  const categoriesQuery = useQuery({
-    queryKey: queryKeys.knowledgeCategories(spaceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.listKnowledgeCategories(spaceId).then(unwrap);
-    },
-    enabled: spaceId !== null,
-  });
-
-  const pointsQuery = useQuery({
-    queryKey: queryKeys.knowledgePoints(spaceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.listKnowledgePoints(spaceId).then(unwrap);
-    },
-    enabled: spaceId !== null,
-  });
+  const pointsQuery = useQuery(
+    spaceQuery(
+      spaceId,
+      queryKeys.knowledgePoints(spaceId),
+      (id) => api.listKnowledgePoints(id)
+    )
+  );
 
   const createCategory = useMutation({
     mutationFn: (body: {
@@ -71,15 +68,13 @@ export function KnowledgePage() {
       description?: string;
       parentId?: number;
       sortOrder?: number;
-    }) => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.createKnowledgeCategory(spaceId, body).then(unwrap);
-    },
+    }) =>
+      api
+        .createKnowledgeCategory(requireId(spaceId, 'space id'), body)
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgeCategories(spaceId ?? 0),
+        queryKey: queryKeys.knowledgeCategories(spaceId),
       });
       setCreatingCategory(false);
     },
@@ -92,22 +87,20 @@ export function KnowledgePage() {
       content: string;
       categoryId?: number;
       difficulty?: string;
-    }) => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.createKnowledgePoint(spaceId, body).then(unwrap);
-    },
+    }) =>
+      api
+        .createKnowledgePoint(requireId(spaceId, 'space id'), body)
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgePoints(spaceId ?? 0),
+        queryKey: queryKeys.knowledgePoints(spaceId),
       });
       setCreatingPoint(false);
     },
   });
 
-  if (spaceId === null) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+  if (!spaceId) {
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   const categories = categoriesQuery.data ?? [];

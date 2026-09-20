@@ -5,12 +5,17 @@
  */
 
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { normalizeApiError, unwrap } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
+import { spaceQuery } from '../../lib/queries';
+import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
-import { parsePositiveIdParam } from '../../lib/ids';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -22,35 +27,28 @@ export function ExamsPage() {
   const api = useApiClient();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { spaceId: spaceIdParam } = useParams();
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceId = useSpaceId();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(60);
 
-  const listQuery = useQuery({
-    queryKey: queryKeys.exams(spaceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null) return Promise.reject(new Error('invalid space id'));
-      return api.listExams(spaceId).then(unwrap);
-    },
-    enabled: spaceId !== null,
-  });
+  const listQuery = useQuery(
+    spaceQuery(spaceId, queryKeys.exams(spaceId), (id) => api.listExams(id))
+  );
 
   const create = useMutation({
-    mutationFn: () => {
-      if (spaceId === null) return Promise.reject(new Error('invalid space id'));
-      const body = {
-        title,
-        description: description || undefined,
-        durationMinutes,
-        questions: [],
-      };
-      return api.createExam(spaceId, body).then(unwrap);
-    },
+    mutationFn: () =>
+      api
+        .createExam(requireId(spaceId, 'space id'), {
+          title,
+          description: description || undefined,
+          durationMinutes,
+          questions: [],
+        })
+        .then(unwrap),
     onSuccess: (exam) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.exams(spaceId ?? 0) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.exams(spaceId) });
       if (exam?.id) {
         navigate(`/spaces/${spaceId}/exams/${exam.id}`);
       }
@@ -58,7 +56,7 @@ export function ExamsPage() {
   });
 
   if (!spaceId) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   return (

@@ -15,7 +15,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useApiClient } from '../../lib/api-context';
-import { unwrap, normalizeApiError } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
+import { entityQuery, spaceQuery } from '../../lib/queries';
+import { requireId, useSpaceId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { formatDateTime } from '../../lib/format';
 import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
@@ -28,72 +34,64 @@ import { StatusBadge } from '../../components/StatusBadge';
 export function KnowledgePointDetailPage() {
   const api = useApiClient();
   const queryClient = useQueryClient();
-  const { spaceId: spaceIdParam, knowledgePointId: pointIdParam } = useParams();
+  const spaceId = useSpaceId();
+  const { knowledgePointId: pointIdParam } = useParams();
 
-  const spaceId = parsePositiveIdParam(spaceIdParam);
   const knowledgePointId = parsePositiveIdParam(pointIdParam);
   const idsValid = spaceId !== null && knowledgePointId !== null;
 
-  const pointQuery = useQuery({
-    queryKey: queryKeys.knowledgePoint(spaceId ?? 0, knowledgePointId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || knowledgePointId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.getKnowledgePoint(spaceId, knowledgePointId).then(unwrap);
-    },
-    enabled: idsValid,
-  });
+  const pointQuery = useQuery(
+    entityQuery(
+      spaceId,
+      knowledgePointId,
+      queryKeys.knowledgePoint(spaceId, knowledgePointId),
+      (id, point) => api.getKnowledgePoint(id, point)
+    )
+  );
 
   // Category name resolution (review fix #5): reuse the catalog query
   // key so arriving from the Knowledge list hits the warm cache. A
   // failing category query must never take the detail page down —
   // resolution degrades to "#<id>" instead.
   const categoriesQuery = useQuery({
-    queryKey: queryKeys.knowledgeCategories(spaceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.listKnowledgeCategories(spaceId).then(unwrap);
-    },
+    ...spaceQuery(
+      spaceId,
+      queryKeys.knowledgeCategories(spaceId),
+      (id) => api.listKnowledgeCategories(id)
+    ),
     enabled: idsValid,
   });
 
   // BUSINESS-007 provenance links. Failure never blocks the detail page.
-  const provenanceQuery = useQuery({
-    queryKey: queryKeys.knowledgePointSources(
-      spaceId ?? 0,
-      knowledgePointId ?? 0
-    ),
-    queryFn: () => {
-      if (spaceId === null || knowledgePointId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.listKnowledgePointSources(spaceId, knowledgePointId).then(unwrap);
-    },
-    enabled: idsValid,
-  });
+  const provenanceQuery = useQuery(
+    entityQuery(
+      spaceId,
+      knowledgePointId,
+      queryKeys.knowledgePointSources(spaceId, knowledgePointId),
+      (id, point) => api.listKnowledgePointSources(id, point)
+    )
+  );
 
   const publish = useMutation({
-    mutationFn: () => {
-      if (spaceId === null || knowledgePointId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.publishKnowledgePoint(spaceId, knowledgePointId).then(unwrap);
-    },
+    mutationFn: () =>
+      api
+        .publishKnowledgePoint(
+          requireId(spaceId, 'space id'),
+          requireId(knowledgePointId, 'knowledge point id')
+        )
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgePoint(spaceId ?? 0, knowledgePointId ?? 0),
+        queryKey: queryKeys.knowledgePoint(spaceId, knowledgePointId),
       });
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgePoints(spaceId ?? 0),
+        queryKey: queryKeys.knowledgePoints(spaceId),
       });
     },
   });
 
   if (!idsValid) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   if (pointQuery.isPending) {
@@ -111,7 +109,7 @@ export function KnowledgePointDetailPage() {
 
   const point = pointQuery.data;
   if (!point) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   const isDraft = point.status === 'DRAFT';
@@ -229,26 +227,32 @@ export function KnowledgePointDetailPage() {
               const sourcePageId = (link as unknown as { sourcePageId?: number }).sourcePageId;
               const hasSourceNav =
                 isPositiveId(sourceId) && isPositiveId(blockId);
-              const hasBlockOnly = isPositiveId(blockId) && !hasSourceNav;
-              const pageParam = isPositiveId(sourcePageId) ? `?page=${sourcePageId}` : '';
-              const blockParam = `&block=${blockId}`;
+              // Built as a real query string: `?page=` is optional, so the
+              // old `&block=` concatenation produced `/sources/5&block=9`
+              // whenever a link had no sourcePageId — an unreadable source
+              // id that landed on not-found.
+              const deepLink = new URLSearchParams();
+              if (isPositiveId(sourcePageId)) {
+                deepLink.set('page', String(sourcePageId));
+              }
+              if (isPositiveId(blockId)) {
+                deepLink.set('block', String(blockId));
+              }
+              const suffix = deepLink.size > 0 ? `?${deepLink.toString()}` : '';
               return (
                 <li key={link.id ?? `prov-${index}`}>
                   {hasSourceNav ? (
                     <Link
-                      to={`/spaces/${spaceId}/sources/${sourceId}${pageParam}${blockParam}`}
-                      className="nav-link"
-                    >
-                      Content block #{blockId}
-                    </Link>
-                  ) : hasBlockOnly ? (
-                    <Link
-                      to={`/spaces/${spaceId}/sources?block=${blockId}`}
+                      to={`/spaces/${spaceId}/sources/${sourceId}${suffix}`}
                       className="nav-link"
                     >
                       Content block #{blockId}
                     </Link>
                   ) : (
+                    /* Provenance without a resolvable source cannot be
+                       navigated: the reader needs both ids. Linking to the
+                       plain source list (as before) was a dead end dressed
+                       up as a deep link. */
                     <span className="muted">
                       Content block #{blockId ?? '—'}
                     </span>

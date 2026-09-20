@@ -21,54 +21,34 @@
  *    neutral "Space unavailable".
  */
 
-import { NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useApiClient } from '../lib/api-context';
-import { normalizeApiError, unwrap } from '../lib/api-error';
+import { normalizeApiError } from '../lib/api-error';
+import { spaceQuery } from '../lib/queries';
+import { useSpaceId } from '../lib/space-scope';
 import { queryKeys } from '../lib/query-keys';
-import { parsePositiveIdParam } from '../lib/ids';
 import { apiBaseUrl } from '../lib/api-client';
 import { UserMenu } from '../features/auth/UserMenu';
 
-function useCurrentSpaceId(): number | null {
-  const params = useParams();
-  const location = useLocation();
-  // Route param wins; fall back to parsing /spaces/:spaceId/... from the URL
-  // so the shell can resolve the space name even on nested routes.
-  const fromParams = parsePositiveIdParam(params.spaceId);
-  if (fromParams !== null) {
-    return fromParams;
-  }
-  const match = location.pathname.match(/^\/spaces\/(\d+)/);
-  if (!match) {
-    return null;
-  }
-  return parsePositiveIdParam(match[1]);
-}
-
 export function AppShell() {
   const api = useApiClient();
-  const spaceId = useCurrentSpaceId();
+  const spaceId = useSpaceId();
 
-  const spaceQuery = useQuery({
-    queryKey: spaceId === null ? ['space', 'none'] : queryKeys.space(spaceId),
-    queryFn: () => {
-      if (spaceId === null) {
-        return Promise.resolve(undefined);
-      }
-      return api.getLearningSpace(spaceId).then(unwrap);
-    },
-    enabled: spaceId !== null,
-  });
+  const spaceDetail = useQuery(
+    spaceQuery(spaceId, queryKeys.space(spaceId), (id) =>
+      api.getLearningSpace(id)
+    )
+  );
 
-  const space = spaceQuery.data;
+  const space = spaceDetail.data;
   const spaceName = space?.name;
   // Child navigation requires a SUCCESSFUL query with a valid space —
   // pending/error never renders seemingly-valid child links.
   const spaceAvailable =
-    spaceId !== null && spaceQuery.isSuccess && space !== undefined;
-  const spaceError = spaceQuery.isError
-    ? normalizeApiError(spaceQuery.error)
+    spaceId !== null && spaceDetail.isSuccess && space !== undefined;
+  const spaceError = spaceDetail.isError
+    ? normalizeApiError(spaceDetail.error)
     : null;
   const spaceLabel = spaceError
     ? spaceError.status === 404

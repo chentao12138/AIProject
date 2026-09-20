@@ -7,12 +7,14 @@
  * contract supports (status, questionType, knowledgePointId).
  */
 
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { normalizeApiError, unwrap } from '../../lib/api-error';
+import { normalizeApiError } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
-import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
+import { spaceQuery } from '../../lib/queries';
+import { useSpaceId } from '../../lib/space-scope';
+import { isPositiveId } from '../../lib/ids';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -23,37 +25,30 @@ import { StatusBadge } from '../../components/StatusBadge';
 export function QuestionsPage() {
   const api = useApiClient();
   const navigate = useNavigate();
-  const { spaceId: spaceIdParam } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceId = useSpaceId();
 
-  const status = searchParams.get('status') ?? undefined;
-  const questionType = searchParams.get('questionType') ?? undefined;
-  const knowledgePointId = searchParams.get('knowledgePointId')
+  const status = searchParams.get('status') || undefined;
+  const questionType = searchParams.get('questionType') || undefined;
+  const rawKnowledgePointId = searchParams.get('knowledgePointId')
     ? Number(searchParams.get('knowledgePointId'))
     : undefined;
+  const knowledgePointId = isPositiveId(rawKnowledgePointId)
+    ? rawKnowledgePointId
+    : undefined;
 
-  const listQuery = useQuery({
-    queryKey: queryKeys.questions(
-      spaceId ?? 0,
-      status || undefined,
-      questionType || undefined,
-      isPositiveId(knowledgePointId) ? knowledgePointId : undefined
-    ),
-    queryFn: () => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api
-        .listQuestions(spaceId, {
-          status: status || undefined,
-          questionType: questionType || undefined,
-          knowledgePointId: isPositiveId(knowledgePointId) ? knowledgePointId : undefined,
+  const listQuery = useQuery(
+    spaceQuery(
+      spaceId,
+      queryKeys.questions(spaceId, { status, questionType, knowledgePointId }),
+      (id) =>
+        api.listQuestions(id, {
+          status,
+          questionType,
+          knowledgePointId,
         })
-        .then(unwrap);
-    },
-    enabled: spaceId !== null,
-  });
+    )
+  );
 
   const items = listQuery.data ?? [];
 

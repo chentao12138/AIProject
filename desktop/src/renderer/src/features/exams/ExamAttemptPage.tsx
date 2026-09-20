@@ -8,7 +8,13 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { normalizeApiError, unwrap } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
+import { entityQuery } from '../../lib/queries';
+import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { parsePositiveIdParam } from '../../lib/ids';
 import { Button } from '../../components/Button';
@@ -29,51 +35,48 @@ interface ExamQuestion {
 export function ExamAttemptPage() {
   const api = useApiClient();
   const queryClient = useQueryClient();
-  const { spaceId: spaceIdParam, attemptId: attemptIdParam } = useParams();
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceId = useSpaceId();
+  const { attemptId: attemptIdParam } = useParams();
   const attemptId = parsePositiveIdParam(attemptIdParam);
 
-  const attemptQuery = useQuery({
-    queryKey: queryKeys.examAttempt(spaceId ?? 0, attemptId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || attemptId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.getExamAttempt(spaceId, attemptId).then(unwrap);
-    },
-    enabled: spaceId !== null && attemptId !== null,
-  });
+  const attemptQuery = useQuery(
+    entityQuery(spaceId, attemptId, queryKeys.examAttempt(spaceId, attemptId), (id, entity) =>
+      api.getExamAttempt(id, entity)
+    )
+  );
 
   const startAttempt = useMutation({
-    mutationFn: () => {
-      if (spaceId === null || attemptId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.startExamAttempt(spaceId, attemptId).then(unwrap);
-    },
+    mutationFn: () =>
+      api
+        .startExamAttempt(
+          requireId(spaceId, 'space id'),
+          requireId(attemptId, 'attempt id')
+        )
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.examAttempt(spaceId ?? 0, attemptId ?? 0),
+        queryKey: queryKeys.examAttempt(spaceId, attemptId),
       });
     },
   });
 
   const submitAttempt = useMutation({
-    mutationFn: () => {
-      if (spaceId === null || attemptId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.submitExamAttempt(spaceId, attemptId).then(unwrap);
-    },
+    mutationFn: () =>
+      api
+        .submitExamAttempt(
+          requireId(spaceId, 'space id'),
+          requireId(attemptId, 'attempt id')
+        )
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.examAttempt(spaceId ?? 0, attemptId ?? 0),
+        queryKey: queryKeys.examAttempt(spaceId, attemptId),
       });
     },
   });
 
   if (spaceId === null || attemptId === null) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
   if (attemptQuery.isPending) {
     return <LoadingState text="加载考试…" />;
@@ -89,7 +92,7 @@ export function ExamAttemptPage() {
 
   const attempt = attemptQuery.data;
   if (!attempt) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   const rawQuestions = (attempt.questions ?? []) as ExamQuestion[];

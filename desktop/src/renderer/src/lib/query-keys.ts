@@ -11,56 +11,115 @@
  * Keys never contain File/FormData/JWT/raw content.
  */
 
+/**
+ * Ids come from route params and are `number | null` until a URL resolves.
+ * Encoding the missing one as `'none'` (instead of `?? 0`) keeps a
+ * disabled query's cache entry readable in devtools and stops every page
+ * from inventing its own placeholder. Ids are positive integers, so a real
+ * id can never collide with `'none'`.
+ */
+function part(value: number | null): number | 'none' {
+  return value ?? 'none';
+}
+
+/**
+ * Flatten the filters that are actually applied into labeled key slots.
+ *
+ * Padding optional filters with `undefined` breaks invalidation: TanStack
+ * compares every index of the filter key, so `['questions', 7, undefined]`
+ * does NOT match a cached `['questions', 7, 'PUBLISHED']`, and creating a
+ * question while a filter was active left the list stale. Labeled, sparse
+ * keys keep `queryKeys.questions(spaceId)` a true prefix of every filtered
+ * variant, which is what mutations invalidate.
+ */
+function labelled(filters: Record<string, unknown>): unknown[] {
+  return Object.entries(filters)
+    .filter(([, value]) => value !== undefined && value !== '')
+    .flatMap(([name, value]) => [name, value]);
+}
+
 export const queryKeys = {
   spaces: ['spaces'] as const,
-  space: (spaceId: number) => ['space', spaceId] as const,
-  sources: (spaceId: number) => ['sources', spaceId] as const,
-  source: (spaceId: number, sourceId: number) =>
-    ['source', spaceId, sourceId] as const,
-  sourceAssets: (spaceId: number, sourceId: number) =>
-    ['source-assets', spaceId, sourceId] as const,
-  sourceAsset: (spaceId: number, sourceId: number, assetId: number) =>
-    ['source-asset', spaceId, sourceId, assetId] as const,
-  ingestionJobs: (spaceId: number, sourceId: number) =>
-    ['ingestion-jobs', spaceId, sourceId] as const,
-  ingestionJob: (spaceId: number, jobId: number) =>
-    ['ingestion-job', spaceId, jobId] as const,
-  sourcePages: (spaceId: number, sourceId: number) =>
-    ['source-pages', spaceId, sourceId] as const,
-  contentBlocks: (spaceId: number, sourceId: number, pageId?: number) =>
-    pageId === undefined
-      ? (['content-blocks', spaceId, sourceId] as const)
-      : (['content-blocks', spaceId, sourceId, pageId] as const),
-  knowledgeCategories: (spaceId: number) =>
-    ['knowledge-categories', spaceId] as const,
-  knowledgePoints: (spaceId: number) => ['knowledge-points', spaceId] as const,
-  knowledgePoint: (spaceId: number, knowledgePointId: number) =>
-    ['knowledge-point', spaceId, knowledgePointId] as const,
-  knowledgePointSources: (spaceId: number, knowledgePointId: number) =>
-    ['knowledge-point-sources', spaceId, knowledgePointId] as const,
+  space: (spaceId: number | null) => ['space', part(spaceId)] as const,
+  sources: (spaceId: number | null) => ['sources', part(spaceId)] as const,
+  source: (spaceId: number | null, sourceId: number | null) =>
+    ['source', part(spaceId), part(sourceId)] as const,
+  sourceAssets: (spaceId: number | null, sourceId: number | null) =>
+    ['source-assets', part(spaceId), part(sourceId)] as const,
+  sourceAsset: (
+    spaceId: number | null,
+    sourceId: number | null,
+    assetId: number
+  ) => ['source-asset', part(spaceId), part(sourceId), assetId] as const,
+  ingestionJobs: (spaceId: number | null, sourceId: number | null) =>
+    ['ingestion-jobs', part(spaceId), part(sourceId)] as const,
+  ingestionJob: (spaceId: number | null, jobId: number | null) =>
+    ['ingestion-job', part(spaceId), part(jobId)] as const,
+  sourcePages: (spaceId: number | null, sourceId: number | null) =>
+    ['source-pages', part(spaceId), part(sourceId)] as const,
+  contentBlocks: (
+    spaceId: number | null,
+    sourceId: number | null,
+    pageId?: number
+  ) =>
+    [
+      'content-blocks',
+      part(spaceId),
+      part(sourceId),
+      ...labelled({ page: pageId }),
+    ] as const,
+  knowledgeCategories: (spaceId: number | null) =>
+    ['knowledge-categories', part(spaceId)] as const,
+  knowledgePoints: (spaceId: number | null) =>
+    ['knowledge-points', part(spaceId)] as const,
+  knowledgePoint: (spaceId: number | null, knowledgePointId: number | null) =>
+    ['knowledge-point', part(spaceId), part(knowledgePointId)] as const,
+  knowledgePointSources: (
+    spaceId: number | null,
+    knowledgePointId: number | null
+  ) =>
+    ['knowledge-point-sources', part(spaceId), part(knowledgePointId)] as const,
   // FE-AI-001
   aiSettings: ['ai-settings'] as const,
-  aiConversations: (spaceId: number) =>
-    ['ai-conversations', spaceId] as const,
-  aiConversation: (spaceId: number, conversationId: number) =>
-    ['ai-conversation', spaceId, conversationId] as const,
-  aiMessages: (spaceId: number, conversationId: number) =>
-    ['ai-messages', spaceId, conversationId] as const,
-  questions: (spaceId: number, status?: string, questionType?: string, knowledgePointId?: number) =>
-    ['questions', spaceId, status, questionType, knowledgePointId] as const,
-  question: (spaceId: number, questionId: number) =>
-    ['question', spaceId, questionId] as const,
-  practiceSessions: (spaceId: number) =>
-    ['practice-sessions', spaceId] as const,
-  practiceSession: (spaceId: number, sessionId: number) =>
-    ['practice-session', spaceId, sessionId] as const,
-  exams: (spaceId: number) => ['exams', spaceId] as const,
-  exam: (spaceId: number, examId: number) =>
-    ['exam', spaceId, examId] as const,
-  examAttempt: (spaceId: number, attemptId: number) =>
-    ['exam-attempt', spaceId, attemptId] as const,
-  examResult: (spaceId: number, attemptId: number) =>
-    ['exam-result', spaceId, attemptId] as const,
-  search: (spaceId: number, query: string) =>
-    ['search', spaceId, query] as const,
+  aiConversations: (spaceId: number | null) =>
+    ['ai-conversations', part(spaceId)] as const,
+  aiConversation: (spaceId: number | null, conversationId: number | null) =>
+    ['ai-conversation', part(spaceId), part(conversationId)] as const,
+  aiMessages: (
+    spaceId: number | null,
+    conversationId: number | null,
+    page?: number
+  ) =>
+    ['ai-messages', part(spaceId), part(conversationId), ...labelled({ page })] as const,
+  questions: (
+    spaceId: number | null,
+    filters: {
+      status?: string;
+      questionType?: string;
+      knowledgePointId?: number;
+    } = {}
+  ) => ['questions', part(spaceId), ...labelled(filters)] as const,
+  question: (spaceId: number | null, questionId: number | null) =>
+    ['question', part(spaceId), part(questionId)] as const,
+  practiceSessions: (spaceId: number | null) =>
+    ['practice-sessions', part(spaceId)] as const,
+  practiceSession: (spaceId: number | null, sessionId: number | null) =>
+    ['practice-session', part(spaceId), part(sessionId)] as const,
+  exams: (spaceId: number | null) => ['exams', part(spaceId)] as const,
+  exam: (spaceId: number | null, examId: number | null) =>
+    ['exam', part(spaceId), part(examId)] as const,
+  examAttempt: (spaceId: number | null, attemptId: number | null) =>
+    ['exam-attempt', part(spaceId), part(attemptId)] as const,
+  examResult: (spaceId: number | null, attemptId: number | null) =>
+    ['exam-result', part(spaceId), part(attemptId)] as const,
+  /**
+   * Search must key on everything that changes the result set. With only
+   * `query` in the key, page 2 overwrote page 1's cache entry and the
+   * pager showed stale rows.
+   */
+  search: (
+    spaceId: number | null,
+    query: string,
+    filters: { types?: string; page?: number; size?: number } = {}
+  ) => ['search', part(spaceId), query, ...labelled(filters)] as const,
 };

@@ -7,13 +7,19 @@
  */
 
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { unwrap, normalizeApiError } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
+import { spaceQuery } from '../../lib/queries';
+import { requireId, useSpaceId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { formatDateTime } from '../../lib/format';
-import { isPositiveId, parsePositiveIdParam } from '../../lib/ids';
+import { isPositiveId } from '../../lib/ids';
 import { useFormError } from '../../lib/use-form-error';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -29,41 +35,31 @@ const DESKTOP_SOURCE_TYPE = 'DESKTOP_UPLOAD';
 export function SourcesPage() {
   const api = useApiClient();
   const queryClient = useQueryClient();
-  const { spaceId: spaceIdParam } = useParams();
+  const spaceId = useSpaceId();
   const [creating, setCreating] = useState(false);
 
-  const spaceId = parsePositiveIdParam(spaceIdParam);
-
-  const sourcesQuery = useQuery({
-    queryKey: queryKeys.sources(spaceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.listSources(spaceId).then(unwrap);
-    },
-    enabled: spaceId !== null,
-  });
+  const sourcesQuery = useQuery(
+    spaceQuery(spaceId, queryKeys.sources(spaceId), (id) => api.listSources(id))
+  );
 
   const createSource = useMutation({
-    mutationFn: (title: string) => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api
-        .createSource(spaceId, { title, sourceType: DESKTOP_SOURCE_TYPE })
-        .then(unwrap);
-    },
+    mutationFn: (title: string) =>
+      api
+        .createSource(requireId(spaceId, 'space id'), {
+          title,
+          sourceType: DESKTOP_SOURCE_TYPE,
+        })
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.sources(spaceId ?? 0),
+        queryKey: queryKeys.sources(spaceId),
       });
       setCreating(false);
     },
   });
 
-  if (spaceId === null) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+  if (!spaceId) {
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   const sources = sourcesQuery.data ?? [];

@@ -7,8 +7,14 @@
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useApiClient } from '../../lib/api-context';
-import { normalizeApiError, unwrap } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
+import { entityQuery } from '../../lib/queries';
+import { requireId, useSpaceId } from '../../lib/space-scope';
 import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
@@ -20,37 +26,40 @@ import { QuestionRenderer, type QuestionPayload } from './QuestionRenderer';
 export function QuestionDetailPage() {
   const api = useApiClient();
   const queryClient = useQueryClient();
-  const { spaceId: spaceIdParam, questionId: questionIdParam } = useParams();
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceId = useSpaceId();
+  const { questionId: questionIdParam } = useParams();
   const questionId = parsePositiveIdParam(questionIdParam);
 
-  const query = useQuery({
-    queryKey: queryKeys.question(spaceId ?? 0, questionId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || questionId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.getQuestion(spaceId, questionId).then(unwrap);
-    },
-    enabled: spaceId !== null && questionId !== null,
-  });
+  const query = useQuery(
+    entityQuery(
+      spaceId,
+      questionId,
+      queryKeys.question(spaceId, questionId),
+      (id, qid) => api.getQuestion(id, qid)
+    )
+  );
 
   const publish = useMutation({
-    mutationFn: () => {
-      if (spaceId === null || questionId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.publishQuestion(spaceId, questionId).then(unwrap);
-    },
+    mutationFn: () =>
+      api
+        .publishQuestion(
+          requireId(spaceId, 'space id'),
+          requireId(questionId, 'question id')
+        )
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.question(spaceId ?? 0, questionId ?? 0),
+        queryKey: queryKeys.question(spaceId, questionId),
+      });
+      // The list badge would otherwise keep saying DRAFT after publishing.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.questions(spaceId),
       });
     },
   });
 
   if (!spaceId || !questionId) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
   if (query.isPending) {
     return <LoadingState text="加载题目…" />;
@@ -66,7 +75,7 @@ export function QuestionDetailPage() {
 
   const q = query.data;
   if (!q) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   const payload: QuestionPayload = {

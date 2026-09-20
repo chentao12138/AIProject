@@ -8,7 +8,13 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { normalizeApiError, unwrap } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
+import { entityQuery } from '../../lib/queries';
+import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { parsePositiveIdParam } from '../../lib/ids';
 import { Button } from '../../components/Button';
@@ -29,51 +35,48 @@ interface PracticeQuestion {
 export function PracticeSessionPage() {
   const api = useApiClient();
   const queryClient = useQueryClient();
-  const { spaceId: spaceIdParam, sessionId: sessionIdParam } = useParams();
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceId = useSpaceId();
+  const { sessionId: sessionIdParam } = useParams();
   const sessionId = parsePositiveIdParam(sessionIdParam);
 
-  const sessionQuery = useQuery({
-    queryKey: queryKeys.practiceSession(spaceId ?? 0, sessionId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || sessionId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.getPracticeSession(spaceId, sessionId).then(unwrap);
-    },
-    enabled: spaceId !== null && sessionId !== null,
-  });
+  const sessionQuery = useQuery(
+    entityQuery(spaceId, sessionId, queryKeys.practiceSession(spaceId, sessionId), (id, entity) =>
+      api.getPracticeSession(id, entity)
+    )
+  );
 
   const startSession = useMutation({
-    mutationFn: () => {
-      if (spaceId === null || sessionId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.startPracticeSession(spaceId, sessionId).then(unwrap);
-    },
+    mutationFn: () =>
+      api
+        .startPracticeSession(
+          requireId(spaceId, 'space id'),
+          requireId(sessionId, 'session id')
+        )
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.practiceSession(spaceId ?? 0, sessionId ?? 0),
+        queryKey: queryKeys.practiceSession(spaceId, sessionId),
       });
     },
   });
 
   const finishSession = useMutation({
-    mutationFn: () => {
-      if (spaceId === null || sessionId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.finishPracticeSession(spaceId, sessionId).then(unwrap);
-    },
+    mutationFn: () =>
+      api
+        .finishPracticeSession(
+          requireId(spaceId, 'space id'),
+          requireId(sessionId, 'session id')
+        )
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.practiceSession(spaceId ?? 0, sessionId ?? 0),
+        queryKey: queryKeys.practiceSession(spaceId, sessionId),
       });
     },
   });
 
   if (spaceId === null || sessionId === null) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
   if (sessionQuery.isPending) {
     return <LoadingState text="加载练习…" />;
@@ -89,7 +92,7 @@ export function PracticeSessionPage() {
 
   const session = sessionQuery.data;
   if (!session) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   const rawQuestions = (session.questions ?? []) as PracticeQuestion[];

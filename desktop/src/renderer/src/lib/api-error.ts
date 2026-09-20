@@ -45,14 +45,15 @@ export class ApiRequestError extends Error {
   }
 }
 
-interface OpenApiResult<T> {
+/** Shape every shared-client method resolves to (openapi-fetch result). */
+export interface ApiResult<T> {
   data?: T;
   error?: unknown;
   response: { status: number };
 }
 
 /** Throws ApiRequestError on HTTP error; returns data otherwise. */
-export function unwrap<T>(result: OpenApiResult<T>): T {
+export function unwrap<T>(result: ApiResult<T>): T {
   if (result.error !== undefined && result.error !== null) {
     throw new ApiRequestError(result.response.status, result.error);
   }

@@ -12,8 +12,14 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { normalizeApiError, unwrap } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
+import { entityQuery, spaceQuery } from '../../lib/queries';
+import { useSpaceId } from '../../lib/space-scope';
 import { formatDateTime } from '../../lib/format';
 import { isPositiveId, parsePositiveIdParam } from '../../lib/ids';
 import { Button } from '../../components/Button';
@@ -21,11 +27,15 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
+import type { components } from '@aistudy/api-client';
+
+/** Cache shape of one message page (the only source for the chat list). */
+type MessagePageResponse = components['schemas']['MessagePageResponse'];
 
 export function AiChatPage() {
   const api = useApiClient();
-  const { spaceId: spaceIdParam, conversationId: convIdParam } = useParams();
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceId = useSpaceId();
+  const { conversationId: convIdParam } = useParams();
   const conversationId = parsePositiveIdParam(convIdParam);
 
   const settingsQuery = useQuery({
@@ -34,7 +44,7 @@ export function AiChatPage() {
   });
 
   if (spaceId === null) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   const settings = settingsQuery.data;
@@ -88,10 +98,13 @@ function ConversationList({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const listQuery = useQuery({
-    queryKey: queryKeys.aiConversations(spaceId),
-    queryFn: () => api.listConversations(spaceId).then(unwrap),
-  });
+  const listQuery = useQuery(
+    spaceQuery(
+      spaceId,
+      queryKeys.aiConversations(spaceId),
+      (id) => api.listConversations(id)
+    )
+  );
 
   const create = useMutation({
     mutationFn: () => api.createConversation(spaceId, {}).then(unwrap),
@@ -204,51 +217,79 @@ function ChatPanel({
   const [sendError, setSendError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const messagesQuery = useQuery({
-    queryKey: queryKeys.aiMessages(spaceId, conversationId),
-    queryFn: () => api.listMessages(spaceId, conversationId).then(unwrap),
-    enabled: conversationId !== null,
-  });
-  const [messages, setMessages] = useState<MessageItem[]>([]);
+  const messagesKey = queryKeys.aiMessages(spaceId, conversationId);
 
-  useEffect(() => {
-    if (messagesQuery.data?.content) {
-      setMessages(messagesQuery.data.content as MessageItem[]);
-    }
-  }, [messagesQuery.data]);
+  const messagesQuery = useQuery(
+    entityQuery(spaceId, conversationId, messagesKey, (id, convId) =>
+      api.listMessages(id, convId)
+    )
+  );
+  const messages = (messagesQuery.data?.content ?? []) as MessageItem[];
 
   const send = useMutation({
     mutationFn: (content: string) =>
       api.sendMessage(spaceId, conversationId, { content }).then(unwrap),
     onMutate: async (content: string) => {
       setSendError(null);
-      const tempUserMsg: MessageItem = {
-        id: Date.now(),
-        role: 'USER',
-        content,
-        createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, tempUserMsg]);
+      const previous =
+        queryClient.getQueryData<MessagePageResponse>(messagesKey);
+      queryClient.setQueryData<MessagePageResponse>(messagesKey, (current) => ({
+        ...current,
+        content: [
+          ...(current?.content ?? []),
+          {
+            id: Date.now(),
+            role: 'USER',
+            content,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }));
       setPrompt('');
+      return { previous };
     },
     onSuccess: (data) => {
-      if (data?.userMessage && data?.assistantMessage) {
-        setMessages((prev) => {
-          const withoutOptimistic = prev.slice(0, -1);
-          return [...withoutOptimistic, data.userMessage!, data.assistantMessage!];
-        });
-      } else if (data?.assistantMessage) {
-        setMessages((prev) => [...prev, data.assistantMessage!]);
+      const { userMessage, assistantMessage } = data ?? {};
+      if (userMessage && assistantMessage) {
+        // The response carries the persisted pair, so writing it into the
+        // cache IS the resync — a refetch here would race this update.
+        queryClient.setQueryData<MessagePageResponse>(
+          messagesKey,
+          (current) => ({
+            ...current,
+            content: [
+              ...(current?.content ?? []).slice(0, -1),
+              userMessage,
+              assistantMessage,
+            ],
+          })
+        );
+      } else if (assistantMessage) {
+        queryClient.setQueryData<MessagePageResponse>(
+          messagesKey,
+          (current) => ({
+            ...current,
+            content: [...(current?.content ?? []), assistantMessage],
+          })
+        );
+      } else {
+        // Nothing persisted came back: resync instead of keeping a locally
+        // invented message in the list.
+        void queryClient.invalidateQueries({ queryKey: messagesKey });
       }
       void queryClient.invalidateQueries({
         queryKey: queryKeys.aiConversations(spaceId),
       });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.aiMessages(spaceId, conversationId),
-      });
     },
-    onError: (error) => {
-      setMessages((prev) => prev.slice(0, -1));
+    onError: (error, _content, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData<MessagePageResponse>(
+          messagesKey,
+          context.previous
+        );
+      } else {
+        void queryClient.invalidateQueries({ queryKey: messagesKey });
+      }
       setSendError(normalizeApiError(error).message);
     },
   });

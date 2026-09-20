@@ -5,12 +5,14 @@
  */
 
 import { useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { normalizeApiError, unwrap } from '../../lib/api-error';
+import { normalizeApiError } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
-import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
+import { spaceQuery } from '../../lib/queries';
+import { useSpaceId } from '../../lib/space-scope';
+import { isPositiveId } from '../../lib/ids';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -43,29 +45,33 @@ const PAGE_SIZE = 20;
 
 export function SearchPage() {
   const api = useApiClient();
-  const { spaceId: spaceIdParam } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceId = useSpaceId();
 
   const rawQuery = searchParams.get('q') ?? '';
-  const types = searchParams.get('types') ?? undefined;
+  const types = searchParams.get('types') || undefined;
   const page = Math.max(0, Number(searchParams.get('page') ?? '0') || 0);
   const [localQuery, setLocalQuery] = useState(rawQuery);
 
-  const searchQuery = useQuery<SearchPageResponse>({
-    queryKey: queryKeys.search(spaceId ?? 0, rawQuery),
-    queryFn: () => {
-      if (spaceId === null) return Promise.reject(new Error('invalid space id'));
-      if (!rawQuery.trim()) return Promise.resolve({ content: [], page: 0, size: PAGE_SIZE, totalElements: 0, totalPages: 0 });
-      return api
-        .search(spaceId, {
+  // Key and request read the very same values: a key without `types`/
+  // `page`/`size` made page 2 overwrite page 1's cache entry.
+  const searchQuery = useQuery({
+    ...spaceQuery<SearchPageResponse>(
+      spaceId,
+      queryKeys.search(spaceId, rawQuery, {
+        types,
+        page,
+        size: PAGE_SIZE,
+      }),
+      (id) =>
+        api.search(id, {
           q: rawQuery,
-          types: types || undefined,
+          types,
           page,
           size: PAGE_SIZE,
         })
-        .then(unwrap);
-    },
+    ),
+    // No query typed yet is not a search: keep the request from firing.
     enabled: spaceId !== null && rawQuery.trim().length > 0,
   });
 

@@ -8,12 +8,12 @@
  */
 
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
 import { NOT_FOUND_MESSAGE, normalizeApiError, unwrap } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
-import { parsePositiveIdParam } from '../../lib/ids';
+import { requireId, useSpaceId } from '../../lib/space-scope';
 import { Button } from '../../components/Button';
 import type { components } from '@aistudy/api-client';
 type CreateQuestionRequest = components['schemas']['CreateQuestionRequest'];
@@ -31,8 +31,7 @@ export function QuestionForm() {
   const api = useApiClient();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { spaceId: spaceIdParam } = useParams();
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceId = useSpaceId();
 
   const [questionType, setQuestionType] = useState<QuestionType>('SINGLE_CHOICE');
   const [stem, setStem] = useState('');
@@ -51,7 +50,6 @@ export function QuestionForm() {
 
   const create = useMutation({
     mutationFn: () => {
-      if (spaceId === null) return Promise.reject(new Error('invalid space id'));
       const body: CreateQuestionRequest = {
         questionType,
         stem,
@@ -72,10 +70,14 @@ export function QuestionForm() {
       } else if (questionType === 'TEXT_ANSWER') {
         body.referenceAnswer = referenceAnswer || undefined;
       }
-      return api.createQuestion(spaceId, body).then(unwrap);
+      return api
+        .createQuestion(requireId(spaceId, 'space id'), body)
+        .then(unwrap);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.questions(spaceId ?? 0) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.questions(spaceId),
+      });
       if (spaceId !== null) {
         navigate(`/spaces/${spaceId}/questions`);
       }

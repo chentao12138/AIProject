@@ -7,12 +7,18 @@
  */
 
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { normalizeApiError, unwrap } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
+import { spaceQuery } from '../../lib/queries';
+import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
-import { parsePositiveIdParam } from '../../lib/ids';
+import { parseOptionalPositiveId } from '../../lib/ids';
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
@@ -22,28 +28,25 @@ import { StatusBadge } from '../../components/StatusBadge';
 export function PracticePage() {
   const api = useApiClient();
   const navigate = useNavigate();
-  const { spaceId: spaceIdParam } = useParams();
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const spaceId = useSpaceId();
 
   const [count, setCount] = useState(10);
   const [knowledgePointId, setKnowledgePointId] = useState('');
 
-  const kpQuery = useQuery({
-    queryKey: queryKeys.knowledgePoints(spaceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null) return Promise.reject(new Error('invalid space id'));
-      return api.listKnowledgePoints(spaceId).then(unwrap);
-    },
-    enabled: spaceId !== null,
-  });
+  const kpQuery = useQuery(
+    spaceQuery(spaceId, queryKeys.knowledgePoints(spaceId), (id) =>
+      api.listKnowledgePoints(id)
+    )
+  );
 
   const start = useMutation({
     mutationFn: () => {
-      if (spaceId === null) return Promise.reject(new Error('invalid space id'));
       const body: Record<string, unknown> = { count };
-      const kpId = Number(knowledgePointId);
-      if (kpId > 0) body.knowledgePointId = kpId;
-      return api.createPracticeSession(spaceId, body).then(unwrap);
+      const kpId = parseOptionalPositiveId(knowledgePointId);
+      if (kpId !== undefined) body.knowledgePointId = kpId;
+      return api
+        .createPracticeSession(requireId(spaceId, 'space id'), body)
+        .then(unwrap);
     },
     onSuccess: (session) => {
       if (session?.id) {
@@ -53,7 +56,7 @@ export function PracticePage() {
   });
 
   if (!spaceId) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   return (
