@@ -25,12 +25,14 @@ import com.aistudy.server.storage.StorageResult;
 import com.aistudy.server.storage.StorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -270,6 +272,10 @@ public class IngestionJobService {
                     revision.getId(), anyLowConfidence, failed > 0);
             ingestionJobMapper.markStageComplete(jobId, "EXTRACT", LocalDateTime.now());
 
+            // Terminal for this job either way: the failure path stamps finished_at
+            // in markTerminalFailure, so the success paths have to as well -
+            // otherwise the API reports a completed job with finishedAt: null.
+            job.setFinishedAt(LocalDateTime.now());
             if (failed > 0) {
                 updateStatus(job, IngestionStatus.PARTIAL_FAILED.name(), "REVIEW", 100);
             } else {
@@ -331,7 +337,10 @@ public class IngestionJobService {
         }
         if (!IngestionStatus.FAILED.name().equals(existing.getStatus())
                 && !IngestionStatus.PARTIAL_FAILED.name().equals(existing.getStatus())) {
-            return existing;
+            // The endpoint documents 409 for this case; returning the unchanged job
+            // made a no-op retry look like a successful one (HTTP 200).
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "only FAILED or PARTIAL_FAILED jobs can be retried: " + existing.getStatus());
         }
         LocalDateTime now = LocalDateTime.now();
         int updated = ingestionJobMapper.requeueForStageRetry(

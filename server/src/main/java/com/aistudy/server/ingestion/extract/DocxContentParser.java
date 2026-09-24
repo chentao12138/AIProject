@@ -50,7 +50,7 @@ public class DocxContentParser implements ContentExtractionService {
             page.setSpaceId(spaceId);
             page.setSourceId(sourceId);
             page.setSourceAssetId(sourceAssetId);
-            page.setSourcePageNumber(1);
+            page.setSourcePageNumber(null);   // PDF-internal page number; null for text (SourcePageResponse)
             page.setPageOrder(1);
             page.setPrintedPageNumber(null);
             page.setPageType("BODY");

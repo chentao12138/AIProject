@@ -8,6 +8,16 @@
 - 生产缺陷：`ExamDiagnosisService` 用 `Long.parseLong` 解析分类标签，而"知识点没有分类"时标签是字符串 `UNCATEGORIZED` → **考试提交直接失败**。改为维度行显式携带 id 或 null，`item(...)` 参数类型收窄成 `Long`。`ExamDiagnosisIntegrationTest` 11/11 绿；该类的诊断条目数量断言按四个维度（KNOWLEDGE_POINT / QUESTION_TYPE / CATEGORY / DIFFICULTY）重写，并把 `UNCATEGORIZED` 钉成显式断言。
 - 生产缺陷：摄取的错误码被整体压平。`IngestionJobService` 的作业 catch 硬编码 `INGESTION_FAILED`，从不读取 `IngestionParseException` / `PdfExtractionException` / `ImageExtractionException` 已有的 `errorCode()` / `safeMessage()`（这三类的 javadoc 明确写着"作业层会取它们落库"），而 `ZIP_SAFETY_VIOLATION` 在 `src/main` 里只出现在枚举与 javadoc、从未被抛出 —— zip 安全检查是结果式的（`ZipInspectionResult.violations()`），解压处把它转成裸 `IllegalStateException` 并顺带把违规明细（含条目名）塞进消息。修法：新增 `IngestionFailure` 接口（三个既有异常实现之）+ `ZipSafetyException`，解压处不再重新包装类型化失败，作业 catch 沿 cause 链找类型化失败并沿用其 code/safeMessage。验证：`createForCorruptZipFailsWithSafetyViolation`、`createForTraversalZipFailsWithSafetyViolation`、`failedJobErrorMessageContainsNoStackTrace` 由失败转通过（该类 7 failures → 3）。
 - 未修（下一步）：按资产的提取失败抛出**空消息**异常（`asset 239 extraction failed: ` 后面什么都没有），且单个资产的失败只把作业置 `PARTIAL_FAILED` 而不留任何 errorCode —— 于是纯 TXT/MD 作业也终态错误、错误不可解释。当前摄取 IT 剩余 33 个失败全部源于此，属 `ingestion/extract` 与作业计数逻辑，与上面的错误码映射是两件事。
+- 后续同轮已继续修掉（各条独立，按测量推进）：
+  - `content_block` 从来没有 `source_asset_id` 列（资产的页归属在 `source_page.source_asset_id`），重抽取的清理语句因此抛 `BadSqlGrammarException`，被按资产的 catch 吞掉 —— **任何**作业（哪怕一个 txt）都终态 `PARTIAL_FAILED` 且无 errorCode。删除改为经 `source_page` JOIN；同时那行日志原先只打 `getMessage()`（这次恰是空串），改为记录完整异常。
+  - 作业不绑定资产：端点 javadoc 与请求体都写明 `assetId`，service 签名却不接收，于是 `ingestion_job.asset_id` 恒为 NULL（API 对每个作业回 `"assetId": null`），worker 还会去重抽该 source 下所有无关资产。现在创建时校验归属、写入 assetId，worker 从作业自己的资产出发。
+  - 全部资产失败时按 `FAILED` + 第一个类型化失败的 code/safeMessage 收尾（原来只有无声的 `PARTIAL_FAILED`）；成功/部分失败收尾补写 `finished_at`（此前完成态的作业 `finishedAt` 为 null）。
+  - `TextMarkdownContentParser` 先做宽松解码（非法字节被替换成 U+FFFD）再把"已干净"的字节交给内部的严格 UTF-8 解码器 —— 因此 `ENCODING_ERROR` 永不可能触发；`aistudy.ingestion.text.max-document-bytes` 在 `application.yml` 与 runtime-configuration.md 里都有，却**没有任何 Java 代码绑定**，`DOCUMENT_TOO_LARGE` 同样永不触发。现在原始字节直通解析器，上限按仓库既有 `@Value(... DataSize)` 方式注入并在解析前校验。
+  - `source_page_number` 按 `SourcePageResponse` 的契约（"PDF-internal page number (null for text assets)"）对 txt/docx 置 null，此前固定写 1。
+  - `retry` 的控制器 javadoc 写着"非 FAILED → 409"，实现却返回未改动的作业（→200 的假成功）；改为真正 409。
+  - `KnowledgePointProvenanceIntegrationTest` 的 `ingestTextSource` 仍在 create 响应上断言 `SUCCEEDED`（同步契约残留），改用 `AsyncIngestionJobs.createAndAwait(..., "NEEDS_REVIEW")`。
+  - 测量：摄取 IT 从 33 failures + 1 error 降到 2 failures；Provenance 11 failures 归零。
+- 剩余 2 个摄取失败，都需要产品口径而不是改代码：`duplicateCreateOnSucceededAssetReturns409`（service 里根本没有去重规则，且作业生命周期里没有 `SUCCEEDED` 这个状态，测试前提要先定）；`imageRetryOnFailedThenSucceedDoesNotDuplicate`（断言 create 同步返回 `FAILED`，注释还引用了 AI 作业才有的 PENDING/RUNNING/SUCCEEDED —— 该文件正被另一位编辑者改写，不动）。
 - 协作：本轮期间另一个编辑者在 12:50 独立改写了 4 个摄取 IT 与 `testsupport/AsyncIngestionJobs`（把同步断言改成轮询终态，并把终态从测试原先写的 `SUCCEEDED` 纠正为生命周期里的 `NEEDS_REVIEW`）。这些改动不属于本次提交。
 
 ## 2026-09-24 — 前端联调清单转来的后端缺陷修复
