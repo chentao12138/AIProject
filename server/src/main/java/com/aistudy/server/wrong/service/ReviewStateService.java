@@ -48,6 +48,7 @@ public class ReviewStateService {
         }
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
         int updated = reviewStateMapper.upsert(
+                existing.getId(),
                 spaceId, ownerSubject, targetType, targetId,
                 existing.getEaseFactor(), existing.getIntervalDays(),
                 existing.getRepetitions(), existing.getPolicyVersion(),
@@ -106,6 +107,7 @@ public class ReviewStateService {
             state.setCreatedAt(now);
             state.setUpdatedAt(now);
             reviewStateMapper.upsert(
+                    null,
                     spaceId, ownerSubject, targetType, targetId,
                     result.easeFactor(), result.intervalDays(), newRepetitions,
                     DEFAULT_POLICY_VERSION, nextDue, now, now);
@@ -113,6 +115,7 @@ public class ReviewStateService {
         }
 
         int updated = reviewStateMapper.upsert(
+                existing.getId(),
                 spaceId, ownerSubject, targetType, targetId,
                 result.easeFactor(), result.intervalDays(), newRepetitions,
                 DEFAULT_POLICY_VERSION, nextDue, existing.getCreatedAt(), now);

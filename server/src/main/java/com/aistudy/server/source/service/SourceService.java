@@ -105,7 +105,7 @@ public class SourceService {
         if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
             return null;
         }
-        return sourceMapper.selectBySpaceId(spaceId);
+        return sourceMapper.selectBySpaceId(spaceId, ownerSubject);
     }
 
     public Source getMine(String ownerSubject, Long spaceId, Long sourceId) {

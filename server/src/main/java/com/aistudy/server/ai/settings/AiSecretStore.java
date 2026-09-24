@@ -1,6 +1,8 @@
 package com.aistudy.server.ai.settings;
 
 import com.aistudy.server.ai.config.AiProperties;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -19,10 +21,10 @@ import org.springframework.web.server.ResponseStatusException;
  *
  * <p>DB holds AES-GCM ciphertext only
  * ({@code Base64(IV(12) || ciphertext+tag)}; unique IV per encryption).
- * Master key is {@code aistudy.ai.secret-key} (Base64, ≥256-bit) from the
- * environment. Never logs or returns the plaintext key. Missing master key
- * does not break app startup; use of an existing encrypted secret without a
- * master key fails safely.
+ * Master key is {@code aistudy.ai.secret-key} (Base64 decoding to exactly 32
+ * bytes, i.e. AES-256) from the environment. Never logs or returns the
+ * plaintext key. Missing master key does not break app startup; an
+ * unusable one fails at startup rather than at the first save.
  */
 @Service
 public class AiSecretStore {
@@ -114,8 +116,11 @@ public class AiSecretStore {
 
     private void requireMasterKey() {
         if (masterKey == null) {
-            throw new IllegalStateException(
-                    "AI secret store is not configured (AISTUDY_AI_SECRET_KEY missing)");
+            // Operator configuration gap, not a client error: a stable code lets
+            // the UI say "this server cannot store keys" instead of "500".
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
+                    ApiErrorCodes.AI_NOT_CONFIGURED,
+                    "服务器未配置 AI 密钥存储（AISTUDY_AI_SECRET_KEY），暂时无法保存 API Key。");
         }
     }
 
@@ -167,9 +172,14 @@ public class AiSecretStore {
         }
         try {
             byte[] keyBytes = Base64.getDecoder().decode(secretKey.trim());
-            if (keyBytes.length < 32) {
-                throw new IllegalStateException(
-                        "AISTUDY_AI_SECRET_KEY must decode to at least 256 bits");
+            // AES accepts 16/24/32-byte keys only. A longer key would pass a
+            // "at least 256-bit" check and then fail inside Cipher.init at the
+            // first save, surfacing as a 500 on PUT /settings/ai — so the only
+            // accepted shape here is exactly AES-256.
+            if (keyBytes.length != 32) {
+                throw new IllegalStateException("AISTUDY_AI_SECRET_KEY must decode to exactly "
+                        + "256 bits for AES-256-GCM (Base64 of 32 bytes); got "
+                        + keyBytes.length + " bytes");
             }
             return new SecretKeySpec(keyBytes, "AES");
         } catch (IllegalArgumentException e) {

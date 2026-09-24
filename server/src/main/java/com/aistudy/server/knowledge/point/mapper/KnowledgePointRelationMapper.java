@@ -32,5 +32,6 @@ public interface KnowledgePointRelationMapper extends BaseMapper<KnowledgePointR
             + "WHERE kpr.id = #{relationId} AND kpr.space_id = #{spaceId} "
             + "  AND ls.owner_subject = #{ownerSubject}")
     KnowledgePointRelation selectByIdAndSpace(@Param("relationId") Long relationId,
-                                              @Param("spaceId") Long spaceId);
+                                              @Param("spaceId") Long spaceId,
+                                              @Param("ownerSubject") String ownerSubject);
 }

@@ -82,7 +82,8 @@ public class KnowledgePointRelationService {
         if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
-        KnowledgePointRelation existing = knowledgePointRelationMapper.selectByIdAndSpace(relationId, spaceId);
+        KnowledgePointRelation existing = knowledgePointRelationMapper.selectByIdAndSpace(
+                relationId, spaceId, ownerSubject);
         if (existing == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "relation not found");
         }

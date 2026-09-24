@@ -6,16 +6,24 @@ import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -114,6 +122,82 @@ public class ApiExceptionHandler {
     public ProblemDetail handleIllegalState(IllegalStateException ex, HttpServletRequest request) {
         log.error("Unhandled server state requestId={} path={}", requestId(), request.getRequestURI(), ex);
         return problem(500, ApiErrorCodes.INTERNAL_ERROR, "服务器暂时无法完成请求，请稍后重试。", request);
+    }
+
+    /** A body that never reached a controller method: unreadable or wrong shape. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ProblemDetail handleUnreadableBody(HttpMessageNotReadableException ex,
+                                              HttpServletRequest request) {
+        log.warn("Unreadable request body requestId={} path={} reason={}",
+                requestId(), request.getRequestURI(), ex.getMessage());
+        return problem(400, ApiErrorCodes.VALIDATION_ERROR, "请求体无法解析。", request);
+    }
+
+    @ExceptionHandler({MissingServletRequestParameterException.class,
+            MethodArgumentTypeMismatchException.class})
+    public ProblemDetail handleBadParameter(Exception ex, HttpServletRequest request) {
+        log.warn("Rejected parameter requestId={} path={} reason={}",
+                requestId(), request.getRequestURI(), ex.getMessage());
+        return problem(400, ApiErrorCodes.VALIDATION_ERROR, "请求包含无法处理的参数。", request);
+    }
+
+    /**
+     * Declared so {@link #handleUnexpected} cannot turn a missing route into a
+     * 500: unknown paths stay 404, and they now speak ProblemDetail too.
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ProblemDetail handleNoHandler(Exception ex, HttpServletRequest request) {
+        return problem(404, ApiErrorCodes.NOT_FOUND, "请求的资源不存在。", request);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ProblemDetail handleMethodNotSupported(HttpRequestMethodNotSupportedException ex,
+                                                  HttpServletRequest request) {
+        return problem(405, ApiErrorCodes.forStatus(405), "该路径不支持此 HTTP 方法。", request);
+    }
+
+    /**
+     * Last line of defence: anything not matched above is logged with its stack
+     * against the response {@code requestId} and rendered as a §12 ProblemDetail,
+     * so no failure shape escapes into the servlet container's error page.
+     *
+     * <p>The advice runs before Spring's own resolvers, so a class-level
+     * {@link ResponseStatus} would silently stop working here: it is re-applied
+     * rather than flattened into a 500.
+     */
+    @ExceptionHandler(Exception.class)
+    public ProblemDetail handleUnexpected(Exception ex, HttpServletRequest request) {
+        ResponseStatus annotated = statusAnnotationOf(ex);
+        int status = annotated == null ? 500 : annotated.code().value();
+        if (status < 500) {
+            log.warn("Rejected request requestId={} path={} type={}",
+                    requestId(), request.getRequestURI(), ex.getClass().getName());
+        } else {
+            log.error("Unhandled exception requestId={} path={} type={}",
+                    requestId(), request.getRequestURI(), ex.getClass().getName(), ex);
+        }
+        String code = annotated != null
+                ? ApiErrorCodes.forStatus(status)
+                : ApiErrorCodes.INTERNAL_ERROR;
+        String detail = annotated != null && !annotated.reason().isEmpty()
+                ? annotated.reason()
+                : (status >= 500 ? "服务器暂时无法完成请求，请稍后重试。" : fallbackDetail(status));
+        return problem(status, code, detail, request);
+    }
+
+    /** Mirrors Spring's resolver: the exception itself, then its cause chain. */
+    private ResponseStatus statusAnnotationOf(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current == current.getCause()) {
+                break;
+            }
+            ResponseStatus annotated =
+                    AnnotatedElementUtils.findMergedAnnotation(current.getClass(), ResponseStatus.class);
+            if (annotated != null) {
+                return annotated;
+            }
+        }
+        return null;
     }
 
     private ProblemDetail problem(int status, String code, String detail, HttpServletRequest request) {

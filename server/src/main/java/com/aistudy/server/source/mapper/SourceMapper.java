@@ -86,21 +86,18 @@ public interface SourceMapper extends BaseMapper<Source> {
     /**
      * Returns all sources of one space, newest first. The caller
      * MUST have already proven (owner-scoped) that {@code spaceId}
-     * belongs to the current user; this query is space-scoped only.
+     * belongs to the current user; {@code ownerSubject} re-states that
+     * boundary in SQL so this query can never be reached without it.
      *
      * @param spaceId the parent space id from the path
+     * @param ownerSubject the authenticated JWT subject owning the space
      * @return sources of the space, newest first
      */
     @Select("SELECT s.* FROM source s JOIN learning_space ls ON ls.id = s.space_id "
             + "WHERE s.space_id = #{spaceId} AND ls.owner_subject = #{ownerSubject} "
             + "ORDER BY s.created_at DESC, s.id DESC")
-    List<Source> selectBySpaceId(@Param("spaceId") Long spaceId);
-
-    @Select("SELECT s.* FROM source s JOIN learning_space ls ON ls.id = s.space_id "
-            + "WHERE s.space_id = #{spaceId} AND ls.owner_subject = #{ownerSubject} "
-            + "ORDER BY s.created_at DESC, s.id DESC")
-    List<Source> selectByOwnerIncludingArchived(@Param("spaceId") Long spaceId,
-                                                @Param("ownerSubject") String ownerSubject);
+    List<Source> selectBySpaceId(@Param("spaceId") Long spaceId,
+                                 @Param("ownerSubject") String ownerSubject);
 
     @Update("UPDATE source SET title = #{title}, updated_at = #{updatedAt} "
             + "WHERE id = #{sourceId} AND space_id = #{spaceId}")

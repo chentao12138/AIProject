@@ -27,16 +27,23 @@ public interface ReviewStateMapper extends BaseMapper<ReviewState> {
                                         @Param("targetType") String targetType,
                                         @Param("targetId") Long targetId);
 
-    /** Upserts the state (INSERT on absent, UPDATE on present). */
+    /**
+     * Upserts the state: UPDATE when {@code stateId} identifies the existing row,
+     * INSERT when it is null.
+     *
+     * <p>The branch keys off a bound parameter on purpose — {@code _index} is only
+     * defined inside a {@code <foreach>}, so testing it here always took the INSERT
+     * arm and the second review of one target hit uq_review_state_target.
+     */
     @Update("<script>"
-            + "<if test='_index != null and _index > 0'>"
+            + "<if test='stateId != null'>"
             + "UPDATE review_state SET "
             + "    ease_factor = #{easeFactor}, interval_days = #{intervalDays}, "
             + "    repetitions = #{repetitions}, policy_version = #{policyVersion}, "
             + "    next_due_at = #{nextDueAt}, updated_at = #{updatedAt} "
-            + "WHERE id = #{id} AND space_id = #{spaceId}"
+            + "WHERE id = #{stateId} AND space_id = #{spaceId}"
             + "</if>"
-            + "<if test='_index == null or _index == 0'>"
+            + "<if test='stateId == null'>"
             + "INSERT INTO review_state "
             + "    (user_subject, space_id, target_type, target_id, "
             + "     ease_factor, interval_days, repetitions, policy_version, "
@@ -47,7 +54,8 @@ public interface ReviewStateMapper extends BaseMapper<ReviewState> {
             + "     #{nextDueAt}, #{createdAt}, #{updatedAt})"
             + "</if>"
             + "</script>")
-    int upsert(@Param("spaceId") Long spaceId,
+    int upsert(@Param("stateId") Long stateId,
+               @Param("spaceId") Long spaceId,
                @Param("userSubject") String userSubject,
                @Param("targetType") String targetType,
                @Param("targetId") Long targetId,
