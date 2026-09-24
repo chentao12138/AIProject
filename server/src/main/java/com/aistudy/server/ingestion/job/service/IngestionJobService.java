@@ -1,366 +1,522 @@
 package com.aistudy.server.ingestion.job.service;
 
-import com.aistudy.server.ingestion.extract.ContentExtractionService;
-import com.aistudy.server.ingestion.extract.IngestionParseException;
-import com.aistudy.server.ingestion.extract.TxtMarkdownContentParser.ParsedDocument;
+import com.aistudy.server.config.properties.IngestionWorkerProperties;
+import com.aistudy.server.ingestion.extract.DocxContentParser;
+import com.aistudy.server.ingestion.extract.TextMarkdownContentParser;
 import com.aistudy.server.ingestion.image.ImageContentExtractionService;
-import com.aistudy.server.ingestion.image.ImageExtractionException;
 import com.aistudy.server.ingestion.job.entity.IngestionJob;
 import com.aistudy.server.ingestion.job.mapper.IngestionJobMapper;
 import com.aistudy.server.ingestion.pdf.PdfContentExtractionService;
-import com.aistudy.server.ingestion.pdf.PdfExtractionException;
+import com.aistudy.server.ingestion.revision.entity.ExtractionRevision;
+import com.aistudy.server.ingestion.revision.service.ExtractionRevisionService;
 import com.aistudy.server.ingestion.zip.ZipArchiveInspector;
 import com.aistudy.server.ingestion.zip.ZipInspectionResult;
 import com.aistudy.server.ingestion.zip.ZipSafetyLimits;
-import com.aistudy.server.ingestion.zip.ZipViolation;
 import com.aistudy.server.source.asset.entity.SourceAsset;
+import com.aistudy.server.source.asset.mapper.SourceAssetMapper;
 import com.aistudy.server.source.asset.service.SourceAssetService;
+import com.aistudy.server.source.entity.Source;
+import com.aistudy.server.source.mapper.SourceMapper;
 import com.aistudy.server.source.service.SourceService;
+import com.aistudy.server.space.service.LearningSpaceService;
+import com.aistudy.server.storage.StorageMetadata;
+import com.aistudy.server.storage.StorageResult;
 import com.aistudy.server.storage.StorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.unit.DataSize;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
-/**
- * BUSINESS-005 — application service for IngestionJob (process state
- * for one ingestion attempt) plus the synchronous ZIP safety
- * validation of the V1 pipeline.
- *
- * <p>V1 dispatches to TXT/Markdown, PDF, or image ingestion. Each
- * path validates the asset, extracts deterministic metadata/text,
- * and persists one SourcePage plus optional ContentBlocks inside
- * the surrounding job transaction.
- */
 @Service
 public class IngestionJobService {
 
-    public static final String STATUS_PENDING = "PENDING";
-    public static final String STATUS_RUNNING = "RUNNING";
-    public static final String STATUS_SUCCEEDED = "SUCCEEDED";
-    public static final String STATUS_FAILED = "FAILED";
-
-    public static final String STAGE_QUEUED = "QUEUED";
-    public static final String STAGE_IMPORTING = "IMPORTING";
-    public static final String STAGE_PUBLISHED = "PUBLISHED";
-
-    /** error_message column is VARCHAR(1000) — bound before persist. */
-    private static final int MAX_ERROR_MESSAGE_LENGTH = 1000;
+    public enum IngestionStatus {
+        QUEUED, IMPORTING, EXTRACTING, STRUCTURING, AI_PROCESSING, NEEDS_REVIEW, PUBLISHED, PARTIAL_FAILED, FAILED
+    }
 
     private static final Logger log = LoggerFactory.getLogger(IngestionJobService.class);
 
-    /** V1 text formats whose pipeline is wired (mirrors ContentExtractionService). */
-    private static final Set<String> TEXT_EXTENSIONS = Set.of("txt", "md", "markdown");
-
     private final IngestionJobMapper ingestionJobMapper;
+    private final SourceAssetMapper sourceAssetMapper;
+    private final SourceMapper sourceMapper;
+    private final LearningSpaceService learningSpaceService;
     private final SourceService sourceService;
     private final SourceAssetService sourceAssetService;
-    private final StorageService storageService;
-    private final ContentExtractionService contentExtractionService;
+    private final ThreadPoolTaskExecutor ingestionWorkerExecutor;
+    private final IngestionWorkerProperties workerProperties;
+    private final IngestionRevisionPublisher revisionPublisher;
     private final PdfContentExtractionService pdfContentExtractionService;
     private final ImageContentExtractionService imageContentExtractionService;
-    private final ZipSafetyLimits zipLimits;
+    private final TextMarkdownContentParser textMarkdownContentParser;
+    private final DocxContentParser docxContentParser;
+    private final ExtractionRevisionService extractionRevisionService;
+    private final StorageService storageService;
+    private final com.aistudy.server.ingestion.issue.service.IngestionIssueService ingestionIssueService;
 
     public IngestionJobService(IngestionJobMapper ingestionJobMapper,
+                               SourceAssetMapper sourceAssetMapper,
+                               SourceMapper sourceMapper,
+                               LearningSpaceService learningSpaceService,
                                SourceService sourceService,
                                SourceAssetService sourceAssetService,
-                               StorageService storageService,
-                               ContentExtractionService contentExtractionService,
+                               @org.springframework.beans.factory.annotation.Qualifier("ingestionWorkerExecutor")
+                               ThreadPoolTaskExecutor ingestionWorkerExecutor,
+                               IngestionWorkerProperties workerProperties,
+                               IngestionRevisionPublisher revisionPublisher,
                                PdfContentExtractionService pdfContentExtractionService,
                                ImageContentExtractionService imageContentExtractionService,
-                               @Value("${aistudy.ingestion.zip.max-entries:10000}") int maxEntries,
-                               @Value("${aistudy.ingestion.zip.max-entry-uncompressed-bytes:4GB}") DataSize maxEntryBytes,
-                               @Value("${aistudy.ingestion.zip.max-total-uncompressed-bytes:16GB}") DataSize maxTotalBytes,
-                               @Value("${aistudy.ingestion.zip.max-compression-ratio:200}") long maxCompressionRatio) {
+                               TextMarkdownContentParser textMarkdownContentParser,
+                               DocxContentParser docxContentParser,
+                               ExtractionRevisionService extractionRevisionService,
+                               StorageService storageService,
+                               com.aistudy.server.ingestion.issue.service.IngestionIssueService ingestionIssueService) {
         this.ingestionJobMapper = ingestionJobMapper;
+        this.sourceAssetMapper = sourceAssetMapper;
+        this.sourceMapper = sourceMapper;
+        this.learningSpaceService = learningSpaceService;
         this.sourceService = sourceService;
         this.sourceAssetService = sourceAssetService;
-        this.storageService = storageService;
-        this.contentExtractionService = contentExtractionService;
+        this.ingestionWorkerExecutor = ingestionWorkerExecutor;
+        this.workerProperties = workerProperties;
+        this.revisionPublisher = revisionPublisher;
         this.pdfContentExtractionService = pdfContentExtractionService;
         this.imageContentExtractionService = imageContentExtractionService;
-        this.zipLimits = new ZipSafetyLimits(maxEntries, maxEntryBytes.toBytes(),
-                maxTotalBytes.toBytes(), maxCompressionRatio);
+        this.textMarkdownContentParser = textMarkdownContentParser;
+        this.docxContentParser = docxContentParser;
+        this.extractionRevisionService = extractionRevisionService;
+        this.storageService = storageService;
+        this.ingestionIssueService = ingestionIssueService;
     }
 
-    /**
-     * Creates one ingestion job for the caller's own source + asset
-     * and runs the V1 pipeline steps that exist (format dispatch).
-     *
-     * @return the persisted job, or {@code null} when source/asset is
-     *         absent or not owned (404)
-     * @throws ResponseStatusException 409 when the asset already has a
-     *         PENDING/RUNNING/SUCCEEDED job; 422 INGESTION_NOT_READY
-     *         when the asset format has no wired pipeline
-     */
     @Transactional
-    public IngestionJob create(String ownerSubject,
-                               Long spaceId,
-                               Long sourceId,
-                               Long assetId) {
-        if (sourceService.getMine(ownerSubject, spaceId, sourceId) == null) {
+    public IngestionJob create(String ownerSubject, Long spaceId, Long sourceId) {
+        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
             return null;
         }
-        SourceAsset asset = sourceAssetService.getMine(ownerSubject, spaceId, sourceId, assetId);
-        if (asset == null) {
+        Source source = sourceMapper.selectByIdAndSpaceAndOwner(sourceId, spaceId, ownerSubject);
+        if (source == null) {
             return null;
         }
-
-        if (ingestionJobMapper.countActiveOrSucceeded(spaceId, sourceId, assetId) > 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "an ingestion job for this asset already exists "
-                            + "(pending, running or succeeded)");
+        List<SourceAsset> assets = sourceAssetMapper.selectBySpaceSourceOwner(spaceId, sourceId, ownerSubject);
+        if (assets == null || assets.isEmpty()) {
+            return null;
         }
-
-        if (!isSupportedAsset(asset)) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "INGESTION_NOT_READY: no ingestion pipeline for this asset format yet");
-        }
-
-        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        LocalDateTime now = LocalDateTime.now();
         IngestionJob job = new IngestionJob();
         job.setSpaceId(spaceId);
         job.setSourceId(sourceId);
-        job.setAssetId(assetId);
-        job.setStatus(STATUS_PENDING);
-        job.setStage(STAGE_QUEUED);
+        job.setCreatedByUserId(ownerSubject);
+        job.setStatus(IngestionStatus.QUEUED.name());
+        job.setStage("IMPORT");
         job.setProgressPercent(0);
         job.setRetryCount(0);
-        job.setCreatedByUserId(ownerSubject);
         job.setCreatedAt(now);
         job.setUpdatedAt(now);
         ingestionJobMapper.insert(job);
-
-        if (isZipAsset(asset)) {
-            runZipSafetyGate(job, asset);
-        } else if (isTextAsset(asset)) {
-            runTextPipeline(job, asset);
-        } else if (isPdfAsset(asset)) {
-            runPdfPipeline(job, asset);
-        } else if (isImageAsset(asset)) {
-            runImagePipeline(job, asset);
-        } else {
-            markFailed(job, IngestionErrorCode.UNSUPPORTED_FORMAT,
-                    "asset format has no ingestion pipeline");
-        }
+        submit(job.getId());
         return job;
     }
 
-    public IngestionJob getMine(String ownerSubject, Long spaceId, Long jobId) {
-        return ingestionJobMapper.selectByIdSpaceOwner(jobId, spaceId, ownerSubject);
+    /**
+     * Hands the job to the worker pool AFTER the caller's transaction commits.
+     *
+     * <p>Submitting inside {@code @Transactional} raced the insert: the worker
+     * could not yet see the row, {@code claimQueued} matched nothing, and the
+     * job stayed QUEUED with nobody scheduled to pick it up.
+     *
+     * <p>A rejected submission is not an error the caller sees: the row remains
+     * QUEUED and the periodic recovery drain dispatches it once the pool frees.
+     */
+    private void submit(Long jobId) {
+        Runnable dispatch = () -> {
+            try {
+                ingestionWorkerExecutor.execute(() -> processJob(jobId));
+            } catch (RuntimeException ex) {
+                log.warn("Ingestion job {} queued for later dispatch: {}", jobId, ex.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    dispatch.run();
+                }
+            });
+        } else {
+            dispatch.run();
+        }
     }
 
     public List<IngestionJob> listMine(String ownerSubject, Long spaceId, Long sourceId) {
-        if (sourceService.getMine(ownerSubject, spaceId, sourceId) == null) {
+        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
             return null;
         }
         return ingestionJobMapper.selectBySpaceSourceOwner(spaceId, sourceId, ownerSubject);
     }
 
+    public IngestionJob getMine(String ownerSubject, Long spaceId, Long jobId) {
+        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
+            return null;
+        }
+        return ingestionJobMapper.selectByIdSpaceOwner(jobId, spaceId, ownerSubject);
+    }
+
+    private static final String WORKER_ID =
+            "worker-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+
+    private void processJob(Long jobId) {
+        IngestionJob job = ingestionJobMapper.selectById(jobId);
+        if (job == null) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        int claimed = ingestionJobMapper.claimQueued(
+                jobId, WORKER_ID, now, now.minus(workerProperties.getStaleLease()));
+        if (claimed == 0) {
+            // Another worker owns this job, or it is not QUEUED.
+            return;
+        }
+        job = ingestionJobMapper.selectById(jobId);
+        try {
+            // Stage-aware resume: skip IMPORT artifacts already marked complete.
+            boolean importDone = "IMPORT".equalsIgnoreCase(job.getLastStageStatus());
+            if (!importDone) {
+                updateStatus(job, IngestionStatus.IMPORTING.name(), "IMPORT", 10);
+            }
+
+            List<SourceAsset> assets = discoverAssets(job);
+            if (assets.isEmpty()) {
+                ingestionJobMapper.markTerminalFailure(job.getId(), IngestionStatus.FAILED.name(),
+                        "IMPORT", 10, "INGESTION_NO_ASSETS",
+                        "source has no ingestible assets", LocalDateTime.now());
+                return;
+            }
+
+            // Create DRAFT revision BEFORE extraction so pages/blocks can own it.
+            ExtractionRevision revision = extractionRevisionService.createForVerifiedSource(
+                    job.getSpaceId(), job.getSourceId(), new ExtractionRevision());
+            if (revision == null) {
+                throw new IllegalStateException("failed to create extraction revision");
+            }
+            ingestionJobMapper.markStageComplete(jobId, "IMPORT", LocalDateTime.now());
+
+            int processed = 0;
+            int failed = 0;
+            int total = assets.size();
+            boolean anyLowConfidence = false;
+            LocalDateTime lastBeat = LocalDateTime.now();
+
+            for (SourceAsset asset : assets) {
+                int progress = 30 + (int) (40.0 * processed / Math.max(total, 1));
+                updateStatus(job, IngestionStatus.EXTRACTING.name(), "EXTRACT", progress);
+                try {
+                    boolean low = extractAsset(asset);
+                    if (low) {
+                        anyLowConfidence = true;
+                    }
+                } catch (Exception e) {
+                    log.warn("asset {} extraction failed: {}", asset.getId(), e.getMessage());
+                    failed++;
+                }
+                processed++;
+                lastBeat = heartbeat(jobId, lastBeat);
+            }
+
+            updateStatus(job, IngestionStatus.STRUCTURING.name(), "STRUCTURE", 70);
+            LocalDateTime stampAt = LocalDateTime.now();
+            revisionPublisher.publish(job.getSpaceId(), job.getSourceId(), revision.getId(), stampAt);
+            ingestionIssueService.recordIfLowConfidence(
+                    job.getSpaceId(), job.getSourceId(), job.getId(),
+                    revision.getId(), anyLowConfidence, failed > 0);
+            ingestionJobMapper.markStageComplete(jobId, "EXTRACT", LocalDateTime.now());
+
+            if (failed > 0) {
+                updateStatus(job, IngestionStatus.PARTIAL_FAILED.name(), "REVIEW", 100);
+            } else {
+                updateStatus(job, IngestionStatus.NEEDS_REVIEW.name(), "REVIEW", 100);
+            }
+        } catch (Exception e) {
+            log.error("Ingestion job {} failed", jobId, e);
+            String safe = e.getMessage() == null ? e.getClass().getSimpleName()
+                    : (e.getMessage().length() > 400 ? e.getMessage().substring(0, 400) : e.getMessage());
+            ingestionJobMapper.markTerminalFailure(jobId, IngestionStatus.FAILED.name(),
+                    job.getStage(), job.getProgressPercent(), "INGESTION_FAILED", safe, LocalDateTime.now());
+        }
+    }
+
+    /**
+     * Renews this worker's claim when the lease is running out. A multi-hundred
+     * page OCR pass can otherwise outlive {@code stale-lease} and be requeued
+     * while still running, putting two workers on the same source.
+     */
+    private LocalDateTime heartbeat(Long jobId, LocalDateTime lastBeat) {
+        LocalDateTime now = LocalDateTime.now();
+        if (lastBeat != null && java.time.Duration.between(lastBeat, now)
+                .compareTo(workerProperties.getHeartbeat()) < 0) {
+            return lastBeat;
+        }
+        ingestionJobMapper.refreshClaim(jobId, WORKER_ID, now);
+        return now;
+    }
+
     @Transactional
     public IngestionJob retry(String ownerSubject, Long spaceId, Long jobId) {
-        IngestionJob job = getMine(ownerSubject, spaceId, jobId);
+        IngestionJob existing = getMine(ownerSubject, spaceId, jobId);
+        if (existing == null) {
+            return null;
+        }
+        if (!IngestionStatus.FAILED.name().equals(existing.getStatus())
+                && !IngestionStatus.PARTIAL_FAILED.name().equals(existing.getStatus())) {
+            return existing;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int updated = ingestionJobMapper.requeueForStageRetry(
+                jobId, spaceId, existing.getRetryCount() + 1, now);
+        if (updated == 0) {
+            return null;
+        }
+        existing.setStatus(IngestionStatus.QUEUED.name());
+        existing.setUpdatedAt(now);
+        existing.setRetryCount(existing.getRetryCount() + 1);
+        submit(jobId);
+        return existing;
+    }
+
+    /**
+     * ADMIN governance retry of any job row, without owner impersonation.
+     *
+     * <p>The governance screen used to issue its own {@code UPDATE ingestion_job
+     * SET status='QUEUED'} and stop there, which left the row waiting for a
+     * worker that only appears after a restart. Reset and dispatch are one
+     * operation here, same as the owner-facing {@link #retry}.
+     */
+    @Transactional
+    public IngestionJob adminRetry(Long jobId) {
+        IngestionJob job = jobId == null ? null : ingestionJobMapper.selectById(jobId);
         if (job == null) {
             return null;
         }
-        if (!STATUS_FAILED.equals(job.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "only FAILED jobs can be retried (current status: " + job.getStatus() + ")");
-        }
-        int retryCount = job.getRetryCount() + 1;
-        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
-        ingestionJobMapper.resetForRetry(job.getId(), retryCount, now);
-
-        job.setStatus(STATUS_PENDING);
-        job.setStage(STAGE_QUEUED);
-        job.setProgressPercent(0);
-        job.setStartedAt(null);
-        job.setFinishedAt(null);
-        job.setRetryCount(retryCount);
-        job.setErrorCode(null);
-        job.setErrorMessage(null);
-        job.setUpdatedAt(now);
-
-        SourceAsset asset = sourceAssetService.getMine(
-                ownerSubject, spaceId, job.getSourceId(), job.getAssetId());
-        if (asset != null) {
-            if (isZipAsset(asset)) {
-                runZipSafetyGate(job, asset);
-            } else if (isTextAsset(asset)) {
-                runTextPipeline(job, asset);
-            } else if (isPdfAsset(asset)) {
-                runPdfPipeline(job, asset);
-            } else if (isImageAsset(asset)) {
-                runImagePipeline(job, asset);
-            } else {
-                markFailed(job, IngestionErrorCode.UNSUPPORTED_FORMAT,
-                        "asset format has no ingestion pipeline");
-            }
-        }
-        return job;
-    }
-
-    @Transactional
-    public IngestionJob markRunning(IngestionJob job) {
-        requireStatus(job, STATUS_PENDING, "start");
-        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
-        job.setStatus(STATUS_RUNNING);
-        job.setStage(STAGE_IMPORTING);
-        job.setStartedAt(now);
-        job.setUpdatedAt(now);
-        ingestionJobMapper.updateById(job);
-        return job;
-    }
-
-    @Transactional
-    public IngestionJob markSucceeded(IngestionJob job) {
-        requireStatus(job, STATUS_RUNNING, "finish");
-        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
-        job.setStatus(STATUS_SUCCEEDED);
-        job.setStage(STAGE_PUBLISHED);
-        job.setProgressPercent(100);
-        job.setFinishedAt(now);
-        job.setUpdatedAt(now);
-        ingestionJobMapper.updateById(job);
-        return job;
-    }
-
-    @Transactional
-    public IngestionJob markFailed(IngestionJob job,
-                                   IngestionErrorCode errorCode,
-                                   String safeMessage) {
-        if (!STATUS_PENDING.equals(job.getStatus()) && !STATUS_RUNNING.equals(job.getStatus())) {
-            throw new IllegalStateException("cannot fail job " + job.getId()
-                    + " in status " + job.getStatus());
-        }
-        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
-        job.setStatus(STATUS_FAILED);
-        job.setFinishedAt(now);
-        job.setErrorCode(errorCode.code());
-        job.setErrorMessage(boundMessage(safeMessage));
-        job.setUpdatedAt(now);
-        ingestionJobMapper.updateById(job);
-        return job;
-    }
-
-    // ==================== pipeline steps ====================
-
-    private void runZipSafetyGate(IngestionJob job, SourceAsset asset) {
-        ZipInspectionResult result = inspectZipAsset(asset);
-        if (!result.valid()) {
-            markFailed(job, IngestionErrorCode.ZIP_SAFETY_VIOLATION,
-                    zipViolationSummary(result.violations()));
-        }
-    }
-
-    private void runTextPipeline(IngestionJob job, SourceAsset asset) {
-        markRunning(job);
-        try {
-            ParsedDocument doc = contentExtractionService.extractText(asset);
-            contentExtractionService.persistPageAndBlocks(asset, doc);
-            markSucceeded(job);
-        } catch (IngestionParseException e) {
-            markFailed(job, e.errorCode(), e.safeMessage());
-        }
-    }
-
-    private void runPdfPipeline(IngestionJob job, SourceAsset asset) {
-        markRunning(job);
-        try {
-            pdfContentExtractionService.extractAndPersist(asset);
-            markSucceeded(job);
-        } catch (PdfExtractionException e) {
-            markFailed(job, e.errorCode(), e.safeMessage());
-        }
-    }
-
-    private void runImagePipeline(IngestionJob job, SourceAsset asset) {
-        markRunning(job);
-        try {
-            imageContentExtractionService.extractAndPersist(asset);
-            markSucceeded(job);
-        } catch (ImageExtractionException e) {
-            markFailed(job, e.errorCode(), e.safeMessage());
-        }
-    }
-
-    // ==================== helpers ====================
-
-    private static void requireStatus(IngestionJob job, String expected, String action) {
-        if (!expected.equals(job.getStatus())) {
-            throw new IllegalStateException("cannot " + action + " job " + job.getId()
-                    + " in status " + job.getStatus() + " (expected " + expected + ")");
-        }
-    }
-
-    private ZipInspectionResult inspectZipAsset(SourceAsset asset) {
-        try (InputStream in = storageService.load(asset.getStorageKey())) {
-            return ZipArchiveInspector.inspect(in, zipLimits);
-        } catch (IOException e) {
-            throw new IllegalStateException("failed to load asset for ZIP inspection", e);
-        }
-    }
-
-    private static String zipViolationSummary(List<ZipViolation> violations) {
-        return boundMessage(violations.stream()
-                .limit(5)
-                .map(ZipViolation::message)
-                .collect(Collectors.joining("; ")));
-    }
-
-    private static String boundMessage(String message) {
-        if (message == null) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = ingestionJobMapper.requeueForAdminRetry(jobId, job.getSpaceId(), now);
+        if (updated == 0) {
+            // Terminal-for-this-operation state (NEEDS_REVIEW / PUBLISHED).
             return null;
         }
-        return message.length() <= MAX_ERROR_MESSAGE_LENGTH
-                ? message
-                : message.substring(0, MAX_ERROR_MESSAGE_LENGTH);
+        submit(jobId);
+        return ingestionJobMapper.selectById(jobId);
     }
 
-    private static boolean isSupportedAsset(SourceAsset asset) {
-        return isZipAsset(asset) || isTextAsset(asset) || isPdfAsset(asset) || isImageAsset(asset);
+    /**
+     * Requeue abandoned claims and dispatch QUEUED jobs.
+     *
+     * <p>Runs at startup AND on a schedule: a job whose worker dies is only
+     * reclaimable once its claim ages past the lease, so a startup-only sweep
+     * would strand it until the next restart.
+     */
+    public int recoverStaleJobs() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime staleBefore = now.minus(workerProperties.getStaleLease());
+        int requeued = ingestionJobMapper.requeueStaleProcessing(now, staleBefore);
+        List<IngestionJob> queued = ingestionJobMapper.selectQueued(50);
+        if (queued != null) {
+            for (IngestionJob job : queued) {
+                submit(job.getId());
+            }
+        }
+        return requeued + (queued == null ? 0 : queued.size());
     }
 
-    private static boolean isZipAsset(SourceAsset asset) {
-        return SourceAssetService.ROLE_ORIGINAL_PACKAGE.equals(asset.getAssetRole());
+    private List<SourceAsset> discoverAssets(IngestionJob job) {
+        List<SourceAsset> allAssets = sourceAssetMapper.selectBySpaceSource(
+                job.getSpaceId(), job.getSourceId());
+        if (allAssets == null || allAssets.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<SourceAsset> toProcess = new ArrayList<>();
+        List<SourceAsset> zipAssets = new ArrayList<>();
+
+        for (SourceAsset asset : allAssets) {
+            String ext = SourceAssetService.extractExtension(asset.getOriginalName());
+            if ("zip".equalsIgnoreCase(ext)) {
+                zipAssets.add(asset);
+            } else {
+                toProcess.add(asset);
+            }
+        }
+
+        for (SourceAsset zipAsset : zipAssets) {
+            try {
+                List<SourceAsset> entries = extractZipEntries(zipAsset);
+                toProcess.addAll(entries);
+            } catch (Exception e) {
+                log.error("ZIP extraction failed for asset {}", zipAsset.getId(), e);
+                throw new IllegalStateException("ZIP extraction failed for asset " + zipAsset.getId(), e);
+            }
+        }
+
+        return toProcess;
     }
 
-    private static boolean isTextAsset(SourceAsset asset) {
-        String name = asset.getOriginalName() == null ? "" : asset.getOriginalName();
-        int dot = name.lastIndexOf('.');
-        if (dot < 0 || dot == name.length() - 1) {
+    private List<SourceAsset> extractZipEntries(SourceAsset zipAsset) throws IOException {
+        try (InputStream in = storageService.load(zipAsset.getStorageKey())) {
+            java.nio.file.Path temp = Files.createTempFile("aistudy-zip-extract-", ".zip");
+            Files.copy(in, temp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+            ZipInspectionResult inspection = ZipArchiveInspector.inspectFile(
+                    temp, ZipSafetyLimits.defaults());
+            if (!inspection.valid()) {
+                throw new IllegalStateException("ZIP safety inspection failed: " + inspection.violations());
+            }
+
+            try (ZipFile zip = new ZipFile(temp.toFile())) {
+                Enumeration<? extends ZipEntry> zipEntries = zip.entries();
+                List<SourceAsset> entries = new ArrayList<>();
+                while (zipEntries.hasMoreElements()) {
+                    ZipEntry entry = zipEntries.nextElement();
+                    if (entry.isDirectory()) {
+                        continue;
+                    }
+                    String name = entry.getName();
+                    if (name == null || name.isBlank()) {
+                        continue;
+                    }
+                    if (name.charAt(0) == '/' || name.charAt(0) == '\\'
+                            || name.contains("..")) {
+                        continue;
+                    }
+
+                    String ext = SourceAssetService.extractExtension(name);
+                    if (ext == null || !SourceAssetService.isAllowedExtension(ext)) {
+                        continue;
+                    }
+
+                    try (InputStream entryIn = zip.getInputStream(entry)) {
+                        StorageResult stored = storageService.store(entryIn, new StorageMetadata());
+                        SourceAsset entryAsset = new SourceAsset();
+                        entryAsset.setSpaceId(zipAsset.getSpaceId());
+                        entryAsset.setSourceId(zipAsset.getSourceId());
+                        entryAsset.setAssetRole(SourceAssetService.roleForExtension(ext));
+                        entryAsset.setOriginalName(name);
+                        entryAsset.setOriginalRelativePath(name);
+                        entryAsset.setStorageKey(stored.storageKey());
+                        entryAsset.setMimeType(SourceAssetService.mimeForExtension(ext));
+                        entryAsset.setSizeBytes(stored.sizeBytes());
+                        entryAsset.setSha256(stored.sha256());
+                        entryAsset.setCreatedAt(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS));
+                        sourceAssetMapper.insert(entryAsset);
+                        entries.add(entryAsset);
+                    }
+                }
+                return entries;
+            } finally {
+                Files.deleteIfExists(temp);
+            }
+        }
+    }
+
+    /** @return true when extraction reported low OCR/text confidence */
+    private boolean extractAsset(SourceAsset asset) {
+        String ext = SourceAssetService.extractExtension(asset.getOriginalName());
+        if (ext == null) {
             return false;
         }
-        return TEXT_EXTENSIONS.contains(name.substring(dot + 1).toLowerCase(Locale.ROOT));
+        return switch (ext.toLowerCase()) {
+            case "pdf" -> pdfContentExtractionService.extractAndPersist(asset);
+            case "jpg", "jpeg", "png", "webp" -> imageContentExtractionService.extractAndPersist(asset);
+            case "docx" -> {
+                MultipartFile multipart = multipartFromAsset(asset);
+                docxContentParser.extract(multipart, asset.getSpaceId(), asset.getSourceId(), asset.getId());
+                yield false;
+            }
+            case "txt", "md", "markdown" -> {
+                MultipartFile multipart = multipartFromAsset(asset);
+                textMarkdownContentParser.extract(multipart, asset.getSpaceId(), asset.getSourceId(), asset.getId());
+                yield false;
+            }
+            default -> throw new IllegalStateException("unsupported asset extension: ." + ext);
+        };
     }
 
-    private static boolean isPdfAsset(SourceAsset asset) {
-        String name = asset.getOriginalName() == null ? "" : asset.getOriginalName();
-        int dot = name.lastIndexOf('.');
-        if (dot < 0 || dot == name.length() - 1) {
-            return false;
-        }
-        return "pdf".equals(name.substring(dot + 1).toLowerCase(Locale.ROOT));
+    private MultipartFile multipartFromAsset(SourceAsset asset) {
+        return new MultipartFile() {
+            @Override
+            public String getName() {
+                return "file";
+            }
+
+            @Override
+            public String getOriginalFilename() {
+                return asset.getOriginalName();
+            }
+
+            @Override
+            public String getContentType() {
+                return asset.getMimeType();
+            }
+
+            @Override
+            public boolean isEmpty() {
+                return asset.getSizeBytes() == null || asset.getSizeBytes() == 0;
+            }
+
+            @Override
+            public long getSize() {
+                return asset.getSizeBytes() != null ? asset.getSizeBytes() : 0;
+            }
+
+            @Override
+            public byte[] getBytes() throws IOException {
+                try (InputStream in = storageService.load(asset.getStorageKey())) {
+                    return in.readAllBytes();
+                }
+            }
+
+            @Override
+            public InputStream getInputStream() throws IOException {
+                return storageService.load(asset.getStorageKey());
+            }
+
+            @Override
+            public void transferTo(File dest) throws IOException {
+                try (InputStream in = storageService.load(asset.getStorageKey());
+                     OutputStream out = new FileOutputStream(dest)) {
+                    in.transferTo(out);
+                }
+            }
+        };
     }
 
-    private static boolean isImageAsset(SourceAsset asset) {
-        if (asset.getMimeType() == null) {
-            return false;
-        }
-        return asset.getMimeType().equals("image/png")
-                || asset.getMimeType().equals("image/jpeg");
+    /**
+     * Progress write for one stage transition. Deliberately NOT annotated
+     * {@code @Transactional}: it is called from {@code processJob} inside this
+     * same bean, where the proxy never sees the call, and each transition is a
+     * single UPDATE that autocommits on its own. Multi-statement atomicity
+     * belongs to {@link IngestionRevisionPublisher}.
+     */
+    private void updateStatus(IngestionJob job, String status, String stage, int progress) {
+        job.setStatus(status);
+        job.setStage(stage);
+        job.setProgressPercent(progress);
+        job.setUpdatedAt(LocalDateTime.now());
+        ingestionJobMapper.updateById(job);
     }
 }

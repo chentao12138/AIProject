@@ -62,6 +62,7 @@ public interface MasteryMapper extends BaseMapper<Mastery> {
                                          @Param("ownerSubject") String ownerSubject);
 
     @Update("UPDATE mastery SET mastery_score = #{score}, confidence = #{confidence}, "
+            + "algorithm_version = #{algorithmVersion}, "
             + "practice_evidence_count = #{practiceCount}, exam_evidence_count = #{examCount}, "
             + "review_evidence_count = #{reviewCount}, last_evidence_at = #{lastEvidenceAt}, "
             + "updated_at = #{updatedAt} "
@@ -71,6 +72,7 @@ public interface MasteryMapper extends BaseMapper<Mastery> {
                            @Param("userSubject") String userSubject,
                            @Param("score") Double score,
                            @Param("confidence") Double confidence,
+                           @Param("algorithmVersion") String algorithmVersion,
                            @Param("practiceCount") int practiceCount,
                            @Param("examCount") int examCount,
                            @Param("reviewCount") int reviewCount,
@@ -118,16 +120,31 @@ public interface MasteryMapper extends BaseMapper<Mastery> {
                                            @Param("kpId") Long kpId);
 
     /**
-     * Review evidence: KNOWLEDGE_POINT-targeted review records —
-     * count + latest completion timestamp (participates in
-     * lastEvidenceAt).
+     * Review evidence for a KP: total graded review records + correct
+     * reviews + latest timestamp. Includes:
+     * - KNOWLEDGE_POINT-targeted review records
+     * - QUESTION-targeted reviews whose question is linked to this KP
      */
-    @Select("SELECT COUNT(*) AS cnt, MAX(rr.completed_at) AS last_at "
+    @Select("SELECT COUNT(*) AS cnt, "
+            + "COALESCE(SUM(CASE WHEN rr.result = 'CORRECT' THEN 1 ELSE 0 END), 0) AS correct, "
+            + "MAX(rr.completed_at) AS last_at "
             + "FROM review_record rr "
             + "JOIN review_task rt ON rt.id = rr.review_task_id "
+            + "LEFT JOIN question_knowledge_point qkp "
+            + "  ON rt.target_type = 'QUESTION' AND qkp.question_id = rt.target_id "
             + "WHERE rr.space_id = #{spaceId} AND rr.user_subject = #{userSubject} "
-            + "  AND rt.target_type = 'KNOWLEDGE_POINT' AND rt.target_id = #{kpId}")
+            + "  AND rr.result IN ('CORRECT','WRONG') "
+            + "  AND ("
+            + "    (rt.target_type = 'KNOWLEDGE_POINT' AND rt.target_id = #{kpId}) "
+            + "    OR (rt.target_type = 'QUESTION' AND qkp.knowledge_point_id = #{kpId})"
+            + "  )")
     Map<String, Object> selectReviewEvidence(@Param("spaceId") Long spaceId,
                                              @Param("userSubject") String userSubject,
                                              @Param("kpId") Long kpId);
+
+    /** KP ids linked to a question (for review→mastery propagation). */
+    @Select("SELECT knowledge_point_id FROM question_knowledge_point "
+            + "WHERE space_id = #{spaceId} AND question_id = #{questionId}")
+    java.util.List<Long> selectKpIdsByQuestion(@Param("spaceId") Long spaceId,
+                                               @Param("questionId") Long questionId);
 }

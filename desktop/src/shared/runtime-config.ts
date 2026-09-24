@@ -1,5 +1,5 @@
 /**
- * Runtime configuration contract (ADR-047).
+ * Runtime configuration contract (ADR-051).
  *
  * Before this, the backend base URL was baked into BOTH bundles from
  * `VITE_API_BASE_URL` at build time: a packaged app could never be pointed at
@@ -62,7 +62,7 @@ export function parseRuntimeConfig(raw: string): RuntimeConfig {
     ? { apiBaseUrl: candidate }
     : {};
 }
-/** Read-only config surface preload exposes to the renderer (ADR-047). */
+/** Read-only config surface preload exposes to the renderer (ADR-051). */
 export interface AppConfigBridge {
   getApiBaseUrl: () => Promise<string>;
 }

@@ -1,5 +1,5 @@
 /**
- * Preload bridge surface (ADR-037, ADR-047).
+ * Preload bridge surface (ADR-037, ADR-051).
  *
  * The promise is that the renderer gets the encrypted refresh-token vault
  * plus one read-only config getter, and nothing else: no `ipcRenderer`, no

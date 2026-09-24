@@ -1,5 +1,5 @@
 /**
- * Renderer types for the preload-exposed bridges (FE-AUTH-001, ADR-047).
+ * Renderer types for the preload-exposed bridges (FE-AUTH-001, ADR-051).
  *
  * Both interfaces come from src/shared so the preload implementation and
  * this declaration cannot drift apart — previously this file restated the

@@ -65,6 +65,12 @@ public record CreateQuestionRequest(
         @Size(max = 4000, message = "referenceAnswer must be at most 4000 characters")
         String referenceAnswer,
 
+        @Size(max = 100, message = "correctOrder must be at most 100 items")
+        List<Integer> correctOrder,
+
+        @Size(max = 4000, message = "matches must be at most 4000 characters")
+        String matches,
+
         List<Long> knowledgePointIds
 ) {
 

@@ -56,7 +56,7 @@ function renderApp() {
   );
 }
 
-// ADR-047: the backend target is decided by the main process at runtime, so
+// ADR-051: the backend target is decided by the main process at runtime, so
 // nothing may issue a request (or build a client) before that answer lands.
 // The fallback inside configureApiBaseUrl() keeps the build-time default
 // usable when there is no bridge, so this never blocks startup forever.

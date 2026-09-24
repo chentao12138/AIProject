@@ -40,8 +40,9 @@ LearningSpace-scoped Business Domain
 │                                                         │
 └──────────┬──────────────────────┬────────────────┬───────┘
            │                      │                │
-           └────────── REST / WebSocket ───────────┘
+           └───────────────────── REST ─────────────────────┘
                                   │
+        （长任务用 Job 表轮询；当前没有 WebSocket / SSE / 流式端点）
                                   ▼
                       ┌────────────────────────┐
                       │ Spring Boot 3.5.x      │
@@ -98,45 +99,47 @@ Android → MySQL
 
 仍然是 **一个 Maven Project**，不是 Maven multi-module，也不是微服务。
 
-推荐包结构：
+当前实际包结构（`server/src/main/java/com/aistudy/server/`）：
 
 ```text
-server/src/main/java/<base-package>/
-├── common/
-├── auth/
-├── user/
-├── space/
-├── ingestion/
-├── content/
-├── knowledge/
-├── note/
-├── question/
-├── practice/
-├── review/
-├── exam/
-├── mastery/
-├── plan/
-├── ai/
-├── search/
-├── resource/
-├── admin/
-└── system/
+common/          跨模块基础设施：ProblemDetail 错误契约
+auth/            账号 / JWT / refresh session
+space/           LearningSpace + 作用域强制（见 §5.2）
+source/          Source / SourceAsset / SourcePage / ContentBlock / Outline / Folder
+ingestion/       IngestionJob / 解析 / OCR / ZIP / Revision / Issue
+knowledge/       Category / Point / Point-Source / Relation
+note/ question/ practice/ wrong/ exam/ mastery/ studyplan/
+ai/              provider / context / prompt / learning / explain / coach / settings
+search/ storage/ provenance/ operations/ config/ admin/
 ```
 
-小模块不要求机械使用 DDD 四层；复杂模块可采用：
+`user`/`content`/`review`/`plan`/`resource`/`system` 不是独立包：分别由
+`auth`、`source.content`、`wrong`、`studyplan`、`source.asset`+`storage`、
+`config`+`operations` 承担。
 
-```text
-api
-application
-domain
-infrastructure
-```
+小模块不要求机械使用 DDD 四层；复杂模块可采用
+`api / application / domain / infrastructure`。
 
 规则：
 
 - Controller 不承载核心业务规则。
 - Mapper 不被其他模块任意直接调用以绕过应用服务。
 - `common` 只保留真正通用能力。
+
+这些规则由 `src/test/.../architecture/ModuleBoundaryTest.java` 回读源码 import
+来检查（不依赖外部框架，离线可跑）。它带**只准收缩**的遗留基线：
+
+| 度量 | 当前值 |
+| --- | --- |
+| Controller 直接 import Mapper | 9 个类（基线锁定） |
+| Controller 使用 `JdbcTemplate` | 0（硬性） |
+| 跨模块 Mapper import | ≤ 85 |
+| 一级模块互相可达的环 | 1 个 12 模块大团（`ai, config, exam, knowledge, mastery, operations, practice, provenance, question, source, storage, studyplan`） |
+
+那个 12 模块大团是**测出来的事实**，不是假设：ADR-024“未来需要时可拆”的前提
+（模块边界有方向性）目前不成立。新增一个模块进大团、或新增一个
+Controller→Mapper 依赖，都会让测试失败；从大团里解耦出一个模块，必须同步删掉
+基线条目。
 
 ## 5. LearningSpace 作用域
 
@@ -176,6 +179,25 @@ Authenticated User
 
 不能只依赖前端 CurrentSpace。
 
+### 5.2.1 强制地板
+
+“每个 endpoint 自己记得验证”不是机制，只是约定，在几百个端点的规模下必然漏。
+因此 `/api/v1/spaces/**` 由 `space/scope/SpaceScopeInterceptor` 在进入 handler
+之前统一校验：
+
+```text
+handler 解析出的 {spaceId}  →  LearningSpaceService.getMine(jwt.sub, spaceId)
+                            →  null: 404 SPACE_NOT_FOUND（与不存在的空间不可区分）
+```
+
+- `spaceId` 只取 Spring 已解析的 path 变量，query/body 里的同名参数无效。
+- 未认证请求不在此处判定，交给 Security 链返回 401（若这里返回 404，客户端的
+  token 刷新逻辑会被误触发/失效）。
+- `/api/v1/admin/**` 不受该拦截器约束：治理天然跨 owner，由 `ROLE_ADMIN` 授权，
+  空间过滤改为显式 `spaceId` 谓词。
+- 该地板**不取代**各模块 service 的 owner-scoped SQL：正常路径的查询条件与关系
+  校验仍必须留在属主模块里（§5.3、ADR-038），地板只保证漏写不会变成越权。
+
 ### 5.3 数据关系不允许跨空间
 
 创建 QuestionKnowledgePoint、ExamQuestion、KnowledgePointSource 等关系时，Service 必须验证双方属于同一 LearningSpace。
@@ -212,9 +234,25 @@ OCR/文档解析与 AI Provider 分离。OCR 技术尚未锁死，后续用真�
 
 ### 6.2 长任务
 
-Ingestion/AI 批量任务不使用一个超长同步 HTTP 请求。第一版可由 Spring Boot 内部异步执行并通过 Job 表查询状态，不为此提前引入 MQ。
+Ingestion/AI 批量任务不使用一个超长同步 HTTP 请求。第一版由 Spring Boot 内部异步
+执行并通过 Job 表查询状态，不为此提前引入 MQ。
 
-只有可靠性/吞吐量证明需要时，再讨论消息队列。
+“内部异步”不是“随便起个线程”，它必须自己补齐 MQ 本来替你保证的那些性质：
+
+| 要求 | 实现 |
+| --- | --- |
+| 有界、可观测的并发 | 专用 `ingestionWorkerExecutor`（core/max/queue 见 §runtime），拒绝即留在 `QUEUED`，不撑爆堆 |
+| 不与未提交数据赛跑 | 入队发生在外层事务 **commit 之后**（`afterCommit`），worker 不会看不到刚插入的 Job 行 |
+| 同一 Job 只有一个执行者 | `QUEUED → IMPORTING` 是带条件单语句 UPDATE（原子 claim），不是 select-then-update |
+| 崩溃/重启不留下永久 RUNNING | 租约（`stale-lease`）+ 心跳（`heartbeat`）+ 启动时与**周期性**回收 |
+| 重跑不产生重复内容 | 重抽前先删除该 asset 未定稿的 page/block；已完成 stage 由 `last_stage_status` 跳过 |
+| 多写步骤的原子性 | “revision 变为可见”这一步单独成一个事务（`IngestionRevisionPublisher`） |
+| 失败可诊断 | 终态与 `error_code/error_message` 同一条 UPDATE 写入，不出现“状态已改、原因丢失” |
+
+状态词表唯一来源是 `IngestionJobService.IngestionStatus`；任何 SQL 里的状态字面量
+必须与该枚举一致（历史上曾并存 `PENDING/RUNNING/SUCCEEDED` 一套死词表）。
+
+只有可靠性/吞吐量证明需要时，再讨论消息队列；届时上述契约整体迁移到 MQ 语义。
 
 ## 7. Storage
 
@@ -301,6 +339,10 @@ AI Provider Port
    ├─ LM Studio
    └─ Future
 ```
+
+当前端口只有一个实现（`ai/provider/OpenAiCompatibleAiProvider`）；SenseNova /
+Ollama / LM Studio 通过各自的 OpenAI 兼容端点接入，BYOK 配置与密钥见
+`ai/settings` 与 `runtime-configuration.md`。新增非兼容协议时才新增 provider 实现。
 
 ### 10.1 Retrieval Scope
 
@@ -403,6 +445,25 @@ Spring Boot
 ```
 
 同一 API 模型，不因迁服务器重写业务。
+
+### 16.1 实例数约束（当前架构事实）
+
+**同一时刻只能有一个后端实例。** 这不是部署偏好，而是三件事共同决定的：
+
+```text
+StorageService 只有本地磁盘实现        → 多实例必须有共享卷，否则对象互不可见
+摄取/AI worker 是进程内线程 + DB claim  → 多实例可并存，但共享池/队列语义并未按多实例设计
+不引入 Redis                            → 没有跨实例的限流/锁/会话共享
+```
+
+因此以下动作在扩容前必须先有 ADR：
+
+- 需要多实例并发 → 先解决 Storage 对象存储（§7）与 worker 的多实例公平调度；
+- 需要限流/配额 → 目前依赖反向代理（`deployment.md` Rate limiting），后端不实现；
+- readiness 依赖 storage root 可写，多实例共享卷时该探针无法区分“只有我活着”。
+
+单实例下 30s 优雅停机会切断长摄取任务，这是被接受的行为，代价由 §6.2 的租约回收
+与幂等重抽兜住。
 
 ## 17. 当前不引入
 

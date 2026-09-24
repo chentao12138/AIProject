@@ -40,6 +40,23 @@ public interface PracticeSessionMapper extends BaseMapper<PracticeSession> {
                                                  @Param("userSubject") String userSubject,
                                                  @Param("ownerSubject") String ownerSubject);
 
+    /** Same as above but with optional time-range filters on created_at. */
+    @Select("<script>"
+            + "SELECT ps.* FROM practice_session ps "
+            + "JOIN learning_space ls ON ls.id = ps.space_id "
+            + "WHERE ps.space_id = #{spaceId} "
+            + "  AND ps.user_subject = #{userSubject} "
+            + "  AND ls.owner_subject = #{ownerSubject} "
+            + "<if test='fromTime != null'> AND ps.created_at &gt;= #{fromTime} </if>"
+            + "<if test='toTime != null'> AND ps.created_at &lt;= #{toTime} </if>"
+            + "ORDER BY ps.created_at DESC, ps.id DESC"
+            + "</script>")
+    List<PracticeSession> selectBySpaceOwnerUser(@Param("spaceId") Long spaceId,
+                                                 @Param("userSubject") String userSubject,
+                                                 @Param("ownerSubject") String ownerSubject,
+                                                 @Param("fromTime") LocalDateTime fromTime,
+                                                 @Param("toTime") LocalDateTime toTime);
+
     /**
      * State transition guarded in SQL: only rows currently in
      * {@code fromStatus} flip to {@code toStatus}. Returns 0 when the

@@ -15,6 +15,7 @@ import com.aistudy.server.ai.provider.AiProvider;
 import com.aistudy.server.ai.provider.AiProviderException;
 import com.aistudy.server.ai.prompt.AiTutorPromptBuilder;
 import com.aistudy.server.ai.settings.AiRuntimeConfigResolver;
+import com.aistudy.server.ai.service.AiUsageRecordService;
 import com.aistudy.server.operations.AiMetrics;
 import com.aistudy.server.space.service.LearningSpaceService;
 import java.util.ArrayList;
@@ -45,6 +46,7 @@ public class AiStudyCoachService {
     private final AiProperties aiProperties;
     private final AiRuntimeConfigResolver configResolver;
     private final AiMetrics aiMetrics;
+    private final AiUsageRecordService aiUsageRecordService;
     private final LearningSpaceService learningSpaceService;
     private final AiLearningStateService learningStateService;
     private final AiLearningContextService learningContextService;
@@ -53,6 +55,7 @@ public class AiStudyCoachService {
                                AiProperties aiProperties,
                                AiRuntimeConfigResolver configResolver,
                                AiMetrics aiMetrics,
+                               AiUsageRecordService aiUsageRecordService,
                                LearningSpaceService learningSpaceService,
                                AiLearningStateService learningStateService,
                                AiLearningContextService learningContextService) {
@@ -60,6 +63,7 @@ public class AiStudyCoachService {
         this.aiProperties = aiProperties;
         this.configResolver = configResolver;
         this.aiMetrics = aiMetrics;
+        this.aiUsageRecordService = aiUsageRecordService;
         this.learningSpaceService = learningSpaceService;
         this.learningStateService = learningStateService;
         this.learningContextService = learningContextService;
@@ -94,11 +98,25 @@ public class AiStudyCoachService {
 
         AiChatResponse response;
         try {
+            long start = System.currentTimeMillis();
             response = aiProvider.chat(new AiChatRequest(
                     messages, aiProperties.getTemperature(), aiProperties.getMaxOutputTokens()),
                     ownerSubject);
+            long latency = System.currentTimeMillis() - start;
+            aiUsageRecordService.record(ownerSubject, spaceId,
+                    response.provider(), response.model(),
+                    "STUDY_COACH", null,
+                    response.usage() != null ? response.usage().promptTokens() : null,
+                    response.usage() != null ? response.usage().completionTokens() : null,
+                    response.usage() != null ? response.usage().totalTokens() : null,
+                    (int) latency,
+                    "SUCCESS", null);
         } catch (AiProviderException e) {
             aiMetrics.recordFailure(aiProperties.getProvider(), e.errorCode().name());
+            aiUsageRecordService.record(ownerSubject, spaceId,
+                    aiProperties.getProvider(), aiProperties.getModel(),
+                    "STUDY_COACH", null, null, null, null, null,
+                    "FAILED", e.errorCode().name());
             throw e;
         }
         aiMetrics.recordRequest(aiProperties.getProvider(), "SUCCESS");

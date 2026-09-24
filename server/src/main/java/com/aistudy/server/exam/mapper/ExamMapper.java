@@ -43,4 +43,43 @@ public interface ExamMapper extends BaseMapper<Exam> {
                             @Param("status") String status,
                             @Param("publishedAt") LocalDateTime publishedAt,
                             @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Update("UPDATE exam SET title = #{title}, description = #{description}, "
+            + "time_limit_minutes = #{timeLimitMinutes}, updated_at = #{updatedAt} "
+            + "WHERE id = #{examId} AND space_id = #{spaceId} AND status = 'DRAFT'")
+    int updateDetailsByIdAndSpace(@Param("examId") Long examId,
+                                  @Param("spaceId") Long spaceId,
+                                  @Param("title") String title,
+                                  @Param("description") String description,
+                                  @Param("timeLimitMinutes") Integer timeLimitMinutes,
+                                  @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Update("UPDATE exam SET total_score = #{totalScore}, updated_at = #{updatedAt} "
+            + "WHERE id = #{examId} AND space_id = #{spaceId}")
+    int updateTotalScoreByIdAndSpace(@Param("examId") Long examId,
+                                     @Param("spaceId") Long spaceId,
+                                     @Param("totalScore") Integer totalScore,
+                                     @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Update("UPDATE exam SET status = #{status}, archived_at = #{archivedAt}, "
+            + "updated_at = #{updatedAt} "
+            + "WHERE id = #{examId} AND space_id = #{spaceId}")
+    int archiveByIdAndSpace(@Param("examId") Long examId,
+                            @Param("spaceId") Long spaceId,
+                            @Param("status") String status,
+                            @Param("archivedAt") LocalDateTime archivedAt,
+                            @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Select("SELECT e.* FROM exam WHERE id = #{examId} LIMIT 1")
+    Exam selectByIdAdmin(@Param("examId") Long examId);
+
+    @Select("<script>"
+            + "SELECT e.* FROM exam e "
+            + "WHERE 1=1 "
+            + "<if test='spaceId != null'> AND e.space_id = #{spaceId} </if>"
+            + "<if test='status != null'> AND e.status = #{status} </if>"
+            + "ORDER BY e.created_at DESC, e.id DESC"
+            + "</script>")
+    List<Exam> selectAllAdmin(@Param("spaceId") Long spaceId,
+                              @Param("status") String status);
 }

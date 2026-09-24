@@ -40,6 +40,7 @@ import java.time.LocalDateTime;
  * @param status      ACTIVE / ARCHIVED; v1 create always writes ACTIVE
  * @param createdAt   creation timestamp, set by the service
  * @param updatedAt   last-update timestamp, equals createdAt on create
+ * @param archivedAt  archive timestamp, null when not archived
  */
 public record LearningSpaceResponse(
         Long id,
@@ -47,7 +48,8 @@ public record LearningSpaceResponse(
         String description,
         String status,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        LocalDateTime archivedAt
 ) {
 
     /**
@@ -64,7 +66,8 @@ public record LearningSpaceResponse(
                 space.getDescription(),
                 space.getStatus(),
                 space.getCreatedAt(),
-                space.getUpdatedAt()
+                space.getUpdatedAt(),
+                space.getArchivedAt()
         );
     }
 }

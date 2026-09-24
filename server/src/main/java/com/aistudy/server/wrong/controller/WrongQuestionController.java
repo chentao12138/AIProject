@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -45,5 +46,29 @@ public class WrongQuestionController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "LearningSpace not found");
         }
         return questions.stream().map(WrongQuestionView::from).toList();
+    }
+
+    @PostMapping(value = "/{wrongQuestionId}/dismiss", produces = MediaType.APPLICATION_JSON_VALUE)
+    public WrongQuestionView dismiss(@PathVariable Long spaceId,
+                                     @PathVariable Long wrongQuestionId,
+                                     Authentication authentication) {
+        var wq = wrongQuestionReviewService.dismissWrongQuestion(
+                authentication.getName(), spaceId, wrongQuestionId);
+        if (wq == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "WrongQuestion not found");
+        }
+        return WrongQuestionView.from(wq);
+    }
+
+    @PostMapping(value = "/{wrongQuestionId}/restore", produces = MediaType.APPLICATION_JSON_VALUE)
+    public WrongQuestionView restore(@PathVariable Long spaceId,
+                                     @PathVariable Long wrongQuestionId,
+                                     Authentication authentication) {
+        var wq = wrongQuestionReviewService.restoreWrongQuestion(
+                authentication.getName(), spaceId, wrongQuestionId);
+        if (wq == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "WrongQuestion not found");
+        }
+        return WrongQuestionView.from(wq);
     }
 }

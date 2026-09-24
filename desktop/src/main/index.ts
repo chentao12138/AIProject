@@ -45,7 +45,7 @@ import {
 
 const DEV_SERVER_URL = process.env['ELECTRON_RENDERER_URL'];
 
-// Single API base URL contract (FE-001.5 FIX-01, extended by ADR-047):
+// Single API base URL contract (FE-001.5 FIX-01, extended by ADR-051):
 // main resolves the URL ONCE at startup (env -> userData/config.json ->
 // build-time VITE_API_BASE_URL -> default) and is the only authority. The
 // CSP connect-src origin is derived from that value and the renderer reads
@@ -245,7 +245,7 @@ app.whenReady().then(() => {
     allowedOrigins: vaultAllowedOrigins,
   });
 
-  // ADR-047: publish the resolved target to the renderer (read-only, same
+  // ADR-051: publish the resolved target to the renderer (read-only, same
   // origin allowlist as the token vault).
   registerAppConfigIpc({
     apiBaseUrl: () => apiBaseUrl,

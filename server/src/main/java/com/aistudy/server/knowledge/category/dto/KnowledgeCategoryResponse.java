@@ -27,7 +27,8 @@ public record KnowledgeCategoryResponse(
         String description,
         Integer sortOrder,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        LocalDateTime deletedAt
 ) {
 
     public static KnowledgeCategoryResponse from(KnowledgeCategory category) {
@@ -39,7 +40,8 @@ public record KnowledgeCategoryResponse(
                 category.getDescription(),
                 category.getSortOrder(),
                 category.getCreatedAt(),
-                category.getUpdatedAt()
+                category.getUpdatedAt(),
+                category.getDeletedAt()
         );
     }
 }

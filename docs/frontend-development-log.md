@@ -625,5 +625,5 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
   `config.json` → 构建期值 → 默认），renderer 经只读 `aistudyConfig` 通道取得同一
   值，CSP 与 client 由此不可能分歧；桥类型下沉到 `src/shared`；新增
   `api:check`（openapi.json ↔ api.d.ts ↔ manifest.json）并纳入 `npm run build`；
-  记录 ADR-047 / ADR-048。
+  记录 ADR-051 / ADR-052。
 - 门禁：lint OK / typecheck OK / test:run 449 passed (48 files) / build OK。

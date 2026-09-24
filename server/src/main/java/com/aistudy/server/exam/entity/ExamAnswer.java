@@ -38,6 +38,14 @@ public class ExamAnswer {
 
     private String feedback;
 
+    private String gradedBy;
+
+    private LocalDateTime gradedAt;
+
+    private Integer previousScore;
+
+    private String previousFeedback;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
@@ -120,6 +128,38 @@ public class ExamAnswer {
 
     public void setFeedback(String feedback) {
         this.feedback = feedback;
+    }
+
+    public String getGradedBy() {
+        return gradedBy;
+    }
+
+    public void setGradedBy(String gradedBy) {
+        this.gradedBy = gradedBy;
+    }
+
+    public LocalDateTime getGradedAt() {
+        return gradedAt;
+    }
+
+    public void setGradedAt(LocalDateTime gradedAt) {
+        this.gradedAt = gradedAt;
+    }
+
+    public Integer getPreviousScore() {
+        return previousScore;
+    }
+
+    public void setPreviousScore(Integer previousScore) {
+        this.previousScore = previousScore;
+    }
+
+    public String getPreviousFeedback() {
+        return previousFeedback;
+    }
+
+    public void setPreviousFeedback(String previousFeedback) {
+        this.previousFeedback = previousFeedback;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -37,7 +37,8 @@ public record KnowledgePointResponse(
         String difficulty,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
-        LocalDateTime publishedAt
+        LocalDateTime publishedAt,
+        LocalDateTime archivedAt
 ) {
 
     public static KnowledgePointResponse from(KnowledgePoint point) {
@@ -53,7 +54,8 @@ public record KnowledgePointResponse(
                 point.getDifficulty(),
                 point.getCreatedAt(),
                 point.getUpdatedAt(),
-                point.getPublishedAt()
+                point.getPublishedAt(),
+                point.getArchivedAt()
         );
     }
 }

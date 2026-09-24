@@ -60,7 +60,8 @@ public class AiMessagePersistenceService {
                                              Long spaceId,
                                              AiConversation conversation,
                                              AiChatResponse response,
-                                             List<AiContextItem> contextItems) {
+                                             List<AiContextItem> contextItems,
+                                             String groundingMode) {
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
         AiMessage message = new AiMessage();
         message.setConversationId(conversation.getId());
@@ -68,6 +69,7 @@ public class AiMessagePersistenceService {
         message.setContent(response.content() == null ? "" : response.content());
         message.setProvider(response.provider());
         message.setModel(response.model());
+        message.setGroundingMode(groundingMode);
         if (response.usage() != null) {
             message.setPromptTokens(response.usage().promptTokens());
             message.setCompletionTokens(response.usage().completionTokens());

@@ -15,10 +15,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -65,9 +67,14 @@ public class PracticeSessionController {
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public List<PracticeSessionSummary> list(@PathVariable Long spaceId,
+                                             @RequestParam(required = false) LocalDateTime fromTime,
+                                             @RequestParam(required = false) LocalDateTime toTime,
+                                             @RequestParam(required = false) Long knowledgePointId,
+                                             @RequestParam(required = false) Long knowledgeCategoryId,
                                              Authentication authentication) {
         List<PracticeSession> sessions = practiceSessionService.listMine(
-                authentication.getName(), spaceId);
+                authentication.getName(), spaceId, fromTime, toTime,
+                knowledgePointId, knowledgeCategoryId);
         if (sessions == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "LearningSpace not found");
         }

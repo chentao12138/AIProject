@@ -132,7 +132,7 @@ public final class ZipArchiveInspector {
         }
     }
 
-    private static ZipInspectionResult inspectFile(Path file, ZipSafetyLimits limits) throws IOException {
+    public static ZipInspectionResult inspectFile(Path file, ZipSafetyLimits limits) throws IOException {
         List<ZipViolation> violations = new ArrayList<>();
         List<ZipEntryInfo> entries = new ArrayList<>();
         long totalUncompressed = 0;

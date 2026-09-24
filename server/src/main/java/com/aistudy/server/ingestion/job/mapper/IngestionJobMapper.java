@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * BUSINESS-005 — production MyBatis-Plus mapper for {@link IngestionJob}.
@@ -75,34 +76,124 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
                                                 @Param("ownerSubject") String ownerSubject);
 
     /**
-     * Retry reset (FAILED → PENDING): explicit NULL assignments are
-     * required because {@code updateById} skips null fields and would
-     * leave stale error/timing values behind.
+     * Terminal failure with diagnostics, in one statement so the status change
+     * can never be persisted without the error code/message that caused it.
+     * {@code updateById} skips nulls, which previously left runs reporting the
+     * previous attempt's failure.
      */
     @org.apache.ibatis.annotations.Update(
             "UPDATE ingestion_job "
-                    + "SET status = 'PENDING', stage = 'QUEUED', progress_percent = 0, "
-                    + "    started_at = NULL, finished_at = NULL, "
-                    + "    retry_count = #{retryCount}, "
-                    + "    error_code = NULL, error_message = NULL, "
-                    + "    updated_at = #{updatedAt} "
+                    + "SET status = #{status}, stage = #{stage}, progress_percent = #{progress}, "
+                    + "    error_code = #{errorCode}, error_message = #{errorMessage}, "
+                    + "    finished_at = #{now}, updated_at = #{now} "
                     + "WHERE id = #{id}")
-    int resetForRetry(@Param("id") Long id,
-                      @Param("retryCount") int retryCount,
-                      @Param("updatedAt") java.time.LocalDateTime updatedAt);
+    int markTerminalFailure(@Param("id") Long id,
+                            @Param("status") String status,
+                            @Param("stage") String stage,
+                            @Param("progress") int progress,
+                            @Param("errorCode") String errorCode,
+                            @Param("errorMessage") String errorMessage,
+                            @Param("now") java.time.LocalDateTime now);
 
     /**
-     * Duplicate guard (BUSINESS-006): counts non-terminal or already
-     * succeeded jobs for one (space, source, asset). Scope is the
-     * asset itself — no owner predicate needed because the caller
-     * already proved ownership via {@code getMine} before this query.
+     * Lease renewal. A worker that stops beating inside
+     * {@code aistudy.ingestion.worker.stale-lease} is the only signal that lets
+     * recovery requeue its job, so long-running jobs must keep refreshing here
+     * or two workers can end up on the same row.
      */
-    @Select("SELECT COUNT(*) FROM ingestion_job "
-            + "WHERE space_id = #{spaceId} "
-            + "  AND source_id = #{sourceId} "
-            + "  AND asset_id = #{assetId} "
-            + "  AND status IN ('PENDING', 'RUNNING', 'SUCCEEDED')")
-    int countActiveOrSucceeded(@Param("spaceId") Long spaceId,
-                               @Param("sourceId") Long sourceId,
-                               @Param("assetId") Long assetId);
+    @org.apache.ibatis.annotations.Update(
+            "UPDATE ingestion_job SET claimed_at = #{now}, updated_at = #{now} "
+                    + "WHERE id = #{id} AND claimed_by = #{workerId} "
+                    + "  AND status IN ('IMPORTING','EXTRACTING','STRUCTURING','AI_PROCESSING')")
+    int refreshClaim(@Param("id") Long id,
+                     @Param("workerId") String workerId,
+                     @Param("now") java.time.LocalDateTime now);
+
+    @org.apache.ibatis.annotations.Update(
+            "UPDATE ingestion_job "
+                    + "SET status = #{status}, stage = #{stage}, updated_at = #{updatedAt}, retry_count = #{retryCount} "
+                    + "WHERE id = #{id} AND space_id = #{spaceId}")
+    int retryByIdAndSpace(@Param("id") Long id,
+                          @Param("spaceId") Long spaceId,
+                          @Param("status") String status,
+                          @Param("stage") String stage,
+                          @Param("updatedAt") java.time.LocalDateTime updatedAt,
+                          @Param("retryCount") Integer retryCount);
+
+    /**
+     * Atomic claim: only one worker may move QUEUED → IMPORTING.
+     * Returns 1 when this worker won the claim, 0 otherwise.
+     */
+    @org.apache.ibatis.annotations.Update(
+            "UPDATE ingestion_job "
+                    + "SET status = 'IMPORTING', stage = 'IMPORT', progress_percent = 5, "
+                    + "    claimed_by = #{workerId}, claimed_at = #{now}, "
+                    + "    started_at = COALESCE(started_at, #{now}), "
+                    + "    updated_at = #{now} "
+                    + "WHERE id = #{id} AND status = 'QUEUED' "
+                    + "  AND (claimed_by IS NULL OR claimed_at IS NULL "
+                    + "       OR claimed_at < #{staleBefore})")
+    int claimQueued(@Param("id") Long id,
+                    @Param("workerId") String workerId,
+                    @Param("now") java.time.LocalDateTime now,
+                    @Param("staleBefore") java.time.LocalDateTime staleBefore);
+
+    /** Re-queue jobs stuck in non-terminal PROCESSING-like states after crash. */
+    @org.apache.ibatis.annotations.Update(
+            "UPDATE ingestion_job "
+                    + "SET status = 'QUEUED', claimed_by = NULL, claimed_at = NULL, updated_at = #{now} "
+                    + "WHERE status IN ('IMPORTING','EXTRACTING','STRUCTURING','AI_PROCESSING') "
+                    + "  AND (claimed_at IS NULL OR claimed_at < #{staleBefore})")
+    int requeueStaleProcessing(@Param("now") java.time.LocalDateTime now,
+                               @Param("staleBefore") java.time.LocalDateTime staleBefore);
+
+    @org.apache.ibatis.annotations.Select(
+            "SELECT ij.* FROM ingestion_job ij "
+                    + "WHERE ij.status = 'QUEUED' "
+                    + "ORDER BY ij.created_at ASC, ij.id ASC LIMIT #{limit}")
+    List<IngestionJob> selectQueued(@Param("limit") int limit);
+
+    /** Mark last successful stage for stage-resume retries. */
+    @org.apache.ibatis.annotations.Update(
+            "UPDATE ingestion_job SET last_stage_status = #{stage}, updated_at = #{now} "
+                    + "WHERE id = #{id}")
+    int markStageComplete(@Param("id") Long id,
+                          @Param("stage") String stage,
+                          @Param("now") java.time.LocalDateTime now);
+
+    /** Stage-resume retry: requeue without wiping completed stage marker. */
+    @org.apache.ibatis.annotations.Update(
+            "UPDATE ingestion_job "
+                    + "SET status = 'QUEUED', claimed_by = NULL, claimed_at = NULL, "
+                    + "    error_code = NULL, error_message = NULL, "
+                    + "    retry_count = #{retryCount}, updated_at = #{now} "
+                    + "WHERE id = #{id} AND space_id = #{spaceId} "
+                    + "  AND status IN ('FAILED','PARTIAL_FAILED')")
+    int requeueForStageRetry(@Param("id") Long id,
+                             @Param("spaceId") Long spaceId,
+                             @Param("retryCount") int retryCount,
+                             @Param("now") java.time.LocalDateTime now);
+
+    /**
+     * ADMIN governance retry. Also accepts a QUEUED row, because governance
+     * may need to re-dispatch a job that was never picked up.
+     */
+    @org.apache.ibatis.annotations.Update(
+            "UPDATE ingestion_job "
+                    + "SET status = 'QUEUED', claimed_by = NULL, claimed_at = NULL, "
+                    + "    error_code = NULL, error_message = NULL, "
+                    + "    retry_count = COALESCE(retry_count, 0) + 1, updated_at = #{now} "
+                    + "WHERE id = #{id} AND space_id = #{spaceId} "
+                    + "  AND status IN ('FAILED','PARTIAL_FAILED','QUEUED')")
+    int requeueForAdminRetry(@Param("id") Long id,
+                             @Param("spaceId") Long spaceId,
+                             @Param("now") java.time.LocalDateTime now);
+
+    /** Job history of one source, newest first (ADMIN governance list). */
+    @Select("SELECT ij.*, ls.owner_subject FROM ingestion_job ij "
+            + "JOIN learning_space ls ON ls.id = ij.space_id "
+            + "WHERE ij.source_id = #{sourceId} AND ij.space_id = #{spaceId} "
+            + "ORDER BY ij.created_at DESC, ij.id DESC")
+    List<Map<String, Object>> selectAdminBySpaceAndSource(@Param("sourceId") Long sourceId,
+                                                          @Param("spaceId") Long spaceId);
 }

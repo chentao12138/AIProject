@@ -18,4 +18,17 @@ public interface ExamResultMapper extends BaseMapper<ExamResult> {
             + "AND exam_attempt_id = #{attemptId} LIMIT 1")
     ExamResult selectByAttemptId(@Param("spaceId") Long spaceId,
                                  @Param("attemptId") Long attemptId);
+
+    @org.apache.ibatis.annotations.Update(
+            "UPDATE exam_result SET score = #{score}, max_score = #{maxScore}, "
+                    + "correct_count = #{correctCount}, wrong_count = #{wrongCount}, "
+                    + "unanswered_count = #{unansweredCount} "
+                    + "WHERE id = #{id} AND space_id = #{spaceId}")
+    int updateScores(@Param("id") Long id,
+                     @Param("spaceId") Long spaceId,
+                     @Param("score") Integer score,
+                     @Param("maxScore") Integer maxScore,
+                     @Param("correctCount") Integer correctCount,
+                     @Param("wrongCount") Integer wrongCount,
+                     @Param("unansweredCount") Integer unansweredCount);
 }

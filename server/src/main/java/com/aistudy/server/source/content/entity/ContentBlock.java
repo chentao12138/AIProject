@@ -48,6 +48,17 @@ public class ContentBlock {
 
     private Long sourceId;
 
+    /** Extraction revision this block belongs to (V053). */
+    private Long extractionRevisionId;
+
+    public Long getExtractionRevisionId() {
+        return extractionRevisionId;
+    }
+
+    public void setExtractionRevisionId(Long extractionRevisionId) {
+        this.extractionRevisionId = extractionRevisionId;
+    }
+
     private Long sourcePageId;
 
     private Long sourceOutlineNodeId;

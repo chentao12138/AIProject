@@ -39,14 +39,14 @@ npm run lint:fix       # 只修可自动修复项
 npm run typecheck      # tsc --noEmit（node + web 两个 project）
 npm run test:run       # Vitest 单次运行（jsdom + Testing Library）
 npm run test:coverage  # Vitest + v8 coverage（text 报告）
-npm run api:check      # OpenAPI 生成物一致性（ADR-048；不连后端）
+npm run api:check      # OpenAPI 生成物一致性（ADR-052；不连后端）
 npm run build          # typecheck + api:check + electron-vite build（out/）
 ```
 
 质量门禁顺序：`lint` → `typecheck` → `test:run` → `build`（build 内含 `api:check`）。
 全绿才可交付。
 
-## API base URL（运行期单一契约，ADR-047）
+## API base URL（运行期单一契约，ADR-051）
 
 Renderer 只通过共享 `@aistudy/api-client` 调用后端；地址由 **main 在启动时解析一次**，
 renderer 经 `window.aistudyConfig.getApiBaseUrl()`（只读 IPC 通道）读取同一个值。
@@ -71,7 +71,7 @@ renderer 经 `window.aistudyConfig.getApiBaseUrl()`（只读 IPC 通道）读取
   `http://127.0.0.1:9090/api`，CSP 为 `connect-src 'self' http://127.0.0.1:9090`。
 - 外壳 header 显示当前 API target；`config.json` 只认 `apiBaseUrl` 一个键。
 
-## 契约漂移门禁（ADR-048）
+## 契约漂移门禁（ADR-052）
 
 ```powershell
 npm run api:check   # openapi.json ↔ api.d.ts ↔ manifest.json 必须一致

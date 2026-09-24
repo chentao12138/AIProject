@@ -70,6 +70,8 @@ public class LearningSpace {
 
     private LocalDateTime updatedAt;
 
+    private LocalDateTime archivedAt;
+
     public Long getId() {
         return id;
     }
@@ -124,6 +126,14 @@ public class LearningSpace {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public LocalDateTime getArchivedAt() {
+        return archivedAt;
+    }
+
+    public void setArchivedAt(LocalDateTime archivedAt) {
+        this.archivedAt = archivedAt;
     }
 
     @Override

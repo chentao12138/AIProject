@@ -1,32 +1,19 @@
 package com.aistudy.server.source.page.controller;
 
-import com.aistudy.server.source.page.dto.SourcePageResponse;
+import com.aistudy.server.source.page.dto.ReorderPagesRequest;
 import com.aistudy.server.source.page.entity.SourcePage;
 import com.aistudy.server.source.page.service.SourcePageService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 /**
- * BUSINESS-006 — production SourcePage read API.
- *
- * <pre>
- *   GET /api/v1/spaces/{spaceId}/sources/{sourceId}/pages
- *       → 200, pages of my source in final reading order
- * </pre>
- *
- * <p>404 (not 403) uniformly expresses "absent or not yours"
- * (api-guidelines.md §13). CSRF: the existing
- * {@code /api/v1/spaces/**} Bearer ignore already covers these nested
- * paths — no SecurityConfig change.
+ * Source page list + human reorder.
+ * Reorder uses a typed DTO; path sourceId is the ownership source of truth.
  */
 @RestController
 @RequestMapping("/api/v1/spaces/{spaceId}/sources/{sourceId}/pages")
@@ -39,24 +26,25 @@ public class SourcePageController {
         this.sourcePageService = sourcePageService;
     }
 
-    /**
-     * Lists the pages of the caller's own source in final reading
-     * order. 404 when the source is absent or not owned; 200 with an
-     * empty list when owned but no pages.
-     */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public List<SourcePageResponse> list(@PathVariable Long spaceId,
-                                         @PathVariable Long sourceId,
-                                         Authentication authentication) {
-        List<SourcePage> pages = sourcePageService.listMine(
-                authentication.getName(), spaceId, sourceId);
+    public List<SourcePage> list(@PathVariable Long spaceId,
+                                 @PathVariable Long sourceId,
+                                 Authentication authentication) {
+        List<SourcePage> pages = sourcePageService.listMine(authentication.getName(), spaceId, sourceId);
         if (pages == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Source not found");
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Source not found");
         }
-        return pages.stream()
-                .map(SourcePageResponse::from)
-                .toList();
+        return pages;
+    }
+
+    @PostMapping(value = "/batch-reorder",
+            produces = MediaType.APPLICATION_JSON_VALUE,
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void batchReorder(@PathVariable Long spaceId,
+                             @PathVariable Long sourceId,
+                             @RequestBody ReorderPagesRequest request,
+                             Authentication authentication) {
+        sourcePageService.batchUpdateOrder(authentication.getName(), spaceId, sourceId, request);
     }
 }

@@ -46,7 +46,7 @@ See `AISTUDY-FRONTEND-FINAL-COMPLETION-MASTER-CHECKLIST.md` section 12.
 - Preload: `contextBridge` only; no `ipcRenderer` leak — the exposed surface
   (vault save/load/clear + read-only `aistudyConfig.getApiBaseUrl`) is asserted
   by `src/preload/index.test.ts`
-- Backend target resolved at runtime by main (ADR-047):
+- Backend target resolved at runtime by main (ADR-051):
   `AISTUDY_API_BASE_URL` -> `<userData>/config.json` -> `VITE_API_BASE_URL` ->
   default; CSP `connect-src` and the renderer client share that one value
 - Single-instance lock: no second process may race the refresh-token vault

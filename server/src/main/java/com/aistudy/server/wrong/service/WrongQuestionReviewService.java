@@ -2,6 +2,7 @@ package com.aistudy.server.wrong.service;
 
 import com.aistudy.server.space.service.LearningSpaceService;
 import com.aistudy.server.wrong.entity.ReviewRecord;
+import com.aistudy.server.wrong.entity.ReviewState;
 import com.aistudy.server.wrong.entity.ReviewTask;
 import com.aistudy.server.wrong.entity.WrongQuestion;
 import com.aistudy.server.wrong.mapper.ReviewRecordMapper;
@@ -38,6 +39,7 @@ public class WrongQuestionReviewService {
     public static final String STATUS_ACTIVE = "ACTIVE";
     public static final String STATUS_IMPROVING = "IMPROVING";
     public static final String STATUS_MASTERED = "MASTERED";
+    public static final String STATUS_DISMISSED = "DISMISSED";
 
     public static final String TARGET_TYPE_QUESTION = "QUESTION";
     public static final String TARGET_TYPE_KNOWLEDGE_POINT = "KNOWLEDGE_POINT";
@@ -45,19 +47,36 @@ public class WrongQuestionReviewService {
     public static final String TASK_STATUS_PENDING = "PENDING";
     public static final String TASK_STATUS_COMPLETED = "COMPLETED";
 
+    public static final String REASON_WRONG_ANSWER = "WRONG_ANSWER";
+    public static final String REASON_EXAM_DIAGNOSIS = "EXAM_DIAGNOSIS";
+    public static final String REASON_LOW_MASTERY = "LOW_MASTERY";
+    public static final String REASON_MANUAL = "MANUAL";
+    public static final String REASON_SCHEDULED = "SCHEDULED";
+    public static final String REASON_REVIEW_WRONG = "REVIEW_WRONG";
+    public static final String REASON_REVIEW_CORRECT = "REVIEW_CORRECT";
+
     private final WrongQuestionMapper wrongQuestionMapper;
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewRecordMapper reviewRecordMapper;
     private final LearningSpaceService learningSpaceService;
+    private final ReviewStateService reviewStateService;
+    private final com.aistudy.server.mastery.service.MasteryService masteryService;
+    private final com.aistudy.server.studyplan.service.StudyPlanService studyPlanService;
 
     public WrongQuestionReviewService(WrongQuestionMapper wrongQuestionMapper,
                                       ReviewTaskMapper reviewTaskMapper,
                                       ReviewRecordMapper reviewRecordMapper,
-                                      LearningSpaceService learningSpaceService) {
+                                      LearningSpaceService learningSpaceService,
+                                      ReviewStateService reviewStateService,
+                                      com.aistudy.server.mastery.service.MasteryService masteryService,
+                                      com.aistudy.server.studyplan.service.StudyPlanService studyPlanService) {
         this.wrongQuestionMapper = wrongQuestionMapper;
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewRecordMapper = reviewRecordMapper;
         this.learningSpaceService = learningSpaceService;
+        this.reviewStateService = reviewStateService;
+        this.masteryService = masteryService;
+        this.studyPlanService = studyPlanService;
     }
 
     /**
@@ -78,6 +97,61 @@ public class WrongQuestionReviewService {
             registerWrong(ownerSubject, spaceId, questionId, now,
                     "WRONG_IN_PRACTICE", false);
         }
+    }
+
+    /**
+     * Propagates objective wrong answers of a submitted exam into
+     * wrong_question + review_task. Called by ExamAttemptService.submit
+     * within the SAME transaction.
+     */
+    @Transactional
+    public void recordExamResults(String ownerSubject, Long spaceId,
+                                  List<Long> wrongQuestionIds) {
+        if (wrongQuestionIds == null || wrongQuestionIds.isEmpty()) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        for (Long questionId : wrongQuestionIds) {
+            registerWrong(ownerSubject, spaceId, questionId, now,
+                    REASON_EXAM_DIAGNOSIS, false);
+        }
+    }
+
+    /**
+     * Creates a review task for a knowledge point whose mastery is below
+     * the configured threshold.
+     */
+    @Transactional
+    public void recordLowMastery(String ownerSubject, Long spaceId, Long knowledgePointId) {
+        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        ReviewSchedulePolicy.Sm2Result sm2 = ReviewSchedulePolicy.sm2Initial(0);
+        LocalDateTime dueAt = now.plusDays(sm2.intervalDays()).truncatedTo(ChronoUnit.MICROS);
+        ensureReviewTask(ownerSubject, spaceId, TARGET_TYPE_KNOWLEDGE_POINT, knowledgePointId,
+                REASON_LOW_MASTERY, dueAt, ReviewSchedulePolicy.PRIORITY_HIGH, now);
+    }
+
+    /** Creates a manually-scheduled review task (user-initiated). */
+    @Transactional
+    public ReviewTask createManualTask(String ownerSubject, Long spaceId,
+                                       String targetType, Long targetId,
+                                       LocalDateTime dueAt, String priority, String notes) {
+        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
+            return null;
+        }
+        if (!TARGET_TYPE_QUESTION.equals(targetType) && !TARGET_TYPE_KNOWLEDGE_POINT.equals(targetType)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "targetType must be QUESTION or KNOWLEDGE_POINT");
+        }
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        ensureReviewTask(ownerSubject, spaceId, targetType, targetId,
+                REASON_MANUAL, dueAt, priority != null ? priority : ReviewSchedulePolicy.PRIORITY_LOW, now);
+        // Update ReviewState if present (manual trigger overrides next due date).
+        reviewStateService.overrideDue(ownerSubject, spaceId, targetType, targetId, dueAt);
+        return reviewTaskMapper.selectPendingByTarget(
+                ownerSubject, spaceId, targetType, targetId, TASK_STATUS_PENDING);
     }
 
     /** Wrong-answer registration (shared by practice + review). */
@@ -157,6 +231,56 @@ public class WrongQuestionReviewService {
                 spaceId, ownerSubject, ownerSubject, dueBefore);
     }
 
+    /** Dismisses a wrong question (sets dismissedAt, status → DISMISSED). */
+    @Transactional
+    public WrongQuestion dismissWrongQuestion(String ownerSubject, Long spaceId, Long wrongQuestionId) {
+        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
+            return null;
+        }
+        WrongQuestion wq = wrongQuestionMapper.selectByIdAndSpace(wrongQuestionId, spaceId);
+        if (wq == null || !ownerSubject.equals(wq.getUserSubject())) {
+            return null;
+        }
+        if (STATUS_DISMISSED.equals(wq.getStatus())) {
+            return wq;
+        }
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        int updated = wrongQuestionMapper.dismissByIdAndSpace(
+                wq.getId(), spaceId, ownerSubject, now, STATUS_DISMISSED, now);
+        if (updated == 0) {
+            return null;
+        }
+        wq.setDismissedAt(now);
+        wq.setStatus(STATUS_DISMISSED);
+        wq.setUpdatedAt(now);
+        return wq;
+    }
+
+    /** Restores a dismissed wrong question (clears dismissedAt, status → ACTIVE). */
+    @Transactional
+    public WrongQuestion restoreWrongQuestion(String ownerSubject, Long spaceId, Long wrongQuestionId) {
+        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
+            return null;
+        }
+        WrongQuestion wq = wrongQuestionMapper.selectByIdAndSpace(wrongQuestionId, spaceId);
+        if (wq == null || !ownerSubject.equals(wq.getUserSubject())) {
+            return null;
+        }
+        if (!STATUS_DISMISSED.equals(wq.getStatus())) {
+            return wq;
+        }
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        int updated = wrongQuestionMapper.restoreByIdAndSpace(
+                wq.getId(), spaceId, ownerSubject, STATUS_ACTIVE, now);
+        if (updated == 0) {
+            return null;
+        }
+        wq.setDismissedAt(null);
+        wq.setStatus(STATUS_ACTIVE);
+        wq.setUpdatedAt(now);
+        return wq;
+    }
+
     // ==================== completion ====================
 
     /**
@@ -206,9 +330,34 @@ public class WrongQuestionReviewService {
         task.setUpdatedAt(now);
 
         FollowUp followUp = null;
+        int quality = ReviewSchedulePolicy.RESULT_CORRECT.equals(result) ? 4 : 2;
+        // Apply SM-2 exactly once per completion (C-07.6).
         if (TARGET_TYPE_QUESTION.equals(task.getTargetType())) {
             followUp = applyReviewToWrongQuestion(
                     ownerSubject, spaceId, task.getTargetId(), result, now);
+            reviewStateService.applyCompletion(
+                    ownerSubject, spaceId, TARGET_TYPE_QUESTION, task.getTargetId(),
+                    quality, task.getReason());
+            masteryService.recomputeForReviewQuestion(ownerSubject, spaceId, task.getTargetId());
+        } else if (TARGET_TYPE_KNOWLEDGE_POINT.equals(task.getTargetType())) {
+            ReviewState state = reviewStateService.applyCompletion(
+                    ownerSubject, spaceId, TARGET_TYPE_KNOWLEDGE_POINT, task.getTargetId(),
+                    quality, task.getReason());
+            if (state != null) {
+                followUp = new FollowUp(null, state.getNextDueAt());
+            }
+            masteryService.recompute(ownerSubject, spaceId, task.getTargetId());
+        }
+        try {
+            if (TARGET_TYPE_KNOWLEDGE_POINT.equals(task.getTargetType())) {
+                studyPlanService.bumpRelatedStudyTaskPriorities(
+                        ownerSubject, spaceId, task.getTargetId());
+            } else if (TARGET_TYPE_QUESTION.equals(task.getTargetType())
+                    && followUp != null && followUp.wrongQuestionStatus() != null) {
+                // no-op plan bump for question-only reviews
+            }
+        } catch (Exception ignore) {
+            // plan bump is best-effort; review completion already committed
         }
         return new CompleteResult(task, followUp);
     }
@@ -233,9 +382,10 @@ public class WrongQuestionReviewService {
         if (ReviewSchedulePolicy.RESULT_WRONG.equals(result)) {
             wrongQuestionMapper.incrementWrong(wq.getId(), spaceId, ownerSubject,
                     now, STATUS_ACTIVE, now);
+            // SM-2 already applied by completeReviewTask — do not double-apply.
             LocalDateTime nextDue = ReviewSchedulePolicy.dueAfterWrong(now);
             ensureReviewTask(ownerSubject, spaceId, TARGET_TYPE_QUESTION, questionId,
-                    "REVIEW_WRONG", nextDue,
+                    REASON_REVIEW_WRONG, nextDue,
                     ReviewSchedulePolicy.priority(wq.getWrongCount() + 1), now);
             return new FollowUp(STATUS_ACTIVE, nextDue);
         }
@@ -248,11 +398,11 @@ public class WrongQuestionReviewService {
         if (STATUS_MASTERED.equals(nextStatus)) {
             return new FollowUp(STATUS_MASTERED, null);
         }
-        boolean previousWasCorrect = recent != null && recent.size() >= 2
-                && ReviewSchedulePolicy.RESULT_CORRECT.equals(recent.get(1));
-        LocalDateTime nextDue = ReviewSchedulePolicy.dueAfterCorrect(now, previousWasCorrect);
+        LocalDateTime nextDue = ReviewSchedulePolicy.dueAfterCorrect(now,
+                recent != null && recent.size() >= 2
+                        && ReviewSchedulePolicy.RESULT_CORRECT.equals(recent.get(1)));
         ensureReviewTask(ownerSubject, spaceId, TARGET_TYPE_QUESTION, questionId,
-                "REVIEW_CORRECT", nextDue,
+                REASON_REVIEW_CORRECT, nextDue,
                 ReviewSchedulePolicy.priority(wq.getWrongCount()), now);
         return new FollowUp(nextStatus, nextDue);
     }

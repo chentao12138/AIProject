@@ -3,18 +3,23 @@ package com.aistudy.server.practice.controller;
 import com.aistudy.server.practice.dto.PracticeAnswerRequest;
 import com.aistudy.server.practice.dto.PracticeAnswerResponse.PracticeAnswerView;
 import com.aistudy.server.practice.dto.PracticeAnswerResponse.PracticeSubmitView;
+import com.aistudy.server.practice.entity.PracticeAnswer;
 import com.aistudy.server.practice.service.PracticeAnswerService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
 
 /**
  * BUSINESS-010 — Practice answer + finish REST API.
@@ -57,5 +62,20 @@ public class PracticeAnswerController {
                                      Authentication authentication) {
         return practiceAnswerService.finish(
                 authentication.getName(), spaceId, sessionId);
+    }
+
+    @GetMapping(value = "/answers", produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<PracticeAnswerView> listAnswers(@PathVariable Long spaceId,
+                                                @PathVariable Long sessionId,
+                                                Authentication authentication) {
+        List<PracticeAnswer> answers = practiceAnswerService.listAnswers(
+                authentication.getName(), spaceId, sessionId);
+        if (answers == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "PracticeSession not found");
+        }
+        return answers.stream()
+                .map(a -> PracticeAnswerView.from(
+                        a, a.getIsCorrect() != null ? a.getCorrectAnswerSummary() : null, null))
+                .toList();
     }
 }

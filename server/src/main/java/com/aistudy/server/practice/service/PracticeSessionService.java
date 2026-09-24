@@ -21,9 +21,11 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 /**
  * BUSINESS-009 — application service for PracticeSession.
@@ -127,15 +129,69 @@ public class PracticeSessionService {
     }
 
     /**
-     * Lists the caller's own sessions, newest first.
-     *
-     * @return sessions, or {@code null} when the space is not owned
+     * Lists the caller's own sessions, newest first, with optional filters.
+     * KP/category filters are applied against session question snapshots
+     * after the base owner+space+user query so they never widen isolation.
      */
-    public List<PracticeSession> listMine(String ownerSubject, Long spaceId) {
+    public List<PracticeSession> listMine(String ownerSubject, Long spaceId,
+                                          LocalDateTime fromTime, LocalDateTime toTime,
+                                          Long knowledgePointId, Long knowledgeCategoryId) {
         if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
             return null;
         }
-        return practiceSessionMapper.selectBySpaceOwnerUser(spaceId, ownerSubject, ownerSubject);
+        List<PracticeSession> all = practiceSessionMapper.selectBySpaceOwnerUser(
+                spaceId, ownerSubject, ownerSubject, fromTime, toTime);
+        if (all == null || (knowledgePointId == null && knowledgeCategoryId == null)) {
+            return all;
+        }
+        List<PracticeSession> filtered = new ArrayList<>();
+        for (PracticeSession session : all) {
+            if (matchesLearningFilters(session, knowledgePointId, knowledgeCategoryId)) {
+                filtered.add(session);
+            }
+        }
+        return filtered;
+    }
+
+    /** Backward-compatible list without KP/category filters. */
+    public List<PracticeSession> listMine(String ownerSubject, Long spaceId,
+                                          LocalDateTime fromTime, LocalDateTime toTime) {
+        return listMine(ownerSubject, spaceId, fromTime, toTime, null, null);
+    }
+
+    /** Lists all caller's sessions (no time filter, backward-compatible). */
+    public List<PracticeSession> listMine(String ownerSubject, Long spaceId) {
+        return listMine(ownerSubject, spaceId, null, null, null, null);
+    }
+
+    private boolean matchesLearningFilters(PracticeSession session,
+                                           Long knowledgePointId, Long knowledgeCategoryId) {
+        if (knowledgePointId == null && knowledgeCategoryId == null) {
+            return true;
+        }
+        List<PracticeSessionQuestion> slots = questionsOf(session);
+        if (slots == null || slots.isEmpty()) {
+            return false;
+        }
+        for (PracticeSessionQuestion slot : slots) {
+            Question question = questionMapper.selectByIdAndSpace(slot.getQuestionId(), session.getSpaceId());
+            if (question == null) {
+                continue;
+            }
+            if (knowledgePointId != null) {
+                Integer hit = questionMapper.countQuestionKnowledgePoint(question.getId(), knowledgePointId);
+                if (hit != null && hit > 0) {
+                    return true;
+                }
+            }
+            if (knowledgeCategoryId != null && knowledgePointId == null) {
+                Integer hit = questionMapper.countQuestionCategory(question.getId(), knowledgeCategoryId);
+                if (hit != null && hit > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -188,14 +244,18 @@ public class PracticeSessionService {
     private List<Question> selectQuestions(String ownerSubject, Long spaceId,
                                            CreatePracticeSessionRequest request) {
         boolean explicit = request.questionIds() != null && !request.questionIds().isEmpty();
-        boolean auto = request.knowledgePointId() != null;
+        boolean auto = request.knowledgePointId() != null
+                || request.knowledgeCategoryId() != null
+                || request.difficulty() != null
+                || request.questionType() != null
+                || request.count() != null;
         if (explicit == auto) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "exactly one selection mode required: questionIds XOR knowledgePointId+count");
+                    "exactly one selection mode required: questionIds XOR filter-based auto (category/kp/difficulty/type/count)");
         }
         if (auto && request.count() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "count is required with knowledgePointId");
+                    "count is required with filter-based auto selection");
         }
         if (explicit) {
             List<Question> result = new ArrayList<>();
@@ -217,19 +277,44 @@ public class PracticeSessionService {
             }
             return result;
         }
-        // Auto mode: deterministic pick (question.id ASC, first N).
-        if (knowledgePointMapper.selectByIdSpaceOwner(
-                request.knowledgePointId(), spaceId, ownerSubject) == null) {
-            return null;
+        // Filter-based auto mode (A. explicit ids already handled).
+        List<Question> candidates;
+        if (request.knowledgePointId() != null) {
+            if (knowledgePointMapper.selectByIdSpaceOwner(
+                    request.knowledgePointId(), spaceId, ownerSubject) == null) {
+                return null;
+            }
+            candidates = questionMapper.selectPublishedByKnowledgePointId(
+                    spaceId, ownerSubject, request.knowledgePointId(), QuestionService.STATUS_PUBLISHED);
+        } else if (request.knowledgeCategoryId() != null
+                || request.difficulty() != null
+                || request.questionType() != null) {
+            candidates = questionMapper.selectPublishedByFilters(
+                    spaceId, ownerSubject, QuestionService.STATUS_PUBLISHED,
+                    request.knowledgeCategoryId(), request.difficulty(), request.questionType());
+        } else {
+            candidates = questionMapper.selectPublishedBySpaceOwner(
+                    spaceId, ownerSubject, QuestionService.STATUS_PUBLISHED);
         }
-        List<Question> candidates = questionMapper.selectPublishedByKnowledgePointId(
-                spaceId, ownerSubject, request.knowledgePointId(), QuestionService.STATUS_PUBLISHED);
-        if (candidates.size() < request.count()) {
+        List<Question> filtered = candidates.stream().filter(q -> {
+            if (request.difficulty() != null && !request.difficulty().equals(q.getDifficulty())) {
+                return false;
+            }
+            if (request.questionType() != null && !request.questionType().equals(q.getQuestionType())) {
+                return false;
+            }
+            return true;
+        }).toList();
+        if (filtered.size() < request.count()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "only " + candidates.size() + " published questions available for this "
-                            + "knowledge point, requested " + request.count());
+                    "only " + filtered.size() + " published questions available after filters, requested "
+                            + request.count());
         }
-        return new ArrayList<>(candidates.subList(0, request.count()));
+        List<Question> picked = new ArrayList<>(filtered);
+        if (request.seed() != null && request.seed() != 0) {
+            Collections.shuffle(picked, new Random(request.seed()));
+        }
+        return new ArrayList<>(picked.subList(0, Math.min(request.count(), picked.size())));
     }
 
     private String buildScopeJson(CreatePracticeSessionRequest request) {
@@ -238,9 +323,13 @@ public class PracticeSessionService {
             map.put("selectionMode", "QUESTION_IDS");
             map.put("questionIds", request.questionIds());
         } else {
-            map.put("selectionMode", "KNOWLEDGE_POINT");
+            map.put("selectionMode", "FILTER_AUTO");
             map.put("knowledgePointId", request.knowledgePointId());
+            map.put("knowledgeCategoryId", request.knowledgeCategoryId());
+            map.put("difficulty", request.difficulty());
+            map.put("questionType", request.questionType());
             map.put("count", request.count());
+            map.put("seed", request.seed());
         }
         try {
             return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(map);

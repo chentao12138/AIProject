@@ -37,4 +37,13 @@ public interface ExamDiagnosisItemMapper extends BaseMapper<ExamDiagnosisItem> {
     List<ExamDiagnosisItem> selectLatestKpItemsByUserSpace(
             @Param("userSubject") String userSubject,
             @Param("spaceId") Long spaceId);
+
+    @Select("SELECT ea.exam_id FROM exam_diagnosis_item edi "
+            + "JOIN exam_diagnosis ed ON ed.id = edi.exam_diagnosis_id "
+            + "JOIN exam_attempt ea ON ea.id = ed.exam_attempt_id "
+            + "WHERE edi.id = #{diagnosisItemId} AND ed.space_id = #{spaceId} "
+            + "  AND ed.user_subject = #{userSubject} LIMIT 1")
+    Long selectExamIdByDiagnosisId(@Param("diagnosisItemId") Long diagnosisItemId,
+                                   @Param("spaceId") Long spaceId,
+                                   @Param("userSubject") String userSubject);
 }

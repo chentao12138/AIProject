@@ -1,5 +1,5 @@
 /**
- * Read-only app-config IPC (ADR-047).
+ * Read-only app-config IPC (ADR-051).
  *
  * The renderer must talk to exactly the origin the main process allowed in
  * the CSP, so the resolved base URL is published from the SAME place that

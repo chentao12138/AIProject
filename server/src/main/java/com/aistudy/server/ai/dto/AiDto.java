@@ -42,6 +42,7 @@ public final class AiDto {
             Integer promptTokens,
             Integer completionTokens,
             Integer totalTokens,
+            String groundingMode,
             LocalDateTime createdAt,
             List<ContextReference> references
     ) {

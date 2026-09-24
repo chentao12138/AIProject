@@ -1,6 +1,7 @@
 package com.aistudy.server.knowledge.category.service;
 
 import com.aistudy.server.knowledge.category.dto.CreateKnowledgeCategoryRequest;
+import com.aistudy.server.knowledge.category.dto.UpdateKnowledgeCategoryRequest;
 import com.aistudy.server.knowledge.category.entity.KnowledgeCategory;
 import com.aistudy.server.knowledge.category.mapper.KnowledgeCategoryMapper;
 import com.aistudy.server.space.service.LearningSpaceService;
@@ -29,15 +30,11 @@ import java.util.List;
  * {@code null} → 404. This prevents Space A category being parented
  * to a Space B category.
  *
- * <h3>Null/empty contract (controller maps to HTTP)</h3>
+ * <h3>Lifecycle</h3>
  *
- * <ul>
- *   <li>{@link #create} returns {@code null} when the parent space is
- *       not owned OR the parent category is invalid → 404.</li>
- *   <li>{@link #listMine} returns {@code null} when the space is not
- *       owned → 404; empty list when owned but no categories.</li>
- *   <li>{@link #getMine} returns {@code null} → 404.</li>
- * </ul>
+ * <p>Categories support rename, reparent, reorder, and soft-delete.
+ * A category with children cannot be deleted (403). The same-space
+ * invariant is re-verified on reparent.
  */
 @Service
 public class KnowledgeCategoryService {
@@ -51,24 +48,14 @@ public class KnowledgeCategoryService {
         this.learningSpaceService = learningSpaceService;
     }
 
-    /**
-     * Creates a category inside the caller's own LearningSpace,
-     * optionally as a child of an existing category of the SAME
-     * space.
-     *
-     * @return persisted category, or {@code null} when space not
-     *         owned / parent invalid (404)
-     */
     @Transactional
     public KnowledgeCategory create(String ownerSubject,
                                     Long spaceId,
                                     CreateKnowledgeCategoryRequest request) {
-        // 1. Space ownership (id + ownerSubject, SQL-scoped).
         if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
             return null;
         }
 
-        // 2. Parent same-space invariant (if a parent is given).
         if (request.parentId() != null
                 && knowledgeCategoryMapper.selectByIdAndSpaceAndOwner(
                         request.parentId(), spaceId, ownerSubject) == null) {
@@ -90,12 +77,6 @@ public class KnowledgeCategoryService {
         return category;
     }
 
-    /**
-     * Lists all categories of the caller's own space in
-     * tree-presentation order (sort_order ASC, id ASC).
-     *
-     * @return categories, or {@code null} when the space is not owned
-     */
     public List<KnowledgeCategory> listMine(String ownerSubject, Long spaceId) {
         if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
             return null;
@@ -103,11 +84,85 @@ public class KnowledgeCategoryService {
         return knowledgeCategoryMapper.selectBySpaceAndOwner(spaceId, ownerSubject);
     }
 
-    /**
-     * Returns ONE category of the caller's own space (owner-scoped
-     * SQL; {@code null} → 404).
-     */
     public KnowledgeCategory getMine(String ownerSubject, Long spaceId, Long categoryId) {
         return knowledgeCategoryMapper.selectByIdAndSpaceAndOwner(categoryId, spaceId, ownerSubject);
+    }
+
+    @Transactional
+    public KnowledgeCategory update(String ownerSubject, Long spaceId, Long categoryId,
+                                    UpdateKnowledgeCategoryRequest request) {
+        KnowledgeCategory existing = getMine(ownerSubject, spaceId, categoryId);
+        if (existing == null) {
+            return null;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int updated = knowledgeCategoryMapper.updateDetailsByIdAndSpace(
+                categoryId, spaceId,
+                request.name(), request.description(), request.sortOrder(), now);
+        if (updated == 0) {
+            return null;
+        }
+        existing.setName(request.name());
+        existing.setDescription(request.description());
+        existing.setSortOrder(request.sortOrder());
+        existing.setUpdatedAt(now);
+        return existing;
+    }
+
+    @Transactional
+    public KnowledgeCategory reparent(String ownerSubject, Long spaceId, Long categoryId, Long newParentId) {
+        KnowledgeCategory existing = getMine(ownerSubject, spaceId, categoryId);
+        if (existing == null) {
+            return null;
+        }
+        if (newParentId != null) {
+            if (newParentId.equals(categoryId)) {
+                return null;
+            }
+            KnowledgeCategory newParent = knowledgeCategoryMapper.selectByIdAndSpaceAndOwner(newParentId, spaceId, ownerSubject);
+            if (newParent == null) {
+                return null;
+            }
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int updated = knowledgeCategoryMapper.reparentByIdAndSpace(categoryId, spaceId, newParentId, now);
+        if (updated == 0) {
+            return null;
+        }
+        existing.setParentId(newParentId);
+        existing.setUpdatedAt(now);
+        return existing;
+    }
+
+    @Transactional
+    public KnowledgeCategory reorder(String ownerSubject, Long spaceId, Long categoryId, Integer newSortOrder) {
+        KnowledgeCategory existing = getMine(ownerSubject, spaceId, categoryId);
+        if (existing == null) {
+            return null;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int updated = knowledgeCategoryMapper.updateSortOrderByIdAndSpace(categoryId, spaceId, newSortOrder, now);
+        if (updated == 0) {
+            return null;
+        }
+        existing.setSortOrder(newSortOrder);
+        existing.setUpdatedAt(now);
+        return existing;
+    }
+
+    @Transactional
+    public void delete(String ownerSubject, Long spaceId, Long categoryId) {
+        KnowledgeCategory existing = getMine(ownerSubject, spaceId, categoryId);
+        if (existing == null) {
+            return;
+        }
+        long childCount = knowledgeCategoryMapper.countByParentId(categoryId);
+        if (childCount > 0) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "Cannot delete a category that still has children");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        knowledgeCategoryMapper.softDeleteByIdAndSpace(categoryId, spaceId, now);
     }
 }

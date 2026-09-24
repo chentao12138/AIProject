@@ -20,6 +20,7 @@ import com.aistudy.server.exam.mapper.ExamAttemptMapper;
 import com.aistudy.server.exam.mapper.ExamQuestionMapper;
 import com.aistudy.server.knowledge.point.entity.KnowledgePoint;
 import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
+import com.aistudy.server.ai.service.AiUsageRecordService;
 import com.aistudy.server.operations.AiMetrics;
 import com.aistudy.server.practice.entity.PracticeAnswer;
 import com.aistudy.server.practice.entity.PracticeSession;
@@ -60,6 +61,7 @@ public class AiAnswerExplanationService {
     private final AiProperties aiProperties;
     private final AiRuntimeConfigResolver configResolver;
     private final AiMetrics aiMetrics;
+    private final AiUsageRecordService aiUsageRecordService;
     private final LearningSpaceService learningSpaceService;
     private final PracticeAnswerMapper practiceAnswerMapper;
     private final PracticeSessionQuestionMapper practiceSessionQuestionMapper;
@@ -74,6 +76,7 @@ public class AiAnswerExplanationService {
                                       AiProperties aiProperties,
                                       AiRuntimeConfigResolver configResolver,
                                       AiMetrics aiMetrics,
+                                      AiUsageRecordService aiUsageRecordService,
                                       LearningSpaceService learningSpaceService,
                                       PracticeAnswerMapper practiceAnswerMapper,
                                       PracticeSessionQuestionMapper practiceSessionQuestionMapper,
@@ -87,6 +90,7 @@ public class AiAnswerExplanationService {
         this.aiProperties = aiProperties;
         this.configResolver = configResolver;
         this.aiMetrics = aiMetrics;
+        this.aiUsageRecordService = aiUsageRecordService;
         this.learningSpaceService = learningSpaceService;
         this.practiceAnswerMapper = practiceAnswerMapper;
         this.practiceSessionQuestionMapper = practiceSessionQuestionMapper;
@@ -130,7 +134,7 @@ public class AiAnswerExplanationService {
         List<AiContextItem> context = learningContextService.assemble(
                 ownerSubject, ownerSubject, spaceId, stem);
 
-        return callProvider(ownerSubject, "PRACTICE", stem, submitted, correct, correctHint, kpIds, context);
+        return callProvider(ownerSubject, spaceId, "PRACTICE", stem, submitted, correct, correctHint, kpIds, context);
     }
 
     public ExplanationResponse explainExamAnswer(String ownerSubject, Long spaceId, Long answerId) {
@@ -164,10 +168,11 @@ public class AiAnswerExplanationService {
         List<AiContextItem> context = learningContextService.assemble(
                 ownerSubject, ownerSubject, spaceId, stem);
 
-        return callProvider(ownerSubject, "EXAM", stem, submitted, correct, correctHint, kpIds, context);
+        return callProvider(ownerSubject, spaceId, "EXAM", stem, submitted, correct, correctHint, kpIds, context);
     }
 
     private ExplanationResponse callProvider(String ownerSubject,
+                                             Long spaceId,
                                              String evidenceKind,
                                              String stem,
                                              String submitted,
@@ -204,11 +209,25 @@ public class AiAnswerExplanationService {
 
         AiChatResponse response;
         try {
+            long start = System.currentTimeMillis();
             response = aiProvider.chat(new AiChatRequest(
                     messages, aiProperties.getTemperature(), aiProperties.getMaxOutputTokens()),
                     ownerSubject);
+            long latency = System.currentTimeMillis() - start;
+            aiUsageRecordService.record(ownerSubject, spaceId,
+                    response.provider(), response.model(),
+                    "EXPLANATION", null,
+                    response.usage() != null ? response.usage().promptTokens() : null,
+                    response.usage() != null ? response.usage().completionTokens() : null,
+                    response.usage() != null ? response.usage().totalTokens() : null,
+                    (int) latency,
+                    "SUCCESS", null);
         } catch (AiProviderException e) {
             aiMetrics.recordFailure(aiProperties.getProvider(), e.errorCode().name());
+            aiUsageRecordService.record(ownerSubject, spaceId,
+                    aiProperties.getProvider(), aiProperties.getModel(),
+                    "EXPLANATION", null, null, null, null, null,
+                    "FAILED", e.errorCode().name());
             throw e;
         }
         aiMetrics.recordRequest(aiProperties.getProvider(), "SUCCESS");

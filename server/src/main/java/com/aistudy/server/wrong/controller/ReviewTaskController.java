@@ -2,6 +2,8 @@ package com.aistudy.server.wrong.controller;
 
 import com.aistudy.server.wrong.dto.WrongReviewResponse.CompleteReviewTaskRequest;
 import com.aistudy.server.wrong.dto.WrongReviewResponse.CompleteReviewTaskView;
+import com.aistudy.server.wrong.dto.WrongReviewResponse.CreateReviewTaskRequest;
+import com.aistudy.server.wrong.dto.WrongReviewResponse.CreateReviewTaskView;
 import com.aistudy.server.wrong.dto.WrongReviewResponse.ReviewTaskView;
 import com.aistudy.server.wrong.service.ReviewSchedulePolicy;
 import com.aistudy.server.wrong.service.WrongQuestionReviewService;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -31,6 +34,8 @@ import java.util.List;
  *        (owner+user scoped; dueBefore ISO-8601 optional)
  *   POST /api/v1/spaces/{spaceId}/review-tasks/{taskId}/complete
  *        → 200 (PENDING → COMPLETED; result CORRECT|WRONG)
+ *   POST /api/v1/spaces/{spaceId}/review-tasks
+ *        → 201 manual creation (MANUAL reason; deduped per target)
  * </pre>
  *
  * <p>Completion writes an immutable ReviewRecord, transitions the
@@ -77,5 +82,22 @@ public class ReviewTaskController {
                 result.followUp() == null ? null : result.followUp().wrongQuestionStatus(),
                 result.followUp() == null ? null : result.followUp().nextDueAt(),
                 result.task().getUpdatedAt());
+    }
+
+    @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE,
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    public CreateReviewTaskView create(@PathVariable Long spaceId,
+                                       @Valid @RequestBody CreateReviewTaskRequest request,
+                                       Authentication authentication) {
+        var task = wrongQuestionReviewService.createManualTask(
+                authentication.getName(), spaceId,
+                request.targetType(), request.targetId(),
+                request.dueAt(), request.priority(), request.notes());
+        if (task == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "LearningSpace not found or invalid target");
+        }
+        return CreateReviewTaskView.from(task);
     }
 }

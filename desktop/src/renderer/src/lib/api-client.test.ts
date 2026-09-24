@@ -1,5 +1,5 @@
 /**
- * Runtime base URL adoption in the renderer (ADR-047).
+ * Runtime base URL adoption in the renderer (ADR-051).
  *
  * The renderer must end up talking to exactly what main resolved, because
  * that is the origin the CSP allows. These cover the three ways the bridge

@@ -50,6 +50,7 @@ public interface PracticeAnswerMapper extends BaseMapper<PracticeAnswer> {
             + "    submitted_at = #{submittedAt}, "
             + "    duration_ms = #{durationMs}, "
             + "    feedback_json = #{feedbackJson}, "
+            + "    correct_answer_summary = #{correctAnswerSummary}, "
             + "    updated_at = #{updatedAt} "
             + "WHERE id = #{id} AND space_id = #{spaceId} AND user_subject = #{userSubject}")
     int updateByIdAndSpace(@Param("id") Long id,
@@ -61,6 +62,7 @@ public interface PracticeAnswerMapper extends BaseMapper<PracticeAnswer> {
                            @Param("submittedAt") LocalDateTime submittedAt,
                            @Param("durationMs") Integer durationMs,
                            @Param("feedbackJson") String feedbackJson,
+                           @Param("correctAnswerSummary") String correctAnswerSummary,
                            @Param("updatedAt") LocalDateTime updatedAt);
 
     /** Re-grading fix-up at submit (objective rows only). */

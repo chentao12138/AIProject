@@ -73,7 +73,10 @@ public class SourceAssetController {
                     HttpStatus.NOT_FOUND,
                     "Source not found");
         }
-        return SourceAssetResponse.from(created);
+        SourceAsset duplicate = sourceAssetService.checkDuplicate(
+                authentication.getName(), spaceId, sourceId, created.getSha256());
+        boolean isDuplicate = duplicate != null && !duplicate.getId().equals(created.getId());
+        return SourceAssetResponse.from(created, isDuplicate);
     }
 
     /**
@@ -116,5 +119,34 @@ public class SourceAssetController {
                     "SourceAsset not found");
         }
         return SourceAssetResponse.from(asset);
+    }
+
+    /**
+     * Authorized RAW download of one asset.
+     * Streams from storage; never returns storageKey.
+     */
+    @GetMapping(value = "/{assetId}/content")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> downloadRaw(
+            @PathVariable Long spaceId,
+            @PathVariable Long sourceId,
+            @PathVariable Long assetId,
+            Authentication authentication) {
+        SourceAssetService.RawAsset raw = sourceAssetService.openRaw(
+                authentication.getName(), spaceId, sourceId, assetId);
+        if (raw == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "SourceAsset not found");
+        }
+        SourceAsset asset = raw.asset();
+        org.springframework.core.io.InputStreamResource body =
+                new org.springframework.core.io.InputStreamResource(raw.stream());
+        String mime = asset.getMimeType() != null ? asset.getMimeType() : "application/octet-stream";
+        String safeName = asset.getOriginalName() == null
+                ? "asset-" + assetId
+                : asset.getOriginalName().replaceAll("[\\r\\n\"\\\\]", "_");
+        return org.springframework.http.ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + safeName + "\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType(mime))
+                .body(body);
     }
 }

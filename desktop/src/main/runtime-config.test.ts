@@ -1,5 +1,5 @@
 /**
- * Runtime API base URL resolution (ADR-047).
+ * Runtime API base URL resolution (ADR-051).
  */
 
 import { join } from 'node:path';

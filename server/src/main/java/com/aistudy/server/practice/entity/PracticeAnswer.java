@@ -40,6 +40,8 @@ public class PracticeAnswer {
 
     private String feedbackJson;
 
+    private String correctAnswerSummary;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
@@ -130,6 +132,14 @@ public class PracticeAnswer {
 
     public void setFeedbackJson(String feedbackJson) {
         this.feedbackJson = feedbackJson;
+    }
+
+    public String getCorrectAnswerSummary() {
+        return correctAnswerSummary;
+    }
+
+    public void setCorrectAnswerSummary(String correctAnswerSummary) {
+        this.correctAnswerSummary = correctAnswerSummary;
     }
 
     public LocalDateTime getCreatedAt() {

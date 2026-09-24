@@ -1,9 +1,11 @@
 package com.aistudy.server.exam.controller;
 
+import com.aistudy.server.exam.dto.ExamAttemptDto.ExamAnswerGradingView;
 import com.aistudy.server.exam.dto.ExamAttemptDto.ExamAnswerRequest;
 import com.aistudy.server.exam.dto.ExamAttemptDto.ExamAnswerView;
 import com.aistudy.server.exam.dto.ExamAttemptDto.ExamAttemptView;
 import com.aistudy.server.exam.dto.ExamAttemptDto.ExamResultView;
+import com.aistudy.server.exam.dto.ExamAttemptDto.GradeAnswerRequest;
 import com.aistudy.server.exam.entity.ExamAttempt;
 import com.aistudy.server.exam.service.ExamAttemptService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -11,11 +13,14 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -113,6 +118,29 @@ public class ExamAttemptController {
                                  Authentication authentication) {
         return examAttemptService.getResult(
                 authentication.getName(), spaceId, attemptId);
+    }
+
+    /**
+     * Manual subjective grading. Product rule: only ROLE_ADMIN may grade.
+     * Ordinary examinees must never grade their own answers.
+     */
+    @PutMapping(value = "/exam-attempts/{attemptId}/answers/{answerId}/grade",
+            produces = MediaType.APPLICATION_JSON_VALUE,
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ExamAnswerGradingView grade(@PathVariable Long spaceId,
+                                       @PathVariable Long attemptId,
+                                       @PathVariable Long answerId,
+                                       @Valid @RequestBody GradeAnswerRequest request,
+                                       Authentication authentication) {
+        boolean isAdmin = authentication != null && authentication.getAuthorities() != null
+                && authentication.getAuthorities().stream()
+                        .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        if (!isAdmin) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "ADMIN role required");
+        }
+        return examAttemptService.gradeAnswer(
+                authentication.getName(), spaceId, attemptId, answerId, request);
     }
 
     private ExamAttemptView attemptView(ExamAttempt attempt) {

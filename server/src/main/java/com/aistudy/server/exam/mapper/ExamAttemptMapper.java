@@ -64,4 +64,22 @@ public interface ExamAttemptMapper extends BaseMapper<ExamAttempt> {
                            @Param("toStatus") String toStatus,
                            @Param("submittedAt") LocalDateTime submittedAt,
                            @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** Expired IN_PROGRESS attempts for the auto-submit sweeper. */
+    @Select("SELECT * FROM exam_attempt "
+            + "WHERE status = 'IN_PROGRESS' "
+            + "  AND deadline_at IS NOT NULL AND deadline_at < #{now}")
+    List<ExamAttempt> selectExpiredInProgress(@Param("now") LocalDateTime now);
+
+    @Select("SELECT ea.* FROM exam_attempt ea "
+            + "WHERE ea.exam_id = #{examId} "
+            + "ORDER BY ea.created_at DESC, ea.id DESC")
+    List<ExamAttempt> selectByExamId(@Param("examId") Long examId);
+
+    @Update("UPDATE exam_attempt SET grading_status = #{gradingStatus}, updated_at = #{updatedAt} "
+            + "WHERE id = #{attemptId} AND space_id = #{spaceId}")
+    int updateGradingStatusByIdAndSpace(@Param("attemptId") Long attemptId,
+                                        @Param("spaceId") Long spaceId,
+                                        @Param("gradingStatus") String gradingStatus,
+                                        @Param("updatedAt") LocalDateTime updatedAt);
 }

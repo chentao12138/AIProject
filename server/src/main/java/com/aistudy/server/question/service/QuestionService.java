@@ -3,6 +3,7 @@ package com.aistudy.server.question.service;
 import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
 import com.aistudy.server.question.dto.CreateQuestionRequest;
 import com.aistudy.server.question.dto.CreateQuestionRequest.QuestionOptionInput;
+import com.aistudy.server.question.dto.UpdateQuestionRequest;
 import com.aistudy.server.question.entity.Question;
 import com.aistudy.server.question.entity.QuestionKnowledgePoint;
 import com.aistudy.server.question.entity.QuestionOption;
@@ -23,44 +24,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * BUSINESS-008 — application service for the Question bank.
- *
- * <p>The ONLY caller of the Question mappers. Every read is
- * owner-scoped SQL (JOIN learning_space + deleted_at IS NULL).
- *
- * <h3>Server-controlled fields</h3>
- *
- * <p>On create the service fixes: {@code originType = USER_CURATED},
- * {@code status = DRAFT}, {@code createdByUserId = ownerSubject},
- * {@code publishedAt = null}, {@code deletedAt = null}, and writes
- * {@code answer_data_json} from the typed request fields (never from
- * raw client JSON).
- *
- * <h3>Per-type validation (400)</h3>
- *
- * <ul>
- *   <li>SINGLE_CHOICE: 2..16 options, unique option keys, exactly one
- *       correctOptionKey that must exist among the options.</li>
- *   <li>MULTIPLE_CHOICE: 2..16 options, unique keys, &gt;=1
- *       correctOptionKeys, all present among the options, no
- *       duplicates.</li>
- *   <li>TRUE_FALSE: no options allowed, correctBoolean required.</li>
- *   <li>SHORT_ANSWER: no options allowed, referenceAnswer optional.</li>
- * </ul>
- *
- * <h3>Same-space invariants (404)</h3>
- *
- * <p>Space must be owned by the caller; every knowledgePointId must
- * resolve through the owner-scoped KnowledgePoint query (same space,
- * not deleted). Any violation → {@code null} → controller 404.
- *
- * <h3>Publish lifecycle</h3>
- *
- * <p>{@code DRAFT → PUBLISHED}, idempotent: re-publishing an already
- * published question is a NO-OP (no UPDATE, no timestamp refresh),
- * same semantic as BUSINESS-003.
- */
 @Service
 public class QuestionService {
 
@@ -68,10 +31,20 @@ public class QuestionService {
     public static final String TYPE_MULTIPLE_CHOICE = "MULTIPLE_CHOICE";
     public static final String TYPE_TRUE_FALSE = "TRUE_FALSE";
     public static final String TYPE_SHORT_ANSWER = "SHORT_ANSWER";
+    public static final String TYPE_FILL_BLANK = "FILL_BLANK";
+    public static final String TYPE_ORDERING = "ORDERING";
+    public static final String TYPE_MATCHING = "MATCHING";
 
     public static final String ORIGIN_TYPE_USER_CURATED = "USER_CURATED";
+    public static final String ORIGIN_TYPE_SOURCE_DERIVED = "SOURCE_DERIVED";
+    public static final String ORIGIN_TYPE_AI_DERIVED = "AI_DERIVED";
+    public static final String ORIGIN_TYPE_ADMIN_CURATED = "ADMIN_CURATED";
+
     public static final String STATUS_DRAFT = "DRAFT";
+    public static final String STATUS_NEEDS_REVIEW = "NEEDS_REVIEW";
     public static final String STATUS_PUBLISHED = "PUBLISHED";
+    public static final String STATUS_ARCHIVED = "ARCHIVED";
+    public static final String STATUS_REJECTED = "REJECTED";
 
     private static final int MAX_OPTIONS = 16;
 
@@ -93,23 +66,13 @@ public class QuestionService {
         this.learningSpaceService = learningSpaceService;
     }
 
-    /**
-     * Creates a USER_CURATED DRAFT question in the caller's own space.
-     *
-     * @return persisted question, or {@code null} when the space is not
-     *         owned or a knowledgePointId is invalid (404)
-     * @throws ResponseStatusException 400 on type/options violations
-     */
     @Transactional
     public Question create(String ownerSubject, Long spaceId, CreateQuestionRequest request) {
         if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
             return null;
         }
-
         String type = request.questionType();
         validateStructure(type, request);
-
-        // Same-space knowledge points (all-or-nothing; null → 404).
         List<Long> kpIds = request.knowledgePointIds();
         if (kpIds != null && !kpIds.isEmpty()) {
             Set<Long> seen = new HashSet<>();
@@ -123,9 +86,7 @@ public class QuestionService {
                 }
             }
         }
-
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
-
         Question question = new Question();
         question.setSpaceId(spaceId);
         question.setQuestionType(type);
@@ -139,18 +100,11 @@ public class QuestionService {
         question.setUpdatedAt(now);
         question.setAnswerDataJson(buildAnswerDataJson(type, request));
         questionMapper.insert(question);
-
         insertOptions(question.getId(), spaceId, request.options());
         insertKnowledgePointLinks(question.getId(), spaceId, kpIds);
         return question;
     }
 
-    /**
-     * Lists non-deleted questions of the caller's own space with
-     * optional filters (status / questionType / knowledgePointId).
-     *
-     * @return questions, or {@code null} when the space is not owned
-     */
     public List<Question> listMine(String ownerSubject, Long spaceId,
                                    String status, String questionType, Long knowledgePointId) {
         if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
@@ -160,19 +114,67 @@ public class QuestionService {
                 spaceId, ownerSubject, status, questionType, knowledgePointId);
     }
 
-    /**
-     * Returns ONE non-deleted question of the caller's own space
-     * (owner-scoped SQL; {@code null} → 404).
-     */
     public Question getMine(String ownerSubject, Long spaceId, Long questionId) {
         return questionMapper.selectByIdSpaceOwner(questionId, spaceId, ownerSubject);
     }
 
-    /**
-     * Publishes a DRAFT question (DRAFT → PUBLISHED). True idempotency:
-     * already-published → returned unchanged, no UPDATE, no timestamp
-     * refresh (same contract as BUSINESS-003 publish).
-     */
+    @Transactional
+    public Question update(String ownerSubject, Long spaceId, Long questionId, UpdateQuestionRequest request) {
+        Question existing = getMine(ownerSubject, spaceId, questionId);
+        if (existing == null || STATUS_ARCHIVED.equals(existing.getStatus())) {
+            return null;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int updated = questionMapper.updateDetailsByIdAndSpace(
+                questionId, spaceId,
+                request.stem() != null ? request.stem() : existing.getStem(),
+                request.explanation() != null ? request.explanation() : existing.getExplanation(),
+                request.difficulty() != null ? request.difficulty() : existing.getDifficulty(),
+                now);
+        if (updated == 0) {
+            return null;
+        }
+        existing.setStem(request.stem() != null ? request.stem() : existing.getStem());
+        existing.setExplanation(request.explanation() != null ? request.explanation() : existing.getExplanation());
+        existing.setDifficulty(request.difficulty() != null ? request.difficulty() : existing.getDifficulty());
+        existing.setUpdatedAt(now);
+        return existing;
+    }
+
+    @Transactional
+    public Question archive(String ownerSubject, Long spaceId, Long questionId) {
+        Question existing = getMine(ownerSubject, spaceId, questionId);
+        if (existing == null || STATUS_ARCHIVED.equals(existing.getStatus())) {
+            return null;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int updated = questionMapper.archiveByIdAndSpace(questionId, spaceId, STATUS_ARCHIVED, now, now);
+        if (updated == 0) {
+            return null;
+        }
+        existing.setStatus(STATUS_ARCHIVED);
+        existing.setArchivedAt(now);
+        existing.setUpdatedAt(now);
+        return existing;
+    }
+
+    @Transactional
+    public Question restore(String ownerSubject, Long spaceId, Long questionId) {
+        Question existing = getMine(ownerSubject, spaceId, questionId);
+        if (existing == null || !STATUS_ARCHIVED.equals(existing.getStatus())) {
+            return null;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int updated = questionMapper.restoreByIdAndSpace(questionId, spaceId, STATUS_DRAFT, now);
+        if (updated == 0) {
+            return null;
+        }
+        existing.setStatus(STATUS_DRAFT);
+        existing.setArchivedAt(null);
+        existing.setUpdatedAt(now);
+        return existing;
+    }
+
     @Transactional
     public Question publish(String ownerSubject, Long spaceId, Long questionId) {
         Question existing = getMine(ownerSubject, spaceId, questionId);
@@ -193,87 +195,91 @@ public class QuestionService {
         return existing;
     }
 
-    // ==================== internals ====================
+    public List<QuestionOption> optionsOf(Question question) {
+        return questionOptionMapper.selectByQuestionId(question.getSpaceId(), question.getId());
+    }
 
-    /** Type-specific validation. 400 on structural violations. */
+    public List<QuestionKnowledgePoint> knowledgePointsOf(Question question) {
+        return questionKnowledgePointMapper.selectByQuestionId(question.getSpaceId(), question.getId());
+    }
+
     private void validateStructure(String type, CreateQuestionRequest request) {
         List<QuestionOptionInput> options = request.options();
         boolean hasOptions = options != null && !options.isEmpty();
-
         switch (type) {
             case TYPE_SINGLE_CHOICE, TYPE_MULTIPLE_CHOICE -> {
                 if (!hasOptions) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            type + " requires at least 2 options");
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, type + " requires at least 2 options");
                 }
                 if (options.size() > MAX_OPTIONS) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "at most " + MAX_OPTIONS + " options allowed");
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "at most " + MAX_OPTIONS + " options allowed");
                 }
                 Set<String> keys = new HashSet<>();
                 for (QuestionOptionInput o : options) {
                     if (!keys.add(o.optionKey())) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "option keys must be unique within a question: " + o.optionKey());
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "option keys must be unique");
                     }
                 }
                 if (TYPE_SINGLE_CHOICE.equals(type)) {
-                    if (request.correctOptionKey() == null
-                            || !keys.contains(request.correctOptionKey())) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "SINGLE_CHOICE requires exactly one correctOptionKey that exists among the options");
+                    if (request.correctOptionKey() == null || !keys.contains(request.correctOptionKey())) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SINGLE_CHOICE requires exactly one correctOptionKey");
                     }
                 } else {
                     if (request.correctOptionKeys() == null || request.correctOptionKeys().isEmpty()) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "MULTIPLE_CHOICE requires at least one correctOptionKeys entry");
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MULTIPLE_CHOICE requires at least one correctOptionKeys");
                     }
                     Set<String> correctKeys = new HashSet<>();
                     for (String key : request.correctOptionKeys()) {
                         if (!keys.contains(key)) {
-                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                    "correctOptionKeys entry not among the options: " + key);
+                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "correctOptionKeys entry not among options: " + key);
                         }
                         if (!correctKeys.add(key)) {
-                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                    "correctOptionKeys must not contain duplicates: " + key);
+                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "correctOptionKeys must not contain duplicates: " + key);
                         }
                     }
                 }
             }
             case TYPE_TRUE_FALSE -> {
                 if (hasOptions) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "TRUE_FALSE must not carry options");
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "TRUE_FALSE must not carry options");
                 }
                 if (request.correctBoolean() == null) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "TRUE_FALSE requires correctBoolean");
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "TRUE_FALSE requires correctBoolean");
                 }
             }
             case TYPE_SHORT_ANSWER -> {
                 if (hasOptions) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "SHORT_ANSWER must not carry options");
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SHORT_ANSWER must not carry options");
                 }
             }
-            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "unsupported questionType: " + type);
+            case TYPE_FILL_BLANK -> {
+                if (hasOptions) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "FILL_BLANK must not carry options");
+                }
+            }
+            case TYPE_ORDERING -> {
+                if (request.correctOrder() == null || request.correctOrder().isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ORDERING requires correctOrder");
+                }
+            }
+            case TYPE_MATCHING -> {
+                if (request.matches() == null || request.matches().isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATCHING requires matches");
+                }
+            }
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported questionType: " + type);
         }
     }
 
     private String buildAnswerDataJson(String type, CreateQuestionRequest request) {
         return switch (type) {
-            case TYPE_SINGLE_CHOICE -> AnswerDataCodec.buildAnswerDataJson(
-                    request.correctOptionKey(), null, null, null);
-            case TYPE_MULTIPLE_CHOICE -> AnswerDataCodec.buildAnswerDataJson(
-                    null, request.correctOptionKeys(), null, null);
-            case TYPE_TRUE_FALSE -> AnswerDataCodec.buildAnswerDataJson(
-                    null, null, request.correctBoolean(), null);
-            case TYPE_SHORT_ANSWER -> AnswerDataCodec.buildAnswerDataJson(
-                    null, null, null, request.referenceAnswer());
-            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "unsupported questionType: " + type);
+            case TYPE_SINGLE_CHOICE -> AnswerDataCodec.buildAnswerDataJson(request.correctOptionKey(), null, null, null);
+            case TYPE_MULTIPLE_CHOICE -> AnswerDataCodec.buildAnswerDataJson(null, request.correctOptionKeys(), null, null);
+            case TYPE_TRUE_FALSE -> AnswerDataCodec.buildAnswerDataJson(null, null, request.correctBoolean(), null);
+            case TYPE_SHORT_ANSWER, TYPE_FILL_BLANK -> AnswerDataCodec.buildFillBlankAnswerData(request.referenceAnswer());
+            case TYPE_ORDERING -> AnswerDataCodec.buildOrderingAnswerData(request.correctOrder());
+            case TYPE_MATCHING -> AnswerDataCodec.buildMatchingAnswerData(request.matches());
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported questionType: " + type);
         };
     }
 
@@ -309,14 +315,5 @@ public class QuestionService {
             link.setCreatedAt(now);
             questionKnowledgePointMapper.insert(link);
         }
-    }
-
-    /** Authoring helpers shared by controller and tests. */
-    public List<QuestionOption> optionsOf(Question question) {
-        return questionOptionMapper.selectByQuestionId(question.getSpaceId(), question.getId());
-    }
-
-    public List<QuestionKnowledgePoint> knowledgePointsOf(Question question) {
-        return questionKnowledgePointMapper.selectByQuestionId(question.getSpaceId(), question.getId());
     }
 }

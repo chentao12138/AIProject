@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -96,4 +98,58 @@ public interface LearningSpaceMapper extends BaseMapper<LearningSpace> {
     @Select("SELECT * FROM learning_space WHERE owner_subject = #{ownerSubject} "
             + "ORDER BY created_at DESC, id DESC")
     List<LearningSpace> selectByOwner(@Param("ownerSubject") String ownerSubject);
+
+    @Select("SELECT * FROM learning_space WHERE owner_subject = #{ownerSubject} "
+            + "ORDER BY created_at DESC, id DESC")
+    List<LearningSpace> selectByOwnerIncludingArchived(@Param("ownerSubject") String ownerSubject);
+
+    @Update("UPDATE learning_space SET name = #{name}, description = #{description}, updated_at = #{updatedAt} "
+            + "WHERE id = #{spaceId} AND owner_subject = #{ownerSubject}")
+    int updateNameDescriptionByIdAndOwner(@Param("spaceId") Long spaceId,
+                                          @Param("ownerSubject") String ownerSubject,
+                                          @Param("name") String name,
+                                          @Param("description") String description,
+                                          @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Update("UPDATE learning_space SET status = #{status}, archived_at = #{archivedAt}, "
+            + "updated_at = #{updatedAt} "
+            + "WHERE id = #{spaceId} AND owner_subject = #{ownerSubject}")
+    int archiveByIdAndOwner(@Param("spaceId") Long spaceId,
+                            @Param("ownerSubject") String ownerSubject,
+                            @Param("status") String status,
+                            @Param("archivedAt") LocalDateTime archivedAt,
+                            @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Update("UPDATE learning_space SET status = #{status}, archived_at = NULL, "
+            + "updated_at = #{updatedAt} "
+            + "WHERE id = #{spaceId} AND owner_subject = #{ownerSubject}")
+    int restoreByIdAndOwner(@Param("spaceId") Long spaceId,
+                            @Param("ownerSubject") String ownerSubject,
+                            @Param("status") String status,
+                            @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Select("SELECT * FROM learning_space "
+            + "WHERE (#{ownerSubject} IS NULL OR owner_subject = #{ownerSubject}) "
+            + "  AND (#{status} IS NULL OR status = #{status}) "
+            + "ORDER BY created_at DESC, id DESC")
+    List<LearningSpace> selectAllAdmin(@Param("ownerSubject") String ownerSubject,
+                                       @Param("status") String status);
+
+    @Select("SELECT COUNT(*) FROM learning_space_membership WHERE space_id = #{spaceId}")
+    long countMembers(@Param("spaceId") Long spaceId);
+
+    @Update("UPDATE learning_space SET status = #{status}, archived_at = #{archivedAt}, "
+            + "updated_at = #{updatedAt} "
+            + "WHERE id = #{spaceId}")
+    int archiveById(@Param("spaceId") Long spaceId,
+                    @Param("status") String status,
+                    @Param("archivedAt") LocalDateTime archivedAt,
+                    @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Update("UPDATE learning_space SET status = #{status}, archived_at = NULL, "
+            + "updated_at = #{updatedAt} "
+            + "WHERE id = #{spaceId}")
+    int restoreById(@Param("spaceId") Long spaceId,
+                    @Param("status") String status,
+                    @Param("updatedAt") LocalDateTime updatedAt);
 }

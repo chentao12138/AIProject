@@ -898,7 +898,58 @@ Desktop file/folder selection
 
 ---
 
-## ADR-047：Desktop 后端地址在运行期解析并由 main 单点分发
+## ADR-047：LearningSpace 作用域由服务端统一地板强制
+
+- **背景**：architecture.md §5.2 要求"每个 endpoint 先验证 canAccess(spaceId)"，但实现方式是各 controller/service 手工调用 `LearningSpaceService.getMine`。该约定在 33 个 space-scoped controller、62 处手工调用下已经漏过一次（`GET /api/v1/spaces/{spaceId}/statistics/question-type-performance` 不接收 principal，SQL 只按 `space_id` 过滤，任何登录用户枚举自增 spaceId 即可读他人考试正确率）。
+- **决策**：保留各模块的 owner-scoped SQL，同时增加结构性地板 `space/scope/SpaceScopeInterceptor`：凡 handler 声明 `{spaceId}` 路径变量，进入 handler 前统一校验 JWT `sub` 对该空间的所有权，失败返回 404 `SPACE_NOT_FOUND`。
+- **规则**：
+  - `spaceId` 只取 Spring 已解析的 path 变量；query/body 参数不参与判定。
+  - 未认证请求由 Security 链返回 401，地板不介入（否则客户端 token 刷新逻辑失效）。
+  - `/api/v1/admin/**` 不在地板范围内：治理天然跨 owner，由 `ROLE_ADMIN` 授权。
+  - 地板**不免除**§5.3 的关系同空间校验与各模块 owner-scoped 查询；它是漏写的兜底，不是不写的许可。
+- **影响**：新增 space-scoped 端点默认获得隔离，无需记得手写 gate。
+- **状态**：`Accepted`
+
+---
+
+## ADR-048：统一 RFC 7807 错误契约与稳定错误码
+
+- **背景**：api-guidelines.md §12 规定 ProblemDetail + 稳定 `code`，但实现中 `ProblemDetail` / `@RestControllerAdvice` 出现 0 次，错误由 315 处 `ResponseStatusException`、57 处内联全限定 `throw new org.springframework...`、48 处 `IllegalStateException`（默认 500）各自成形。三端客户端只能对 HTTP 状态码和英文自由文本分支，契约只覆盖成功响应。
+- **决策**：新增 `common/problem`：`ApiException(status, code, detail)` + `ApiErrorCodes`（§12 常量的唯一来源）+ `ApiExceptionHandler`（全局唯一错误出口，输出 `application/problem+json`，固定带 `code` 与 `requestId`）。
+- **规则**：
+  - 新代码抛 `ApiException` 以钉住 `code`；客户端只按 `code` 分支。
+  - 遗留 `ResponseStatusException` 保持状态码与 detail，`code` 按状态码推导，逐步替换。
+  - `IllegalArgumentException` → 400；`IllegalStateException` → 500 且不回显异常消息（消息只进日志，以同一 `requestId` 关联）。
+  - 未处理异常仍由 Boot 默认 `/error` 兜底；本 ADR 不引入吞掉框架异常的 catch-all handler，以免把 404（如静态资源未命中）改写成 500。
+- **状态**：`Accepted`
+
+---
+
+## ADR-049：内部异步摄取任务的租约、心跳与幂等契约
+
+- **背景**：architecture.md §6.2 只写"第一版用进程内异步 + Job 表，不引入 MQ"，没有规定进程内异步的最低可靠契约，实现因此各自补齐并留下缺口：worker 落在 Boot 默认的无界队列执行器上；入队发生在事务 commit 之前（worker 看不到行，Job 永久 `QUEUED`）；`@Transactional` 自调用失效使多步写各自 autocommit；回收只在启动时跑一次且租约 30 分钟；DOCX/TXT 重抽不删旧行导致页/块重复；失败时 `error_code/error_message` 只改内存对象，从未落库。
+- **决策**：把 MQ 本来代管的性质显式写为契约（见 architecture.md §6.2 表格），并在实现上落实：专用有界 `ingestionWorkerExecutor`、`afterCommit` 入队、原子 claim、租约 + 心跳、周期回收、重抽前删除未定稿行、终态与诊断同条 UPDATE、"revision 变为可见"单事务化。
+- **规则**：
+  - Job 状态字面量必须与 `IngestionJobService.IngestionStatus` 一致；不允许并存第二套词表。
+  - `heartbeat` 必须显著小于 `stale-lease`，否则长任务会在运行中被他人抢走。
+  - 回收周期在 `test` / `flyway-it` profile 关闭（`recovery-enabled=false`），避免测试期间状态被后台改写。
+  - 拒绝的执行不进内存队列：Job 留在 `QUEUED`，由回收 tick 再派发。
+- **遗留**：ZIP 重抽仍会为每个条目新增 `source_asset` 行（缺 `(space, source, relative_path)` 唯一键与 upsert），本轮未修。
+- **状态**：`Accepted`
+
+---
+
+## ADR-050：模块边界以可回读的棘轮测试锁定
+
+- **背景**：ADR-024 的模块规则（Controller 不承载业务、Mapper 不被跨模块直调、`common` 不放垃圾）只有文档，无 ArchUnit / enforcer / `module-info`，实测跨模块 Mapper import 85 处、12 个一级模块构成一个互相可达的大团。本项目主要由 AI Agent 增量开发，无回读机制的约定必然漂移。
+- **决策**：新增 `src/test/.../architecture/ModuleBoundaryTest.java`，用零依赖的源码 import 扫描把度量固化成**只准收缩**的基线：Controller→Mapper 类名单、Controller 使用 `JdbcTemplate`（硬性 0）、跨模块 Mapper import 上限、模块环基线。
+- **规则**：
+  - 违规只可减少；新增违规使测试失败，修复后必须同步删掉基线条目。
+  - 不为此引入新构建依赖（离线可跑，且跑在无数据库的 `test` profile）。
+- **影响**：ADR-024"未来可按模块拆分"的前提第一次变成可被自动化度量的对象。
+- **状态**：`Accepted`
+
+## ADR-051：Desktop 后端地址在运行期解析并由 main 单点分发
 
 - **背景**：ADR-029 规定 Desktop 的 API 地址"从配置读取"，并预期未来从 `http://127.0.0.1:8080` 切换到 `https://api.<domain>`。实际实现把 `VITE_API_BASE_URL` 在**构建期**内联进 main 与 renderer 两个 bundle（构建产物中 `import.meta` 出现 0 次），仓库又不提交 `.env`，因此干净检出直接 `npm run dist:win` 会静默烤入 `http://localhost:8080`；又因为 CSP `connect-src` 由同一个构建期值派生，切换远端后的失败形态是"renderer 打到远端、策略只放行 localhost"，且在打包环境里不可观测。
 - **决策**：Desktop 后端地址在**运行期**由 main 进程解析一次，main 是唯一权威；renderer 通过只读 IPC 通道获取同一个值。
@@ -919,7 +970,7 @@ Desktop file/folder selection
 
 ---
 
-## ADR-048：OpenAPI 生成物一致性作为可执行门禁
+## ADR-052：OpenAPI 生成物一致性作为可执行门禁
 
 - **背景**：ADR-030 要求 Desktop/Admin 复用从服务端 OpenAPI 生成的 TypeScript client，禁止各端手写同义 DTO。`api:generate` 需要**运行中的服务端**，仓库没有 CI，也没有任何东西能证明提交上来的 `api.d.ts` 确实由提交上来的 `openapi.json` 生成；实际审计还发现 renderer 的 `lib/types.ts` 只派生了 FE-001 领域，新特性（questions/practice/exams/search/ai）改用手写平行 DTO 与 `as unknown as`，等于绕过契约。
 - **决策**：`packages/api-client/src/generated/` 三件套（`openapi.json`、`api.d.ts`、`manifest.json`）必须一致，并由脚本门禁化。

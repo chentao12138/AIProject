@@ -1,17 +1,18 @@
 package com.aistudy.server.mastery.service;
 
 /**
- * BUSINESS-014 — deterministic, explainable mastery policy.
+ * BUSINESS-014 / Final Backend — deterministic mastery policy.
  *
  * <pre>
+ *   evidence = practice + exam + review (CORRECT/WRONG graded records)
  *   masteryScore = correctCount / gradedCount      (0..1)
- *   confidence   = min(1.0, gradedCount / 5.0)    (sample-size proxy)
+ *   confidence   = min(1.0, gradedCount / fullSamples)
  * </pre>
  *
- * <p>Evidence = graded objective answers (practice + exam) of
- * questions linked to the knowledge point. No AI; pure deterministic
- * arithmetic so any score is explainable from its evidence counts.
- * Replaceable policy — never hardcoded in services.
+ * Review CORRECT/WRONG participates in BOTH score and confidence so a
+ * completed spaced-repetition evidence changes mastery explainably.
+ * No AI; pure deterministic arithmetic. algorithmVersion records the
+ * active calibration version used for a recompute.
  */
 public final class MasteryScoringPolicy {
 
@@ -29,6 +30,13 @@ public final class MasteryScoringPolicy {
     }
 
     public static double confidence(int gradedCount) {
-        return Math.min(1.0, gradedCount / (double) CONFIDENCE_FULL_SAMPLES);
+        return confidence(gradedCount, CONFIDENCE_FULL_SAMPLES);
+    }
+
+    public static double confidence(int gradedCount, int confidenceFullSamples) {
+        if (confidenceFullSamples <= 0) {
+            return Math.min(1.0, gradedCount / (double) CONFIDENCE_FULL_SAMPLES);
+        }
+        return Math.min(1.0, gradedCount / (double) confidenceFullSamples);
     }
 }

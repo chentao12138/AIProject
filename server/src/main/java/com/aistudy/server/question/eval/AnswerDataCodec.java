@@ -19,6 +19,9 @@ import java.util.Map;
  *   MULTIPLE_CHOICE  {"correctOptionKeys":["A","C"]}
  *   TRUE_FALSE       {"correctBoolean":true}
  *   SHORT_ANSWER     {"referenceAnswer":"..."}
+ *   FILL_BLANK       {"referenceAnswer":"..."}
+ *   ORDERING         {"correctOrder":[3,1,2]}
+ *   MATCHING         {"matchesJson":"[{\"left\":\"A\",\"right\":\"1\"}]"}
  * </pre>
  *
  * <p>The same shape is embedded into practice/exam question snapshots
@@ -36,9 +39,9 @@ public final class AnswerDataCodec {
 
     /** Builds the canonical JSON for one answer-data shape. */
     public static String buildAnswerDataJson(String correctOptionKey,
-                                             List<String> correctOptionKeys,
-                                             Boolean correctBoolean,
-                                             String referenceAnswer) {
+                                              List<String> correctOptionKeys,
+                                              Boolean correctBoolean,
+                                              String referenceAnswer) {
         Map<String, Object> map = new LinkedHashMap<>();
         if (correctOptionKey != null) {
             map.put("correctOptionKey", correctOptionKey);
@@ -55,6 +58,29 @@ public final class AnswerDataCodec {
         return write(map);
     }
 
+    /** FILL_BLANK: stores the reference answer text (comma-delimited per blank). */
+    public static String buildFillBlankAnswerData(String referenceAnswer) {
+        return buildAnswerDataJson(null, null, null, referenceAnswer);
+    }
+
+    /** ORDERING: stores the correct sequence of item identifiers. */
+    public static String buildOrderingAnswerData(List<Integer> correctOrder) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        if (correctOrder != null) {
+            map.put("correctOrder", correctOrder);
+        }
+        return write(map);
+    }
+
+    /** MATCHING: stores the correct left→right pairs as a JSON array string. */
+    public static String buildMatchingAnswerData(String matchesJson) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        if (matchesJson != null) {
+            map.put("matchesJson", matchesJson);
+        }
+        return write(map);
+    }
+
     /** Parses a stored answer-data document. */
     public static AnswerData parse(String answerDataJson) {
         try {
@@ -64,14 +90,30 @@ public final class AnswerDataCodec {
             List<String> optionKeys = keys == null ? null : ((List<?>) keys).stream()
                     .map(String::valueOf)
                     .toList();
+            List<Integer> order = parseIntegerList(map.get("correctOrder"));
             return new AnswerData(
                     map.get("correctOptionKey") == null ? null : String.valueOf(map.get("correctOptionKey")),
                     optionKeys,
                     map.get("correctBoolean") == null ? null : Boolean.valueOf(String.valueOf(map.get("correctBoolean"))),
-                    map.get("referenceAnswer") == null ? null : String.valueOf(map.get("referenceAnswer"))
+                    map.get("referenceAnswer") == null ? null : String.valueOf(map.get("referenceAnswer")),
+                    order,
+                    map.get("matchesJson") == null ? null : String.valueOf(map.get("matchesJson"))
             );
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("corrupt answer_data_json: " + answerDataJson, e);
+        }
+    }
+
+    private static List<Integer> parseIntegerList(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            List<?> raw = (List<?>) value;
+            return raw.stream().map(o -> Integer.valueOf(String.valueOf(o))).toList();
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -133,7 +175,19 @@ public final class AnswerDataCodec {
     public record AnswerData(String correctOptionKey,
                              List<String> correctOptionKeys,
                              Boolean correctBoolean,
-                             String referenceAnswer) {
+                             String referenceAnswer,
+                             List<Integer> correctOrder,
+                             String matchesJson) {
+
+        /** Returns true when this answer data has enough structure to grade. */
+        public boolean hasCorrectAnswer() {
+            return correctOptionKey != null
+                    || (correctOptionKeys != null && !correctOptionKeys.isEmpty())
+                    || correctBoolean != null
+                    || referenceAnswer != null
+                    || (correctOrder != null && !correctOrder.isEmpty())
+                    || matchesJson != null;
+        }
     }
 
     /**
@@ -150,8 +204,17 @@ public final class AnswerDataCodec {
 
     /** Builds the server-written answer payload JSON from typed fields. */
     public static String buildAnswerPayloadJson(List<String> selectedOptionKeys,
-                                                Boolean booleanAnswer,
-                                                String textAnswer) {
+                                                 Boolean booleanAnswer,
+                                                 String textAnswer) {
+        return buildAnswerPayloadJson(selectedOptionKeys, booleanAnswer, textAnswer, null, null);
+    }
+
+    /** Builds the server-written answer payload JSON including ORDERING/MATCHING. */
+    public static String buildAnswerPayloadJson(List<String> selectedOptionKeys,
+                                                 Boolean booleanAnswer,
+                                                 String textAnswer,
+                                                 List<Integer> orderingAnswer,
+                                                 String matchingAnswer) {
         Map<String, Object> map = new LinkedHashMap<>();
         if (selectedOptionKeys != null) {
             map.put("selectedOptionKeys", selectedOptionKeys);
@@ -161,6 +224,12 @@ public final class AnswerDataCodec {
         }
         if (textAnswer != null) {
             map.put("textAnswer", textAnswer);
+        }
+        if (orderingAnswer != null) {
+            map.put("orderingAnswer", orderingAnswer);
+        }
+        if (matchingAnswer != null) {
+            map.put("matchingAnswer", matchingAnswer);
         }
         return write(map);
     }
@@ -174,11 +243,15 @@ public final class AnswerDataCodec {
             List<String> optionKeys = keys == null ? null : ((List<?>) keys).stream()
                     .map(String::valueOf)
                     .toList();
+            List<Integer> ordering = parseIntegerList(map.get("orderingAnswer"));
+            String matching = map.get("matchingAnswer") == null ? null : String.valueOf(map.get("matchingAnswer"));
             return new AnswerPayloadView(
                     optionKeys,
                     map.get("booleanAnswer") == null ? null
                             : Boolean.valueOf(String.valueOf(map.get("booleanAnswer"))),
-                    map.get("textAnswer") == null ? null : String.valueOf(map.get("textAnswer"))
+                    map.get("textAnswer") == null ? null : String.valueOf(map.get("textAnswer")),
+                    ordering,
+                    matching
             );
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("corrupt answer payload: " + answerPayloadJson, e);
@@ -188,6 +261,8 @@ public final class AnswerDataCodec {
     /** Parsed answer payload view. */
     public record AnswerPayloadView(List<String> selectedOptionKeys,
                                     Boolean booleanAnswer,
-                                    String textAnswer) {
+                                    String textAnswer,
+                                    List<Integer> orderingAnswer,
+                                    String matchingAnswer) {
     }
 }

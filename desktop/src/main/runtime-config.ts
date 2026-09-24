@@ -1,5 +1,5 @@
 /**
- * Runtime API base URL resolution (ADR-047).
+ * Runtime API base URL resolution (ADR-051).
  *
  * Precedence: `AISTUDY_API_BASE_URL` env → `<userData>/config.json` →
  * build-time `VITE_API_BASE_URL` → hard default. Main resolves this ONCE and

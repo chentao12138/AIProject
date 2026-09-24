@@ -68,7 +68,7 @@ public class IngestionJobController {
                                        @Valid @RequestBody CreateIngestionJobRequest request,
                                        Authentication authentication) {
         IngestionJob created = ingestionJobService.create(
-                authentication.getName(), spaceId, sourceId, request.assetId());
+                authentication.getName(), spaceId, sourceId);
         if (created == null) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,

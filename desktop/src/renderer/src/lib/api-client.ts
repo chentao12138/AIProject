@@ -33,7 +33,7 @@ export {
 /**
  * The backend target. Seeded from the build-time `VITE_API_BASE_URL` and
  * replaced by `configureApiBaseUrl()` with the value main resolved at runtime
- * (ADR-047) — an object so the shell header and the client always read the
+ * (ADR-051) — an object so the shell header and the client always read the
  * same live value instead of two snapshots.
  */
 export const apiConfig: { baseUrl: string } = {
