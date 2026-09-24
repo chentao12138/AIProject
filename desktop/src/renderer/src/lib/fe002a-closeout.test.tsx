@@ -37,22 +37,22 @@ describe('formatDateTime — already covered baseline, ensure null path', () => 
 
 describe('ingestion-status — additional edges', () => {
   it('trims whitespace around status before classify', () => {
-    expect(classifyIngestionStatus('  PENDING  ')).toBe('non-terminal');
+    expect(classifyIngestionStatus('  IMPORTING  ')).toBe('non-terminal');
     expect(classifyIngestionStatus('\tFAILED\n')).toBe('failure-terminal');
   });
 
-  it('formatIngestionStage humanizes EXTRACTING and STRUCTURING', () => {
-    expect(formatIngestionStage('EXTRACTING', 'RUNNING')).toBe('Extracting');
-    expect(formatIngestionStage('STRUCTURING', 'RUNNING')).toBe('Structuring');
+  it('formatIngestionStage translates the pipeline stages', () => {
+    expect(formatIngestionStage('EXTRACT', 'EXTRACTING')).toBe('抽取');
+    expect(formatIngestionStage('STRUCTURE', 'STRUCTURING')).toBe('结构化');
   });
 
   it('formatIngestionStage ignores stage when terminal', () => {
-    expect(formatIngestionStage('ANYTHING', 'SUCCEEDED')).toBe('Succeeded');
-    expect(formatIngestionStage('ANYTHING', 'FAILED')).toBe('Failed');
+    expect(formatIngestionStage('ANYTHING', 'PUBLISHED')).toBe('已发布');
+    expect(formatIngestionStage('ANYTHING', 'FAILED')).toBe('失败');
   });
 
   it('isIngestionPollable treats unknown as non-pollable', () => {
-    expect(isIngestionPollable('QUEUED')).toBe(false); // stage ≠ status
+    expect(isIngestionPollable('IMPORT')).toBe(false); // stage ≠ status
     expect(isIngestionPollable('partial')).toBe(false);
   });
 

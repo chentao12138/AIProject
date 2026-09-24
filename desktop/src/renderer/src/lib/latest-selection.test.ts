@@ -45,9 +45,9 @@ describe('selectLatestAsset', () => {
 describe('selectLatestJobForAsset', () => {
   it('picks newest job for the given asset', () => {
     const jobs = [
-      { id: 1, assetId: 10, createdAt: '2026-09-01T10:00:00Z', status: 'SUCCEEDED' },
+      { id: 1, assetId: 10, createdAt: '2026-09-01T10:00:00Z', status: 'PUBLISHED' },
       { id: 2, assetId: 10, createdAt: '2026-09-02T10:00:00Z', status: 'FAILED' },
-      { id: 3, assetId: 20, createdAt: '2026-09-03T10:00:00Z', status: 'SUCCEEDED' },
+      { id: 3, assetId: 20, createdAt: '2026-09-03T10:00:00Z', status: 'PUBLISHED' },
     ];
     const result = selectLatestJobForAsset(jobs, 10);
     expect(result?.id).toBe(2);
@@ -99,7 +99,7 @@ describe('deriveContentState', () => {
     expect(
       deriveContentState({
         hasAsset: true,
-        jobStatus: 'PENDING',
+        jobStatus: 'QUEUED',
         pageCount: 0,
         blockCount: 0,
         hasExtractedText: false,
@@ -111,7 +111,7 @@ describe('deriveContentState', () => {
     expect(
       deriveContentState({
         hasAsset: true,
-        jobStatus: 'RUNNING',
+        jobStatus: 'IMPORTING',
         pageCount: 0,
         blockCount: 0,
         hasExtractedText: false,
@@ -135,7 +135,7 @@ describe('deriveContentState', () => {
     expect(
       deriveContentState({
         hasAsset: true,
-        jobStatus: 'SUCCEEDED',
+        jobStatus: 'PUBLISHED',
         pageCount: 1,
         blockCount: 2,
         hasExtractedText: true,
@@ -147,7 +147,7 @@ describe('deriveContentState', () => {
     expect(
       deriveContentState({
         hasAsset: true,
-        jobStatus: 'SUCCEEDED',
+        jobStatus: 'PUBLISHED',
         pageCount: 1,
         blockCount: 0,
         hasExtractedText: false,

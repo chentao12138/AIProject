@@ -112,9 +112,15 @@ export function filterPagesForAsset(
   return pages.filter((p) => p.sourceAssetId === assetId);
 }
 
+import {
+  INGESTION_STATUSES,
+  classifyIngestionStatus,
+} from './ingestion-status';
+
 /**
  * Frontend presentation state for the content area.
  * These are NOT backend enums — they describe what the user sees.
+ * The backend status itself is read only through `classifyIngestionStatus`.
  */
 export type ContentPresentationState =
   | 'NO_ASSET'
@@ -136,17 +142,16 @@ export function deriveContentState(params: {
   if (!params.hasAsset) {
     return 'NO_ASSET';
   }
-  const status = (params.jobStatus ?? '').trim().toUpperCase();
-  if (status === 'PENDING') {
-    return 'INGESTION_PENDING';
+  const kind = classifyIngestionStatus(params.jobStatus);
+  if (kind === 'non-terminal') {
+    return (params.jobStatus ?? '').trim().toUpperCase() === INGESTION_STATUSES.QUEUED
+      ? 'INGESTION_PENDING'
+      : 'INGESTION_RUNNING';
   }
-  if (status === 'RUNNING') {
-    return 'INGESTION_RUNNING';
-  }
-  if (status === 'FAILED') {
+  if (kind === 'failure-terminal') {
     return 'INGESTION_FAILED';
   }
-  if (status === 'SUCCEEDED') {
+  if (kind === 'success-terminal') {
     if (params.blockCount > 0 || params.hasExtractedText) {
       return 'CONTENT_READY';
     }

@@ -15,42 +15,46 @@ import {
 } from './ingestion-status';
 
 describe('classifyIngestionStatus', () => {
-  it('classifies PENDING and RUNNING as non-terminal', () => {
-    expect(classifyIngestionStatus('PENDING')).toBe('non-terminal');
-    expect(classifyIngestionStatus('RUNNING')).toBe('non-terminal');
-    expect(classifyIngestionStatus('pending')).toBe('non-terminal');
+  it('classifies the worker pipeline as non-terminal', () => {
+    for (const status of ['QUEUED', 'IMPORTING', 'EXTRACTING', 'STRUCTURING', 'AI_PROCESSING']) {
+      expect(classifyIngestionStatus(status)).toBe('non-terminal');
+    }
+    expect(classifyIngestionStatus('queued')).toBe('non-terminal');
   });
 
-  it('classifies SUCCEEDED as success-terminal', () => {
-    expect(classifyIngestionStatus('SUCCEEDED')).toBe('success-terminal');
+  it('classifies PUBLISHED and NEEDS_REVIEW as success-terminal', () => {
+    expect(classifyIngestionStatus('PUBLISHED')).toBe('success-terminal');
+    expect(classifyIngestionStatus('NEEDS_REVIEW')).toBe('success-terminal');
   });
 
-  it('classifies FAILED as failure-terminal', () => {
+  it('classifies FAILED and PARTIAL_FAILED as failure-terminal', () => {
     expect(classifyIngestionStatus('FAILED')).toBe('failure-terminal');
+    expect(classifyIngestionStatus('PARTIAL_FAILED')).toBe('failure-terminal');
   });
 
   it('classifies unknown / missing / lookalikes as unknown', () => {
     expect(classifyIngestionStatus('UNDEFINED')).toBe('unknown');
     expect(classifyIngestionStatus('SUCCESS')).toBe('unknown');
     expect(classifyIngestionStatus('FAIL')).toBe('unknown');
-    expect(classifyIngestionStatus('PARTIAL_FAILED')).toBe('unknown');
+    expect(classifyIngestionStatus('RUNNING')).toBe('unknown');
     expect(classifyIngestionStatus('')).toBe('unknown');
     expect(classifyIngestionStatus(undefined)).toBe('unknown');
     expect(classifyIngestionStatus(null)).toBe('unknown');
   });
 
-  it('does not use substring matching (SUCCESS inside SUCCEEDED is exact only)', () => {
-    // SUCCEEDED is exact-known; a hypothetical SUPERSEDED-like value is unknown.
+  it('does not use substring matching', () => {
     expect(classifyIngestionStatus('SUPERSEDED')).toBe('unknown');
-    expect(classifyIngestionStatus('NOT_PENDING')).toBe('unknown');
+    expect(classifyIngestionStatus('NOT_QUEUED')).toBe('unknown');
+    expect(classifyIngestionStatus('FAILEDLY')).toBe('unknown');
   });
 });
 
 describe('isIngestionPollable', () => {
-  it('is true only for PENDING / RUNNING', () => {
-    expect(isIngestionPollable('PENDING')).toBe(true);
-    expect(isIngestionPollable('RUNNING')).toBe(true);
-    expect(isIngestionPollable('SUCCEEDED')).toBe(false);
+  it('is true only while the worker can still advance the job', () => {
+    expect(isIngestionPollable('QUEUED')).toBe(true);
+    expect(isIngestionPollable('IMPORTING')).toBe(true);
+    expect(isIngestionPollable('PUBLISHED')).toBe(false);
+    expect(isIngestionPollable('PARTIAL_FAILED')).toBe(false);
     expect(isIngestionPollable('FAILED')).toBe(false);
     expect(isIngestionPollable('UNKNOWN_X')).toBe(false);
     expect(isIngestionPollable(undefined)).toBe(false);
@@ -58,29 +62,36 @@ describe('isIngestionPollable', () => {
 });
 
 describe('isIngestionRetryable', () => {
-  it('is true only for FAILED', () => {
+  it('matches the backend retry guard: FAILED and PARTIAL_FAILED only', () => {
     expect(isIngestionRetryable('FAILED')).toBe(true);
     expect(isIngestionRetryable('failed')).toBe(true);
-    expect(isIngestionRetryable('PENDING')).toBe(false);
-    expect(isIngestionRetryable('SUCCEEDED')).toBe(false);
+    expect(isIngestionRetryable('PARTIAL_FAILED')).toBe(true);
+    expect(isIngestionRetryable('QUEUED')).toBe(false);
+    expect(isIngestionRetryable('PUBLISHED')).toBe(false);
+    expect(isIngestionRetryable('NEEDS_REVIEW')).toBe(false);
     expect(isIngestionRetryable(undefined)).toBe(false);
   });
 });
 
 describe('formatIngestionStage', () => {
-  it('renders terminal states as Succeeded / Failed', () => {
-    expect(formatIngestionStage('PUBLISHED', 'SUCCEEDED')).toBe('Succeeded');
-    expect(formatIngestionStage('QUEUED', 'FAILED')).toBe('Failed');
+  it('renders terminal states with their status label', () => {
+    expect(formatIngestionStage('REVIEW', 'PUBLISHED')).toBe('已发布');
+    expect(formatIngestionStage('REVIEW', 'PARTIAL_FAILED')).toBe('部分失败');
+    expect(formatIngestionStage('IMPORT', 'FAILED')).toBe('失败');
   });
 
-  it('humanizes known pipeline stages while non-terminal', () => {
-    expect(formatIngestionStage('QUEUED', 'PENDING')).toBe('Queued');
-    expect(formatIngestionStage('IMPORTING', 'RUNNING')).toBe('Importing');
+  it('translates known pipeline stages while non-terminal', () => {
+    expect(formatIngestionStage('IMPORT', 'IMPORTING')).toBe('导入');
+    expect(formatIngestionStage('STRUCTURE', 'STRUCTURING')).toBe('结构化');
+  });
+
+  it('shows an unknown stage verbatim rather than guessing', () => {
+    expect(formatIngestionStage('MYSTERY', 'IMPORTING')).toBe('MYSTERY');
   });
 
   it('falls back safely for missing stage', () => {
-    expect(formatIngestionStage(undefined, 'PENDING')).toBe('Working…');
-    expect(formatIngestionStage('', 'RUNNING')).toBe('Working…');
+    expect(formatIngestionStage(undefined, 'QUEUED')).toBe('处理中…');
+    expect(formatIngestionStage('', 'IMPORTING')).toBe('处理中…');
     expect(formatIngestionStage(undefined, undefined)).toBe('—');
   });
 });

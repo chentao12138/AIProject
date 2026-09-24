@@ -1,7 +1,7 @@
 /**
  * SourceWorkbenchPage tests (FE-002B Day 2 architecture).
  *
- * Content section requires: latest asset + SUCCEEDED job + pages
+ * Content section requires: latest asset + PUBLISHED job + pages
  * with matching sourceAssetId. Tests mock the full chain.
  */
 
@@ -21,7 +21,7 @@ const sourceOk = {
   response: { status: 200 },
 };
 
-/** Full mock: asset 90 + SUCCEEDED job 55 + pages with sourceAssetId=90. */
+/** Full mock: asset 90 + PUBLISHED job 55 + pages with sourceAssetId=90. */
 function contentReadyApi(
   overrides: Record<string, unknown> = {}
 ) {
@@ -44,7 +44,7 @@ function contentReadyApi(
         {
           id: 55,
           assetId: 90,
-          status: 'SUCCEEDED',
+          status: 'PUBLISHED',
           stage: 'PUBLISHED',
           createdAt: '2026-09-01T10:00:01Z',
         },
@@ -139,7 +139,7 @@ describe('SourceWorkbenchPage — PDF reader', () => {
         })),
         listIngestionJobs: vi.fn(async () => ({
           data: [
-            { id: 56, assetId: 91, status: 'SUCCEEDED', stage: 'PUBLISHED' },
+            { id: 56, assetId: 91, status: 'PUBLISHED', stage: 'REVIEW' },
           ],
           response: { status: 200 },
         })),
@@ -180,7 +180,7 @@ describe('SourceWorkbenchPage — PDF reader', () => {
           response: { status: 200 },
         })),
         listIngestionJobs: vi.fn(async () => ({
-          data: [{ id: 56, assetId: 91, status: 'SUCCEEDED', stage: 'PUBLISHED' }],
+          data: [{ id: 56, assetId: 91, status: 'PUBLISHED', stage: 'REVIEW' }],
           response: { status: 200 },
         })),
         listSourcePages: vi.fn(async () => ({
@@ -204,13 +204,13 @@ describe('SourceWorkbenchPage — PDF reader', () => {
 });
 
 describe('SourceWorkbenchPage — stale content prevention', () => {
-  it('shows processing note when latest job is RUNNING', async () => {
+  it('shows processing note when the latest job is still working', async () => {
     renderWorkbench(
       contentReadyApi({
         listIngestionJobs: vi.fn(async () => ({
           data: [
-            { id: 55, assetId: 90, status: 'SUCCEEDED', stage: 'PUBLISHED' },
-            { id: 56, assetId: 91, status: 'RUNNING', stage: 'IMPORTING' },
+            { id: 55, assetId: 90, status: 'PUBLISHED', stage: 'REVIEW' },
+            { id: 56, assetId: 91, status: 'IMPORTING', stage: 'IMPORT' },
           ],
           response: { status: 200 },
         })),
@@ -260,7 +260,7 @@ describe('SourceWorkbenchPage — image no-OCR', () => {
           response: { status: 200 },
         })),
         listIngestionJobs: vi.fn(async () => ({
-          data: [{ id: 57, assetId: 92, status: 'SUCCEEDED', stage: 'PUBLISHED' }],
+          data: [{ id: 57, assetId: 92, status: 'PUBLISHED', stage: 'REVIEW' }],
           response: { status: 200 },
         })),
         listSourcePages: vi.fn(async () => ({
@@ -292,7 +292,7 @@ describe('SourceWorkbenchPage — no-text PDF', () => {
           response: { status: 200 },
         })),
         listIngestionJobs: vi.fn(async () => ({
-          data: [{ id: 58, assetId: 93, status: 'SUCCEEDED', stage: 'PUBLISHED' }],
+          data: [{ id: 58, assetId: 93, status: 'PUBLISHED', stage: 'REVIEW' }],
           response: { status: 200 },
         })),
         listSourcePages: vi.fn(async () => ({
@@ -322,7 +322,7 @@ describe('SourceWorkbenchPage — upload and ingestion history', () => {
             {
               id: 55,
               assetId: 90,
-              status: 'SUCCEEDED',
+              status: 'PUBLISHED',
               stage: 'PUBLISHED',
               createdAt: '2026-09-01T10:00:01Z',
             },

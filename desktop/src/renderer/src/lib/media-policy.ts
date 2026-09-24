@@ -9,14 +9,16 @@
  *   PDF   .pdf            application/pdf | application/octet-stream
  *         max 100MB / 200 pages / 2,000,000 chars
  *         encrypted → FAILED PDF_ENCRYPTED
- *         image-only → SUCCEEDED + BODY page + empty text + 0 blocks
+ *         image-only → PUBLISHED + BODY page + empty text + 0 blocks
  *   Image .png .jpg .jpeg image/png | image/jpeg | application/octet-stream
  *         max 50MB / 10000×10000 / 100,000,000 px
- *         success → SUCCEEDED + IMAGE page + 0 blocks + extractedText=null
+ *         success → PUBLISHED + IMAGE page + 0 blocks + extractedText=null
  *         NO OCR, NO WebP
  *   Text  .txt .md .markdown
  *         FE-002A behavior unchanged
  */
+
+import { classifyIngestionStatus } from './ingestion-status';
 
 export type MediaKind = 'text' | 'markdown' | 'pdf' | 'image' | 'unknown';
 
@@ -133,7 +135,8 @@ export function isImageOnlyPdfSuccess(params: {
   blockCount: number;
 }): boolean {
   const status = (params.status ?? '').trim().toUpperCase();
-  if (status !== 'SUCCEEDED') {
+
+  if (classifyIngestionStatus(status) !== 'success-terminal') {
     return false;
   }
   if (params.blockCount > 0) {
@@ -159,7 +162,8 @@ export function isStandaloneImageSuccess(params: {
   blockCount: number;
 }): boolean {
   const status = (params.status ?? '').trim().toUpperCase();
-  if (status !== 'SUCCEEDED') {
+
+  if (classifyIngestionStatus(status) !== 'success-terminal') {
     return false;
   }
   if (params.blockCount > 0) {

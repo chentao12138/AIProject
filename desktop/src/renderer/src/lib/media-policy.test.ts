@@ -115,10 +115,10 @@ describe('describeIngestionErrorCode', () => {
 });
 
 describe('isStandaloneImageSuccess', () => {
-  it('true for SUCCEEDED + 1 IMAGE page + 0 blocks', () => {
+  it('true for PUBLISHED + 1 IMAGE page + 0 blocks', () => {
     expect(
       isStandaloneImageSuccess({
-        status: 'SUCCEEDED',
+        status: 'PUBLISHED',
         pages: [{ pageType: 'IMAGE', extractedText: null }],
         blockCount: 0,
       })
@@ -128,14 +128,14 @@ describe('isStandaloneImageSuccess', () => {
   it('false when blocks exist', () => {
     expect(
       isStandaloneImageSuccess({
-        status: 'SUCCEEDED',
+        status: 'PUBLISHED',
         pages: [{ pageType: 'IMAGE' }],
         blockCount: 1,
       })
     ).toBe(false);
   });
 
-  it('false when not SUCCEEDED', () => {
+  it('false when not terminal-success', () => {
     expect(
       isStandaloneImageSuccess({
         status: 'RUNNING',
@@ -148,7 +148,7 @@ describe('isStandaloneImageSuccess', () => {
   it('false when page is not IMAGE', () => {
     expect(
       isStandaloneImageSuccess({
-        status: 'SUCCEEDED',
+        status: 'PUBLISHED',
         pages: [{ pageType: 'BODY' }],
         blockCount: 0,
       })
@@ -157,10 +157,10 @@ describe('isStandaloneImageSuccess', () => {
 });
 
 describe('isImageOnlyPdfSuccess', () => {
-  it('true for SUCCEEDED + BODY pages with empty text + 0 blocks', () => {
+  it('true for PUBLISHED + BODY pages with empty text + 0 blocks', () => {
     expect(
       isImageOnlyPdfSuccess({
-        status: 'SUCCEEDED',
+        status: 'PUBLISHED',
         pages: [{ pageType: 'BODY', extractedText: '  ' }],
         blockCount: 0,
       })
@@ -170,7 +170,7 @@ describe('isImageOnlyPdfSuccess', () => {
   it('false when blocks exist', () => {
     expect(
       isImageOnlyPdfSuccess({
-        status: 'SUCCEEDED',
+        status: 'PUBLISHED',
         pages: [{ pageType: 'BODY', extractedText: '' }],
         blockCount: 2,
       })
@@ -180,7 +180,7 @@ describe('isImageOnlyPdfSuccess', () => {
   it('false when text is present', () => {
     expect(
       isImageOnlyPdfSuccess({
-        status: 'SUCCEEDED',
+        status: 'PUBLISHED',
         pages: [{ pageType: 'BODY', extractedText: 'hello' }],
         blockCount: 0,
       })

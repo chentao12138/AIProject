@@ -138,9 +138,9 @@ describe('Critical — upload errors', () => {
 /* ── Polling stop on terminal ── */
 
 describe('Critical — polling stops on terminal', () => {
-  it('stops polling after SUCCEEDED and shows success', async () => {
+  it('stops polling after PUBLISHED and shows success', async () => {
     const getIngestionJob = vi.fn(async () => ({
-      data: { id: 55, status: 'SUCCEEDED', stage: 'PUBLISHED' },
+      data: { id: 55, status: 'PUBLISHED', stage: 'REVIEW' },
       response: { status: 200 },
     }));
     renderWB(
@@ -150,7 +150,7 @@ describe('Critical — polling stops on terminal', () => {
           response: { status: 201 },
         })),
         createIngestionJob: vi.fn(async () => ({
-          data: { id: 55, status: 'PENDING', stage: 'QUEUED' },
+          data: { id: 55, status: 'QUEUED', stage: 'IMPORT' },
           response: { status: 201 },
         })),
         getIngestionJob,
@@ -226,8 +226,8 @@ describe('Critical — stale content prevention', () => {
         })),
         listIngestionJobs: vi.fn(async () => ({
           data: [
-            { id: 55, assetId: 90, status: 'SUCCEEDED', stage: 'PUBLISHED', createdAt: '2026-09-01T10:00:01Z' },
-            { id: 56, assetId: 91, status: 'PENDING', stage: 'QUEUED', createdAt: '2026-09-02T10:00:01Z' },
+            { id: 55, assetId: 90, status: 'PUBLISHED', stage: 'REVIEW', createdAt: '2026-09-01T10:00:01Z' },
+            { id: 56, assetId: 91, status: 'QUEUED', stage: 'IMPORT', createdAt: '2026-09-02T10:00:01Z' },
           ],
           response: { status: 200 },
         })),
@@ -258,7 +258,7 @@ describe('Critical — stale content prevention', () => {
         })),
         listIngestionJobs: vi.fn(async () => ({
           data: [
-            { id: 55, assetId: 90, status: 'SUCCEEDED', stage: 'PUBLISHED', createdAt: '2026-09-01T10:00:01Z' },
+            { id: 55, assetId: 90, status: 'PUBLISHED', stage: 'REVIEW', createdAt: '2026-09-01T10:00:01Z' },
             { id: 56, assetId: 91, status: 'FAILED', stage: 'QUEUED', createdAt: '2026-09-02T10:00:01Z', errorCode: 'INVALID_PDF' },
           ],
           response: { status: 200 },
@@ -291,8 +291,8 @@ describe('Critical — latest asset/job deterministic', () => {
         })),
         listIngestionJobs: vi.fn(async () => ({
           data: [
-            { id: 55, assetId: 90, status: 'SUCCEEDED', stage: 'PUBLISHED', createdAt: '2026-09-01T10:00:01Z' },
-            { id: 56, assetId: 91, status: 'SUCCEEDED', stage: 'PUBLISHED', createdAt: '2026-09-02T10:00:01Z' },
+            { id: 55, assetId: 90, status: 'PUBLISHED', stage: 'REVIEW', createdAt: '2026-09-01T10:00:01Z' },
+            { id: 56, assetId: 91, status: 'PUBLISHED', stage: 'REVIEW', createdAt: '2026-09-02T10:00:01Z' },
           ],
           response: { status: 200 },
         })),
@@ -336,9 +336,9 @@ describe('Critical — retry semantics', () => {
         })),
         listIngestionJobs: vi.fn(async () => ({
           data: [
-            { id: 55, assetId: 90, status: 'SUCCEEDED', stage: 'PUBLISHED', createdAt: '2026-09-01T10:00:01Z' },
+            { id: 55, assetId: 90, status: 'PUBLISHED', stage: 'REVIEW', createdAt: '2026-09-01T10:00:01Z' },
             { id: 56, assetId: 91, status: 'FAILED', stage: 'QUEUED', createdAt: '2026-09-02T10:00:01Z' },
-            { id: 57, assetId: 90, status: 'RUNNING', stage: 'IMPORTING', createdAt: '2026-09-03T10:00:01Z' },
+            { id: 57, assetId: 90, status: 'IMPORTING', stage: 'IMPORT', createdAt: '2026-09-03T10:00:01Z' },
           ],
           response: { status: 200 },
         })),
@@ -370,7 +370,7 @@ describe('Critical — retry semantics', () => {
           response: { status: 200 },
         })),
         retryIngestionJob: vi.fn(async () => ({
-          data: { id: 55, status: 'PENDING', stage: 'QUEUED' },
+          data: { id: 55, status: 'QUEUED', stage: 'IMPORT' },
           response: { status: 200 },
         })),
       })

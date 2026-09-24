@@ -775,7 +775,7 @@ function ContentSection({
     );
   }
 
-  if (status === 'PENDING' || status === 'RUNNING') {
+  if (classifyIngestionStatus(status) === 'non-terminal') {
     return (
       <section className="workbench-section" aria-label="内容">
         <h2 className="section-title">内容</h2>
@@ -786,7 +786,7 @@ function ContentSection({
     );
   }
 
-  if (status === 'FAILED') {
+  if (classifyIngestionStatus(status) === 'failure-terminal') {
     return (
       <section className="workbench-section" aria-label="内容">
         <h2 className="section-title">内容</h2>
@@ -797,7 +797,7 @@ function ContentSection({
     );
   }
 
-  if (status !== 'SUCCEEDED') {
+  if (classifyIngestionStatus(status) !== 'success-terminal') {
     return (
       <section className="workbench-section" aria-label="内容">
         <h2 className="section-title">内容</h2>
@@ -806,7 +806,7 @@ function ContentSection({
     );
   }
 
-  // SUCCEEDED
+  // A terminal-success job: show whatever the pipeline produced.
   if (pages.length === 0) {
     return (
       <section className="workbench-section" aria-label="内容">
