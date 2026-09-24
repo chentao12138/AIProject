@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ApiRequestError,
+  NetworkUnavailableError,
   normalizeApiError,
   unwrap,
 } from './api-error';
@@ -44,11 +45,21 @@ describe('normalizeApiError — error classes', () => {
     }
   });
 
-  it('maps TypeError (fetch failure) to network', () => {
-    const normalized = normalizeApiError(new TypeError('fetch failed'));
+  it('maps NetworkUnavailableError (fetch rejected) to network', () => {
+    const normalized = normalizeApiError(new NetworkUnavailableError(new TypeError('fetch failed')));
     expect(normalized.kind).toBe('network');
     expect(normalized.status).toBeUndefined();
     expect(normalized.message).toBe('无法连接到后端服务。请确认服务已启动后重试。');
+  });
+
+  // A bare TypeError used to be reported as a backend outage, which sent every
+  // "client method missing" report chasing a server that was fine.
+  it('does not blame the backend for a TypeError from the call site', () => {
+    const normalized = normalizeApiError(
+      new TypeError('api.listExams is not a function')
+    );
+    expect(normalized.kind).toBe('unknown');
+    expect(normalized.message).not.toContain('后端');
   });
 
   it('maps other HTTP statuses to unknown', () => {
@@ -57,6 +68,26 @@ describe('normalizeApiError — error classes', () => {
       expect(normalized.kind).toBe('unknown');
       expect(normalized.status).toBe(status);
     }
+  });
+
+  // The backend answers 400 with ProblemDetail.errors[]; hiding it behind
+  // "请求失败，请稍后重试。" left users with no way to fix their own input.
+  it('surfaces field-level validation messages from a 400 body', () => {
+    const normalized = normalizeApiError(
+      new ApiRequestError(400, {
+        code: 'VALIDATION_ERROR',
+        errors: [{ field: 'questions', message: 'questions must not be empty' }],
+      })
+    );
+    expect(normalized.message).toContain('questions');
+    expect(normalized.message).toContain('questions must not be empty');
+  });
+
+  it('never leaks a non-validation body through the 400 message', () => {
+    const normalized = normalizeApiError(
+      new ApiRequestError(400, { detail: 'SQL syntax near table_x' })
+    );
+    expect(normalized.message).toBe('请求失败，请稍后重试。');
   });
 
   it('maps arbitrary thrown values to unknown', () => {

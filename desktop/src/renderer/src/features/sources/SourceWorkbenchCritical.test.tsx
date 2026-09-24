@@ -18,6 +18,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SourceWorkbenchPage } from './SourceWorkbenchPage';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
+import { NetworkUnavailableError } from '../../lib/api-error';
 
 const sourceOk = {
   data: { id: 3, title: 'S', sourceType: 'DESKTOP_UPLOAD', status: 'ACTIVE' },
@@ -84,7 +85,7 @@ describe('Critical — source get errors', () => {
     renderWB(
       baseApi({
         getSource: vi.fn(async () => {
-          throw new TypeError('fetch failed');
+          throw new NetworkUnavailableError();
         }),
       })
     );

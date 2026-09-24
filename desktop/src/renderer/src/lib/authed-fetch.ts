@@ -19,6 +19,8 @@
  *  - At most one retry: a second 401 is returned to the caller.
  */
 
+import { NetworkUnavailableError } from './api-error';
+
 const AUTH_PATH_SUFFIXES = ['/auth/login', '/auth/refresh', '/auth/logout'];
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -44,8 +46,18 @@ export function createRefreshingFetch({
 }: CreateRefreshingFetchOptions): typeof fetch {
   const baseFetch = fetchImpl ?? fetch;
 
+  /**
+   * The single place a genuine transport failure can surface. Tagging it here
+   * is what lets `normalizeApiError` tell "backend unreachable" apart from a
+   * TypeError raised by the call site itself.
+   */
+  const transport = ((input, init) =>
+    baseFetch(input, init).catch((error: unknown) => {
+      throw new NetworkUnavailableError(error);
+    })) as typeof fetch;
+
   return async (input, init) => {
-    const first = await baseFetch(input, init);
+    const first = await transport(input, init);
     if (first.status !== 401) {
       return first;
     }
@@ -80,6 +92,6 @@ export function createRefreshingFetch({
       input.headers.forEach((value, key) => headers.set(key, value));
     }
     headers.set('Authorization', `Bearer ${newToken}`);
-    return baseFetch(input, { ...init, headers });
+    return transport(input, { ...init, headers });
   };
 }

@@ -59,6 +59,11 @@ export function SearchPage() {
   const total = searchQuery.data?.totalElements ?? 0;
   const totalPages = searchQuery.data?.totalPages ?? 0;
 
+  // A disabled query is `isPending` with `fetchStatus: 'idle'`, so `isPending`
+  // alone would paint "searching…" on a page that never searched anything.
+  const searching =
+    searchQuery.isPending && searchQuery.fetchStatus !== 'idle';
+
   function doSearch() {
     const trimmed = localQuery.trim();
     const next = new URLSearchParams();
@@ -102,17 +107,17 @@ export function SearchPage() {
         </form>
       </section>
 
-      {searchQuery.isPending && <LoadingState text="搜索中…" />}
+      {searching && <LoadingState text="搜索中…" />}
       {searchQuery.isError && (
         <ErrorState
           message={normalizeApiError(searchQuery.error).message}
           onRetry={() => void searchQuery.refetch()}
         />
       )}
-      {!searchQuery.isPending && !searchQuery.isError && rawQuery && results.length === 0 && (
+      {!searching && !searchQuery.isError && rawQuery && results.length === 0 && (
         <EmptyState title="No results" description={`No results for "${rawQuery}".`} />
       )}
-      {!searchQuery.isPending && !searchQuery.isError && results.length > 0 && (
+      {!searching && !searchQuery.isError && results.length > 0 && (
         <>
           <p className="page__note">{total} results</p>
           <ul className="point-list">

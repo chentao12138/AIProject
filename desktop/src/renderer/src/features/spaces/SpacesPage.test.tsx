@@ -13,6 +13,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SpacesPage } from './SpacesPage';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
+import { NetworkUnavailableError } from '../../lib/api-error';
 
 describe('SpacesPage', () => {
   it('shows empty state when there are no spaces (K1.4)', async () => {
@@ -338,7 +339,7 @@ describe('SpacesPage', () => {
     const user = userEvent.setup();
     const listLearningSpaces = vi
       .fn()
-      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new NetworkUnavailableError())
       .mockResolvedValue({
         data: [{ id: 1, name: 'Math 101', status: 'ACTIVE' }],
         response: { status: 200 },

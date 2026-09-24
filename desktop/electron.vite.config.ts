@@ -24,6 +24,14 @@ export default defineConfig({
       },
     },
     plugins: [react()],
+    optimizeDeps: {
+      // The shared client ships TypeScript source through a file: symlink, so
+      // pre-bundling it leaves a stale copy in node_modules/.vite whenever the
+      // package changes: every method added afterwards is `undefined` at
+      // runtime, which surfaces as a misleading "backend unreachable" instead
+      // of a build error. Serving it from source keeps one truth.
+      exclude: ['@aistudy/api-client'],
+    },
     build: {
       outDir: 'out/renderer',
     },

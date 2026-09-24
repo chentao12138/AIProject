@@ -11,6 +11,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { KnowledgePointDetailPage } from './KnowledgePointDetailPage';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
+import { NetworkUnavailableError } from '../../lib/api-error';
 
 describe('KnowledgePointDetailPage', () => {
   it('shows Publish for a DRAFT point (K1.9)', async () => {
@@ -293,7 +294,7 @@ describe('KnowledgePointDetailPage', () => {
   it('renders a network error state on detail (PHASE 16)', async () => {
     const apiClient = mockApiClient({
       getKnowledgePoint: vi.fn(async () => {
-        throw new TypeError('fetch failed');
+        throw new NetworkUnavailableError();
       }),
     });
 

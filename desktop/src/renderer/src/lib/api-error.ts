@@ -35,13 +35,27 @@ export interface NormalizedApiError {
 
 export class ApiRequestError extends Error {
   readonly status: number;
+  /** Raw problem body — read only by normalizeApiError, never rendered whole. */
+  readonly body?: unknown;
 
   constructor(status: number, body?: unknown) {
     super(`API request failed with status ${status}`);
     this.name = 'ApiRequestError';
     this.status = status;
-    // keep body available for debugging without leaking it to the UI
-    (this as { body?: unknown }).body = body;
+    this.body = body;
+  }
+}
+
+/**
+ * The only error that genuinely means "the backend could not be reached":
+ * our own fetch wrapper saw the request reject. Anything else that is a bare
+ * TypeError (a client method missing, a bad argument) must NOT be reported as
+ * a backend outage — that misdirected every report of a stale bundle.
+ */
+export class NetworkUnavailableError extends Error {
+  constructor(cause?: unknown) {
+    super('network request failed', { cause });
+    this.name = 'NetworkUnavailableError';
   }
 }
 
@@ -69,6 +83,33 @@ const SERVER_MESSAGE = '服务器暂时无法完成请求，请稍后重试。';
  * backend is unreachable — reused by RequireAuth so the wording has one source. */
 export const NETWORK_MESSAGE = '无法连接到后端服务。请确认服务已启动后重试。';
 const UNKNOWN_MESSAGE = '请求失败，请稍后重试。';
+const CLIENT_BUG_MESSAGE = '页面请求未能发出，应用内部出错。请刷新后重试。';
+
+/** `{field, message}` pairs the backend returns for a 4xx validation failure. */
+interface FieldViolation {
+  field?: unknown;
+  message?: unknown;
+}
+
+/**
+ * Turn a ProblemDetail `errors[]` list into one readable line. Only the
+ * field/message pair is used — never `detail`/`trace`, which can echo
+ * server internals.
+ */
+function validationMessage(body: unknown): string | null {
+  const errors = (body as { errors?: unknown } | null)?.errors;
+  if (!Array.isArray(errors) || errors.length === 0) {
+    return null;
+  }
+  const parts = (errors as FieldViolation[])
+    .map((v) => {
+      const field = typeof v.field === 'string' ? v.field : '';
+      const message = typeof v.message === 'string' ? v.message : '';
+      return [field, message].filter(Boolean).join('：');
+    })
+    .filter(Boolean);
+  return parts.length > 0 ? `校验未通过：${parts.join('；')}` : null;
+}
 
 export function normalizeApiError(
   error: unknown
@@ -91,10 +132,19 @@ export function normalizeApiError(
     if (status >= 500) {
       return { kind: 'server', status, message: SERVER_MESSAGE };
     }
+    const validation = validationMessage(error.body);
+    if (validation) {
+      return { kind: 'unknown', status, message: validation };
+    }
     return { kind: 'unknown', status, message: UNKNOWN_MESSAGE };
   }
-  if (error instanceof TypeError) {
+  if (error instanceof NetworkUnavailableError) {
     return { kind: 'network', message: NETWORK_MESSAGE };
+  }
+  if (error instanceof TypeError) {
+    // A TypeError that did not come from fetch is a defect in the call site
+    // (missing method, wrong argument), not a backend outage.
+    return { kind: 'unknown', message: CLIENT_BUG_MESSAGE };
   }
   return { kind: 'unknown', message: UNKNOWN_MESSAGE };
 }
