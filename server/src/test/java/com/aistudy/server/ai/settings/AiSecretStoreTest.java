@@ -102,7 +102,12 @@ class AiSecretStoreTest {
         row.setCiphertext(java.util.Base64.getEncoder().encodeToString(new byte[20]));
         when(mapper.selectByUserSubject("u1")).thenReturn(row);
         AiSecretStore store = new AiSecretStore(mapper, props(""));
-        assertThrows(IllegalStateException.class, () -> store.resolveApiKey("u1"));
+        // Renders as 503 + AI_NOT_CONFIGURED rather than an anonymous 500, so the
+        // UI can tell "this server cannot hold keys" from a crash.
+        com.aistudy.server.common.problem.ApiException ex = assertThrows(
+                com.aistudy.server.common.problem.ApiException.class, () -> store.resolveApiKey("u1"));
+        assertEquals(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, ex.status());
+        assertEquals(com.aistudy.server.common.problem.ApiErrorCodes.AI_NOT_CONFIGURED, ex.code());
     }
 
     @Test
@@ -118,5 +123,20 @@ class AiSecretStoreTest {
         AiProperties p = new AiProperties();
         p.setSecretKey(java.util.Base64.getEncoder().encodeToString("short".getBytes()));
         assertThrows(IllegalStateException.class, () -> new AiSecretStore(mapper(), p));
+    }
+
+    /**
+     * A 48-byte key satisfied the old "at least 256 bits" rule and then failed
+     * inside Cipher.init on the first save, surfacing as a bare 500 on
+     * PUT /api/v1/settings/ai.
+     */
+    @Test
+    void overlongMasterKeyRejectedAtConstruction() {
+        AiProperties p = new AiProperties();
+        p.setSecretKey(java.util.Base64.getEncoder().encodeToString(new byte[48]));
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> new AiSecretStore(mapper(), p));
+        assertTrue(ex.getMessage().contains("exactly"),
+                "must name the accepted key shape, was: " + ex.getMessage());
     }
 }

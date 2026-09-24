@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
@@ -51,9 +52,10 @@ public final class ExamDto {
 
     /** One scored question slot. */
     public record ExamQuestionInput(
-            @jakarta.validation.constraints.NotNull(message = "questionId must not be null")
+            @NotNull(message = "questionId must not be null")
             Long questionId,
 
+            @NotNull(message = "score must not be null")
             @Min(value = 1, message = "score must be >= 1")
             Integer score
     ) {

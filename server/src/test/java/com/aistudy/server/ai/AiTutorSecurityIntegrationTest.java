@@ -1,6 +1,7 @@
 package com.aistudy.server.ai;
 
 import com.aistudy.server.ai.provider.AiChatResponse;
+import com.aistudy.server.testsupport.OwnedSpaceReset;
 import com.aistudy.server.ai.provider.AiProvider;
 import com.aistudy.server.ai.provider.AiUsage;
 import com.aistudy.server.auth.service.JwtAccessTokenService;
@@ -224,12 +225,7 @@ class AiTutorSecurityIntegrationTest {
     }
 
     private void clean() {
-        for (String user : new String[]{USER_A, USER_B}) {
-            jdbc.update("DELETE FROM ai_message WHERE conversation_id IN "
-                    + "(SELECT id FROM ai_conversation WHERE user_subject=?)", user);
-            jdbc.update("DELETE FROM ai_conversation WHERE user_subject=?", user);
-            jdbc.update("DELETE FROM learning_space WHERE owner_subject=?", user);
-        }
+        OwnedSpaceReset.forSubjects(jdbc, USER_A, USER_B);
     }
 
     private void assertSchema() {

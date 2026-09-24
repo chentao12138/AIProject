@@ -56,7 +56,7 @@ public interface AIGenerationJobMapper extends BaseMapper<AIGenerationJob> {
                   @Param("updatedAt") LocalDateTime updatedAt);
 
     @Update("UPDATE ai_generation_job "
-            + "SET status = #{status}, progress = #{progress}, retry_count = retry_count + 1, "
+            + "SET status = 'PENDING', progress = 0, retry_count = retry_count + 1, "
             + " error_code = NULL, safe_message = NULL, started_at = NULL, finished_at = NULL, "
             + " updated_at = #{updatedAt} "
             + "WHERE id = #{id} AND status = 'FAILED'")

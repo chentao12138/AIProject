@@ -1,6 +1,7 @@
 package com.aistudy.server.exam;
 
 import com.aistudy.server.auth.service.JwtAccessTokenService;
+import com.aistudy.server.testsupport.OwnedSpaceReset;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -293,7 +294,7 @@ class ExamDiagnosisIntegrationTest {
                 .andExpect(jsonPath("$.examAttemptId").value(attemptId))
                 .andExpect(jsonPath("$.summary").value("Exam score 5/5"))
                 .andExpect(jsonPath("$.createdAt").exists())
-                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items.length()").value(4))
                 .andExpect(jsonPath("$.items[0].dimensionType").value("KNOWLEDGE_POINT"))
                 .andExpect(jsonPath("$.items[0].dimensionId").value(kpId))
                 .andExpect(jsonPath("$.items[0].label").value("点1"))
@@ -305,7 +306,10 @@ class ExamDiagnosisIntegrationTest {
                 .andExpect(jsonPath("$.items[1].dimensionId").doesNotExist())
                 .andExpect(jsonPath("$.items[1].label").value("SINGLE_CHOICE"))
                 .andExpect(jsonPath("$.items[1].score").value(5))
-                .andExpect(jsonPath("$.items[1].maxScore").value(5));
+                .andExpect(jsonPath("$.items[1].maxScore").value(5))
+                // the point has no category, which used to crash submit
+                .andExpect(jsonPath("$.items[?(@.dimensionType=='CATEGORY')].label")
+                        .value(org.hamcrest.Matchers.contains("UNCATEGORIZED")));
     }
 
     /** (2) KP + question-type aggregation over multiple items. */
@@ -352,7 +356,7 @@ class ExamDiagnosisIntegrationTest {
         mockMvc.perform(get(DIAGNOSIS, spaceId, attemptId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.items.length()").value(5))
                 .andExpect(jsonPath("$.items[0].dimensionId").value(kp1))
                 .andExpect(jsonPath("$.items[0].score").value(4))
                 .andExpect(jsonPath("$.items[0].maxScore").value(4))
@@ -401,7 +405,7 @@ class ExamDiagnosisIntegrationTest {
         mockMvc.perform(get(DIAGNOSIS, spaceId, attemptId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items.length()").value(4))
                 .andExpect(jsonPath("$.items[0].dimensionType").value("KNOWLEDGE_POINT"))
                 .andExpect(jsonPath("$.items[0].maxScore").value(2))
                 .andExpect(jsonPath("$.items[0].evidenceCount").value(1))
@@ -547,73 +551,7 @@ class ExamDiagnosisIntegrationTest {
     // ==================== cleanup ====================
 
     private void cleanBizTestRows() {
-        String placeholders = String.join(",", Collections.nCopies(BIZ_TEST_USERS.size(), "?"));
-        Object[] users = BIZ_TEST_USERS.toArray();
-        String spaceIds = "(SELECT id FROM learning_space WHERE owner_subject IN (" + placeholders + "))";
-        jdbcTemplate.update(
-                "DELETE FROM exam_answer WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM exam_result WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM exam_diagnosis_item WHERE exam_diagnosis_id IN "
-                        + "(SELECT id FROM exam_diagnosis WHERE space_id IN " + spaceIds + ")", users);
-        jdbcTemplate.update(
-                "DELETE FROM exam_diagnosis WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM exam_attempt WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM exam_question WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM exam_paper WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM exam WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM review_record WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM review_task WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM wrong_question WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM practice_answer WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM practice_session_question WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM practice_session WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM question_source WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM question_knowledge_point WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM question_option WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM question WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM study_task WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM study_plan WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM mastery WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM knowledge_point_source WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM knowledge_point WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM knowledge_category WHERE space_id IN " + spaceIds
-                        + " AND parent_id IS NOT NULL", users);
-        jdbcTemplate.update(
-                "DELETE FROM knowledge_category WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM content_block WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM source_page WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM ingestion_job WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM source_asset WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM source WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM learning_space WHERE owner_subject IN (" + placeholders + ")", users);
+        OwnedSpaceReset.forSubjects(jdbcTemplate, BIZ_TEST_USERS);
     }
 
     private void assertSchemaIsFlywayTest() {

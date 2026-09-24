@@ -38,6 +38,8 @@ public class ExamDiagnosisService {
     public static final String DIMENSION_KNOWLEDGE_POINT = "KNOWLEDGE_POINT";
     public static final String DIMENSION_QUESTION_TYPE = "QUESTION_TYPE";
     public static final String DIMENSION_CATEGORY = "CATEGORY";
+    /** Category labels carry their id as {@code CATEGORY-<id>}; uncategorized has none. */
+    private static final String CATEGORY_PREFIX = "CATEGORY-";
     public static final String DIMENSION_DIFFICULTY = "DIFFICULTY";
 
     private final ExamAttemptMapper examAttemptMapper;
@@ -147,7 +149,7 @@ public class ExamDiagnosisService {
                 KnowledgePoint kp = kpCache.computeIfAbsent(kpId, id ->
                         knowledgePointMapper.selectByIdSpaceOwner(id, spaceId, ownerSubject));
                 String categoryLabel = kp != null && kp.getCategoryId() != null
-                        ? "CATEGORY-" + kp.getCategoryId() : "UNCATEGORIZED";
+                        ? CATEGORY_PREFIX + kp.getCategoryId() : "UNCATEGORIZED";
                 byCategory.computeIfAbsent(categoryLabel, k -> new Agg()).add(itemScore, maxScore);
             }
         }
@@ -162,8 +164,15 @@ public class ExamDiagnosisService {
                     e.getKey(), e.getValue(), now));
         }
         for (Map.Entry<String, Agg> e : byCategory.entrySet()) {
-            items.add(item(diagnosisId, DIMENSION_CATEGORY, e.getKey(),
-                    e.getKey().toString(), e.getValue(), now));
+            String categoryLabel = e.getKey();
+            // "UNCATEGORIZED" is a label, not an id: parsing it threw
+            // NumberFormatException, so submitting an exam over a knowledge point
+            // without a category answered 400.
+            Long categoryId = categoryLabel.startsWith(CATEGORY_PREFIX)
+                    ? Long.valueOf(categoryLabel.substring(CATEGORY_PREFIX.length()))
+                    : null;
+            items.add(item(diagnosisId, DIMENSION_CATEGORY, categoryId,
+                    categoryLabel, e.getValue(), now));
         }
         for (Map.Entry<String, Agg> e : byDifficulty.entrySet()) {
             items.add(item(diagnosisId, DIMENSION_DIFFICULTY, null,
@@ -177,16 +186,13 @@ public class ExamDiagnosisService {
         return kp == null ? "KP-" + kpId : kp.getTitle();
     }
 
-    private ExamDiagnosisItem item(Long diagnosisId, String dimensionType, Object dimensionId,
+    /** {@code dimensionId} is typed Long on purpose — every caller has an id or none. */
+    private ExamDiagnosisItem item(Long diagnosisId, String dimensionType, Long dimensionId,
                                    String label, Agg agg, LocalDateTime now) {
         ExamDiagnosisItem item = new ExamDiagnosisItem();
         item.setExamDiagnosisId(diagnosisId);
         item.setDimensionType(dimensionType);
-        if (dimensionId instanceof Long l) {
-            item.setDimensionId(l);
-        } else if (dimensionId != null) {
-            item.setDimensionId(Long.parseLong(dimensionId.toString().replace("CATEGORY-", "")));
-        }
+        item.setDimensionId(dimensionId);
         item.setLabel(label);
         item.setScore(agg.score);
         item.setMaxScore(agg.maxScore);
