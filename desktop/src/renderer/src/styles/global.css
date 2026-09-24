@@ -37,6 +37,7 @@
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
+  --space-6: 32px;
   --font-mono: ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
 
   /* 专业阴影阶梯 */
@@ -1170,32 +1171,176 @@ code,
 
 .login-page {
   flex: 1;
+  /* The mount chain is block-level, so `flex: 1` alone collapses the page to
+     its content height and the card sits high in the window. */
+  min-height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background: var(--color-bg);
+  background:
+    radial-gradient(1100px 520px at 12% -10%, #e0e9ff 0%, rgba(224, 233, 255, 0) 60%),
+    radial-gradient(900px 480px at 100% 110%, #e6f0ff 0%, rgba(230, 240, 255, 0) 55%),
+    var(--color-bg);
+}
+
+.login-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  width: 100%;
+  max-width: 860px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+/* Brand panel — decorative, so it carries no interactive or labelled content. */
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  color: #f8fafc;
+  background: linear-gradient(160deg, #1e3a8a 0%, var(--color-primary) 58%, #38bdf8 140%);
+}
+
+.login-brand__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.login-brand__name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.login-brand__tagline {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(248, 250, 252, 0.86);
+}
+
+.login-brand__list {
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: rgba(248, 250, 252, 0.8);
+}
+
+.login-brand__list li {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.login-brand__list li::before {
+  content: '—';
+  flex: none;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .login-card {
-  width: 100%;
-  max-width: 380px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
   padding: var(--space-6);
 }
 
-.login-card__hint {
+.login-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.login-card__title {
   margin: 0;
-  font-size: 12px;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.login-card__subtitle {
+  margin: 0;
+  font-size: 13px;
   color: var(--color-text-muted);
-  line-height: 1.6;
+}
+
+.login-card__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.login-card .input {
+  min-height: 40px;
+}
+
+.login-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid #fecaca;
+  border-radius: var(--radius);
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.login-alert__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .login-card__submit {
-  margin-top: var(--space-2);
+  min-height: 42px;
   justify-content: center;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.login-card__note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--color-text-subtle);
+}
+
+@media (max-width: 720px) {
+  .login-shell {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 420px;
+  }
+
+  .login-brand {
+    display: none;
+  }
 }
 
 .auth-placeholder {

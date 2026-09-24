@@ -64,51 +64,76 @@ export function LoginPage() {
 
   return (
     <main className="login-page" aria-labelledby="login-title">
-      <form className="card login-card" onSubmit={handleSubmit}>
-        <h1 id="login-title" className="page__title">
-          登录 AIStudy
-        </h1>
-        <p className="login-card__hint">
-          使用后端账号登录。访问令牌仅保存在内存中，刷新令牌由系统加密存储。
-        </p>
-
-        {errorMessage && (
-          <div className="form__error" role="alert">
-            {errorMessage}
+      <div className="login-shell">
+        <section className="login-brand">
+          <div className="login-brand__mark" aria-hidden="true">
+            AI
           </div>
-        )}
+          <p className="login-brand__name">AIStudy</p>
+          <p className="login-brand__tagline">
+            把资料、知识点、题目与练习收进同一个学习空间。
+          </p>
+          <ul className="login-brand__list">
+            <li>上传的资料自动解析为页面与内容块</li>
+            <li>知识点、题库、练习、考试共享同一空间作用域</li>
+            <li>AI 辅导基于你自己的资料作答</li>
+          </ul>
+        </section>
 
-        <Input
-          label="用户名"
-          name="username"
-          autoComplete="username"
-          value={username}
-          onChange={(event) => {
-            setUsername(event.target.value);
-            setErrorMessage(null);
-          }}
-        />
-        <Input
-          label="密码"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(event) => {
-            setPassword(event.target.value);
-            setErrorMessage(null);
-          }}
-        />
+        <form className="login-card" onSubmit={handleSubmit}>
+          <header className="login-card__header">
+            <h1 id="login-title" className="login-card__title">
+              登录 AIStudy
+            </h1>
+            <p className="login-card__subtitle">使用后端账号继续</p>
+          </header>
 
-        <Button
-          variant="primary"
-          type="submit"
-          disabled={!canSubmit}
-          className="login-card__submit"
-        >
-          {submitting ? '登录中…' : '登录'}
-        </Button>
-      </form>
+          {errorMessage && (
+            <div className="login-alert" role="alert">
+              <span className="login-alert__dot" aria-hidden="true" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          <div className="login-card__fields">
+            <Input
+              label="用户名"
+              name="username"
+              autoComplete="username"
+              autoFocus
+              value={username}
+              onChange={(event) => {
+                setUsername(event.target.value);
+                setErrorMessage(null);
+              }}
+            />
+            <Input
+              label="密码"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setErrorMessage(null);
+              }}
+            />
+          </div>
+
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={!canSubmit}
+            className="login-card__submit"
+          >
+            {submitting ? '登录中…' : '登录'}
+          </Button>
+
+          <p className="login-card__note">
+            访问令牌只保存在内存中，刷新令牌交由系统加密存储；退出或卸载后即清除。
+          </p>
+        </form>
+      </div>
     </main>
   );
 }
