@@ -11,6 +11,7 @@ import com.aistudy.server.ingestion.revision.entity.ExtractionRevision;
 import com.aistudy.server.ingestion.revision.service.ExtractionRevisionService;
 import com.aistudy.server.ingestion.zip.ZipArchiveInspector;
 import com.aistudy.server.ingestion.zip.ZipInspectionResult;
+import com.aistudy.server.ingestion.zip.ZipSafetyException;
 import com.aistudy.server.ingestion.zip.ZipSafetyLimits;
 import com.aistudy.server.source.asset.entity.SourceAsset;
 import com.aistudy.server.source.asset.mapper.SourceAssetMapper;
@@ -255,11 +256,35 @@ public class IngestionJobService {
             }
         } catch (Exception e) {
             log.error("Ingestion job {} failed", jobId, e);
-            String safe = e.getMessage() == null ? e.getClass().getSimpleName()
-                    : (e.getMessage().length() > 400 ? e.getMessage().substring(0, 400) : e.getMessage());
+            IngestionFailure typed = typedFailureOf(e);
+            String code = typed == null ? "INGESTION_FAILED" : typed.errorCode().name();
+            String safe = typed == null ? genericSafeMessage(e) : typed.safeMessage();
             ingestionJobMapper.markTerminalFailure(jobId, IngestionStatus.FAILED.name(),
-                    job.getStage(), job.getProgressPercent(), "INGESTION_FAILED", safe, LocalDateTime.now());
+                    job.getStage(), job.getProgressPercent(), code, safe, LocalDateTime.now());
         }
+    }
+
+    /**
+     * The pipeline wraps lower failures, so the typed one is often a cause
+     * rather than the thrown exception.
+     */
+    private static IngestionFailure typedFailureOf(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof IngestionFailure failure) {
+                return failure;
+            }
+            if (current == current.getCause()) {
+                break;
+            }
+        }
+        return null;
+    }
+
+    private static String genericSafeMessage(Throwable error) {
+        String message = error.getMessage() == null
+                ? error.getClass().getSimpleName()
+                : error.getMessage();
+        return message.length() > 400 ? message.substring(0, 400) : message;
     }
 
     /**
@@ -368,6 +393,12 @@ public class IngestionJobService {
                 List<SourceAsset> entries = extractZipEntries(zipAsset);
                 toProcess.addAll(entries);
             } catch (Exception e) {
+                // A typed pipeline failure already carries the code and the
+                // client-safe text; re-wrapping it is what used to turn a blocked
+                // zip-slip into a faceless INGESTION_FAILED.
+                if (e instanceof IngestionFailure && e instanceof RuntimeException runtime) {
+                    throw runtime;
+                }
                 log.error("ZIP extraction failed for asset {}", zipAsset.getId(), e);
                 throw new IllegalStateException("ZIP extraction failed for asset " + zipAsset.getId(), e);
             }
@@ -384,7 +415,7 @@ public class IngestionJobService {
             ZipInspectionResult inspection = ZipArchiveInspector.inspectFile(
                     temp, ZipSafetyLimits.defaults());
             if (!inspection.valid()) {
-                throw new IllegalStateException("ZIP safety inspection failed: " + inspection.violations());
+                throw new ZipSafetyException(inspection.violations());
             }
 
             try (ZipFile zip = new ZipFile(temp.toFile())) {

@@ -2,6 +2,14 @@
 
 > 架构决策以 `decisions.md` 为准，业务总定义以 `business-baseline.md` 为准。本文件只记录阶段事实。
 
+## 2026-09-24 — 联调修复之后的两件事：IT 清理基建与摄取错误码
+
+- IT 清理基建：23 个集成测试各自维护一份 `DELETE FROM ...` 阶梯，V031-V056 新增的表和外键没有任何一份阶梯提到，于是 `DELETE FROM learning_space` 报 "Cannot delete or update a parent row"，约 700 个 `DataIntegrityViolationException` 落在与本无问题的测试上。新增 `testsupport/OwnedSpaceReset`：从 `information_schema` 的外键图（`KEY_COLUMN_USAGE` 的 `REFERENCED_*` 列，按约束名 join `REFERENTIAL_CONSTRAINTS` 会因为约束名只在表内唯一而炸出笛卡尔积）推导 `learning_space` 的全部子孙，叶子优先删除；`source <-> extraction_revision` 互指，故单轮清理内临时关 FK 检查（整棵子树用同一谓词清空，不留孤儿）。`FlywayMigrationIntegrationTest` 补 `@AfterEach` 把 schema 恢复到 latest —— 它是唯一会 clean 共享库的类，之前把降级后的 schema 直接交给后面的类（`Unknown column 'claimed_at'` ×66）。效果：**660 tests 里 errors 243 → 3**。
+- 生产缺陷：`ExamDiagnosisService` 用 `Long.parseLong` 解析分类标签，而"知识点没有分类"时标签是字符串 `UNCATEGORIZED` → **考试提交直接失败**。改为维度行显式携带 id 或 null，`item(...)` 参数类型收窄成 `Long`。`ExamDiagnosisIntegrationTest` 11/11 绿；该类的诊断条目数量断言按四个维度（KNOWLEDGE_POINT / QUESTION_TYPE / CATEGORY / DIFFICULTY）重写，并把 `UNCATEGORIZED` 钉成显式断言。
+- 生产缺陷：摄取的错误码被整体压平。`IngestionJobService` 的作业 catch 硬编码 `INGESTION_FAILED`，从不读取 `IngestionParseException` / `PdfExtractionException` / `ImageExtractionException` 已有的 `errorCode()` / `safeMessage()`（这三类的 javadoc 明确写着"作业层会取它们落库"），而 `ZIP_SAFETY_VIOLATION` 在 `src/main` 里只出现在枚举与 javadoc、从未被抛出 —— zip 安全检查是结果式的（`ZipInspectionResult.violations()`），解压处把它转成裸 `IllegalStateException` 并顺带把违规明细（含条目名）塞进消息。修法：新增 `IngestionFailure` 接口（三个既有异常实现之）+ `ZipSafetyException`，解压处不再重新包装类型化失败，作业 catch 沿 cause 链找类型化失败并沿用其 code/safeMessage。验证：`createForCorruptZipFailsWithSafetyViolation`、`createForTraversalZipFailsWithSafetyViolation`、`failedJobErrorMessageContainsNoStackTrace` 由失败转通过（该类 7 failures → 3）。
+- 未修（下一步）：按资产的提取失败抛出**空消息**异常（`asset 239 extraction failed: ` 后面什么都没有），且单个资产的失败只把作业置 `PARTIAL_FAILED` 而不留任何 errorCode —— 于是纯 TXT/MD 作业也终态错误、错误不可解释。当前摄取 IT 剩余 33 个失败全部源于此，属 `ingestion/extract` 与作业计数逻辑，与上面的错误码映射是两件事。
+- 协作：本轮期间另一个编辑者在 12:50 独立改写了 4 个摄取 IT 与 `testsupport/AsyncIngestionJobs`（把同步断言改成轮询终态，并把终态从测试原先写的 `SUCCEEDED` 纠正为生命周期里的 `NEEDS_REVIEW`）。这些改动不属于本次提交。
+
 ## 2026-09-24 — 前端联调清单转来的后端缺陷修复
 
 前端在 `local` / space 28 实测出 3 个 500 和 4 个契约/格式问题，逐个复现后修复。
