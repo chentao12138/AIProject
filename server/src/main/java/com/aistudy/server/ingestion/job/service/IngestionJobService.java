@@ -234,7 +234,7 @@ public class IngestionJobService {
                         anyLowConfidence = true;
                     }
                 } catch (Exception e) {
-                    log.warn("asset {} extraction failed: {}", asset.getId(), e.getMessage());
+                    log.warn("asset {} extraction failed", asset.getId(), e);
                     failed++;
                 }
                 processed++;
