@@ -108,7 +108,7 @@ public class IngestionJobService {
     }
 
     @Transactional
-    public IngestionJob create(String ownerSubject, Long spaceId, Long sourceId) {
+    public IngestionJob create(String ownerSubject, Long spaceId, Long sourceId, Long assetId) {
         if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
             return null;
         }
@@ -120,10 +120,18 @@ public class IngestionJobService {
         if (assets == null || assets.isEmpty()) {
             return null;
         }
+        SourceAsset asset = assets.stream()
+                .filter(candidate -> candidate.getId() != null && candidate.getId().equals(assetId))
+                .findFirst()
+                .orElse(null);
+        if (asset == null) {
+            return null;
+        }
         LocalDateTime now = LocalDateTime.now();
         IngestionJob job = new IngestionJob();
         job.setSpaceId(spaceId);
         job.setSourceId(sourceId);
+        job.setAssetId(asset.getId());
         job.setCreatedByUserId(ownerSubject);
         job.setStatus(IngestionStatus.QUEUED.name());
         job.setStage("IMPORT");
@@ -222,6 +230,7 @@ public class IngestionJobService {
             int processed = 0;
             int failed = 0;
             int total = assets.size();
+            RuntimeException firstFailure = null;
             boolean anyLowConfidence = false;
             LocalDateTime lastBeat = LocalDateTime.now();
 
@@ -235,10 +244,22 @@ public class IngestionJobService {
                     }
                 } catch (Exception e) {
                     log.warn("asset {} extraction failed", asset.getId(), e);
+                    if (firstFailure == null && typedFailureOf(e) != null
+                            && e instanceof RuntimeException runtime) {
+                        firstFailure = runtime;
+                    }
                     failed++;
                 }
                 processed++;
                 lastBeat = heartbeat(jobId, lastBeat);
+            }
+
+            if (failed == total) {
+                // Nothing at all was extracted: reporting PARTIAL_FAILED with no
+                // errorCode left the client unable to explain its own bad upload.
+                throw firstFailure != null
+                        ? firstFailure
+                        : new IllegalStateException("all " + total + " assets failed to extract");
             }
 
             updateStatus(job, IngestionStatus.STRUCTURING.name(), "STRUCTURE", 70);
@@ -374,6 +395,13 @@ public class IngestionJobService {
                 job.getSpaceId(), job.getSourceId());
         if (allAssets == null || allAssets.isEmpty()) {
             return new ArrayList<>();
+        }
+        if (job.getAssetId() != null) {
+            // The job was created for one asset; the rest of the source belongs to
+            // other jobs and must not be re-extracted under this one.
+            allAssets = allAssets.stream()
+                    .filter(asset -> job.getAssetId().equals(asset.getId()))
+                    .toList();
         }
 
         List<SourceAsset> toProcess = new ArrayList<>();
