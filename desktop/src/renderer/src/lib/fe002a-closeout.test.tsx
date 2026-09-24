@@ -46,9 +46,9 @@ describe('ingestion-status — additional edges', () => {
     expect(formatIngestionStage('STRUCTURE', 'STRUCTURING')).toBe('结构化');
   });
 
-  it('formatIngestionStage ignores stage when terminal', () => {
-    expect(formatIngestionStage('ANYTHING', 'PUBLISHED')).toBe('已发布');
-    expect(formatIngestionStage('ANYTHING', 'FAILED')).toBe('失败');
+  it('formatIngestionStage prefers a reported stage over the status', () => {
+    expect(formatIngestionStage('ANYTHING', 'PUBLISHED')).toBe('ANYTHING');
+    expect(formatIngestionStage('ANYTHING', 'FAILED')).toBe('ANYTHING');
   });
 
   it('isIngestionPollable treats unknown as non-pollable', () => {

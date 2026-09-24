@@ -74,10 +74,17 @@ describe('isIngestionRetryable', () => {
 });
 
 describe('formatIngestionStage', () => {
-  it('renders terminal states with their status label', () => {
-    expect(formatIngestionStage('REVIEW', 'PUBLISHED')).toBe('已发布');
-    expect(formatIngestionStage('REVIEW', 'PARTIAL_FAILED')).toBe('部分失败');
-    expect(formatIngestionStage('IMPORT', 'FAILED')).toBe('失败');
+  it('prefers the stage when one is present, even once terminal', () => {
+    // The history table shows status and stage side by side; echoing the
+    // status into the stage column duplicated it.
+    expect(formatIngestionStage('REVIEW', 'PUBLISHED')).toBe('复核');
+    expect(formatIngestionStage('REVIEW', 'PARTIAL_FAILED')).toBe('复核');
+    expect(formatIngestionStage('IMPORT', 'FAILED')).toBe('导入');
+  });
+
+  it('falls back to the status label only when no stage was reported', () => {
+    expect(formatIngestionStage(undefined, 'PUBLISHED')).toBe('已发布');
+    expect(formatIngestionStage('', 'FAILED')).toBe('失败');
   });
 
   it('translates known pipeline stages while non-terminal', () => {

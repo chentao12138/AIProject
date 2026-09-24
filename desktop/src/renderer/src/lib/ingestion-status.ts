@@ -118,24 +118,22 @@ const STAGE_LABELS: Record<string, string> = {
 /**
  * Stage progress for UI display (FE-002A PHASE 10). Stage strings are
  * backend pipeline positions, NOT byte percentages. Unknown stages
- * render as themselves; missing → neutral placeholder.
+ * render as themselves; missing → fall back to the status label so the
+ * column never duplicates it while a stage IS known.
  */
 export function formatIngestionStage(
   stage?: string | null,
   status?: string | null
 ): string {
-  const kind = classifyIngestionStatus(status);
-  if (kind === 'success-terminal') {
-    return ingestionStatusLabel(status);
-  }
-  if (kind === 'failure-terminal') {
-    return ingestionStatusLabel(status);
-  }
   const trimmed = (stage ?? '').trim();
-  if (trimmed === '') {
-    return kind === 'non-terminal' ? '处理中…' : '—';
+  if (trimmed !== '') {
+    return STAGE_LABELS[trimmed.toUpperCase()] ?? trimmed;
   }
-  return STAGE_LABELS[trimmed.toUpperCase()] ?? trimmed;
+  const kind = classifyIngestionStatus(status);
+  if (kind === 'success-terminal' || kind === 'failure-terminal') {
+    return ingestionStatusLabel(status);
+  }
+  return kind === 'non-terminal' ? '处理中…' : '—';
 }
 
 /**
