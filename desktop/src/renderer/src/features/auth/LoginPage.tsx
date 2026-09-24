@@ -64,6 +64,15 @@ export function LoginPage() {
 
   return (
     <main className="login-page" aria-labelledby="login-title">
+      {/* Decorative background layers: no content, no focus targets. */}
+      <div className="login-bg" aria-hidden="true">
+        <span className="login-bg__blob login-bg__blob--a" />
+        <span className="login-bg__blob login-bg__blob--b" />
+        <span className="login-bg__blob login-bg__blob--c" />
+        <span className="login-bg__blob login-bg__blob--d" />
+        <span className="login-bg__grid" />
+      </div>
+
       <div className="login-shell">
         <section className="login-brand">
           <div className="login-brand__mark" aria-hidden="true">

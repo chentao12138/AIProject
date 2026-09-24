@@ -1170,6 +1170,7 @@ code,
 }
 
 .login-page {
+  position: relative;
   flex: 1;
   /* The mount chain is block-level, so `flex: 1` alone collapses the page to
      its content height and the card sits high in the window. */
@@ -1178,13 +1179,118 @@ code,
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background:
-    radial-gradient(1100px 520px at 12% -10%, #e0e9ff 0%, rgba(224, 233, 255, 0) 60%),
-    radial-gradient(900px 480px at 100% 110%, #e6f0ff 0%, rgba(230, 240, 255, 0) 55%),
-    var(--color-bg);
+  overflow: hidden;
+  background: linear-gradient(140deg, #eef4ff 0%, var(--color-bg) 45%, #e8f1ff 100%);
+}
+
+/* ---- animated backdrop (decorative only) ---------------------------- */
+
+.login-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.login-bg__blob {
+  position: absolute;
+  width: 46vmax;
+  height: 46vmax;
+  border-radius: 50%;
+  filter: blur(58px);
+  opacity: 0.8;
+  will-change: transform;
+}
+
+.login-bg__blob--a {
+  top: -18vmax;
+  left: -12vmax;
+  background: radial-gradient(circle at 30% 30%, #93c5fd 0%, rgba(147, 197, 253, 0) 68%);
+  animation: login-drift-a 22s ease-in-out infinite alternate;
+}
+
+.login-bg__blob--b {
+  right: -16vmax;
+  bottom: -20vmax;
+  background: radial-gradient(circle at 70% 60%, #a5b4fc 0%, rgba(165, 180, 252, 0) 66%);
+  animation: login-drift-b 27s ease-in-out infinite alternate;
+}
+
+.login-bg__blob--c {
+  top: 30%;
+  left: 55%;
+  width: 30vmax;
+  height: 30vmax;
+  background: radial-gradient(circle at 50% 50%, #7dd3fc 0%, rgba(125, 211, 252, 0) 70%);
+  opacity: 0.55;
+  animation: login-drift-c 19s ease-in-out infinite alternate;
+}
+
+.login-bg__blob--d {
+  top: -12vmax;
+  right: 8vmax;
+  width: 34vmax;
+  height: 34vmax;
+  background: radial-gradient(circle at 50% 50%, #c4b5fd 0%, rgba(196, 181, 253, 0) 68%);
+  opacity: 0.5;
+  animation: login-drift-a 31s ease-in-out infinite alternate-reverse;
+}
+
+/* A faint grid that slides behind the card, giving the depth a reference. */
+.login-bg__grid {
+  position: absolute;
+  inset: -20%;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(37, 99, 235, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.07) 1px, transparent 1px);
+  background-size: 44px 44px;
+  animation: login-grid 40s linear infinite;
+}
+
+@keyframes login-drift-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(9vmax, 7vmax, 0) scale(1.12); }
+}
+
+@keyframes login-drift-b {
+  from { transform: translate3d(0, 0, 0) scale(1.05); }
+  to { transform: translate3d(-11vmax, -6vmax, 0) scale(0.95); }
+}
+
+@keyframes login-drift-c {
+  from { transform: translate3d(0, 0, 0) scale(0.9); }
+  to { transform: translate3d(-8vmax, 9vmax, 0) scale(1.15); }
+}
+
+@keyframes login-grid {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(44px, 44px, 0); }
+}
+
+@keyframes login-sheen {
+  0% { transform: translate3d(-120%, 0, 0) rotate(8deg); }
+  55%, 100% { transform: translate3d(220%, 0, 0) rotate(8deg); }
+}
+
+@keyframes login-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.35); }
+  50% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+}
+
+/* Motion is decorative: never force it on users who opt out. */
+@media (prefers-reduced-motion: reduce) {
+  .login-bg__blob,
+  .login-bg__grid,
+  .login-brand::before,
+  .login-brand__mark {
+    animation: none;
+  }
 }
 
 .login-shell {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
   width: 100%;
@@ -1192,19 +1298,42 @@ code,
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 24px 70px -22px rgba(37, 99, 235, 0.45), var(--shadow-lg);
   overflow: hidden;
 }
 
 /* Brand panel — decorative, so it carries no interactive or labelled content. */
 .login-brand {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: var(--space-4);
   padding: var(--space-6);
+  overflow: hidden;
   color: #f8fafc;
   background: linear-gradient(160deg, #1e3a8a 0%, var(--color-primary) 58%, #38bdf8 140%);
+}
+
+/* Slow sheen sweeping across the brand panel. */
+.login-brand::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: 0;
+  width: 45%;
+  height: 180%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.16) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: login-sheen 9s ease-in-out infinite;
+}
+
+.login-brand > * {
+  position: relative;
 }
 
 .login-brand__mark {
@@ -1219,6 +1348,7 @@ code,
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.04em;
+  animation: login-pulse 4.5s ease-in-out infinite;
 }
 
 .login-brand__name {
