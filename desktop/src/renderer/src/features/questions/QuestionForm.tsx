@@ -19,8 +19,11 @@ import type { components } from '@aistudy/api-client';
 type CreateQuestionRequest = components['schemas']['CreateQuestionRequest'];
 import { ErrorState } from '../../components/ErrorState';
 import { PageHeader } from '../../components/PageHeader';
-
-type QuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'BOOLEAN' | 'TEXT_ANSWER';
+import {
+  AUTHORABLE_QUESTION_TYPES,
+  questionTypeLabel,
+  type AuthorableQuestionType,
+} from '../../lib/format';
 
 interface OptionInput {
   optionKey: string;
@@ -33,7 +36,7 @@ export function QuestionForm() {
   const navigate = useNavigate();
   const spaceId = useSpaceId();
 
-  const [questionType, setQuestionType] = useState<QuestionType>('SINGLE_CHOICE');
+  const [questionType, setQuestionType] = useState<AuthorableQuestionType>('SINGLE_CHOICE');
   const [stem, setStem] = useState('');
   const [explanation, setExplanation] = useState('');
   const [difficulty, setDifficulty] = useState('');
@@ -65,9 +68,9 @@ export function QuestionForm() {
       } else if (questionType === 'MULTIPLE_CHOICE') {
         body.correctOptionKeys = correctMultiple;
         body.options = options.filter((o) => (o.content ?? '').trim()).map((o) => ({ optionKey: o.optionKey, content: o.content }));
-      } else if (questionType === 'BOOLEAN') {
+      } else if (questionType === 'TRUE_FALSE') {
         body.correctBoolean = correctBoolean ?? undefined;
-      } else if (questionType === 'TEXT_ANSWER') {
+      } else if (questionType === 'SHORT_ANSWER') {
         body.referenceAnswer = referenceAnswer || undefined;
       }
       return api
@@ -130,12 +133,11 @@ export function QuestionForm() {
             id="q-type"
             className="select"
             value={questionType}
-            onChange={(e) => setQuestionType(e.target.value as QuestionType)}
+            onChange={(e) => setQuestionType(e.target.value as AuthorableQuestionType)}
           >
-            <option value="SINGLE_CHOICE">单选</option>
-            <option value="MULTIPLE_CHOICE">多选</option>
-            <option value="BOOLEAN">判断</option>
-            <option value="TEXT_ANSWER">主观题</option>
+            {AUTHORABLE_QUESTION_TYPES.map((t) => (
+              <option key={t} value={t}>{questionTypeLabel(t)}</option>
+            ))}
           </select>
         </div>
 
@@ -225,7 +227,7 @@ export function QuestionForm() {
           </div>
         )}
 
-        {questionType === 'BOOLEAN' && (
+        {questionType === 'TRUE_FALSE' && (
           <div className="form__field">
             <label className="form__label">正确答案</label>
             <div className="form__radios">
@@ -251,7 +253,7 @@ export function QuestionForm() {
           </div>
         )}
 
-        {questionType === 'TEXT_ANSWER' && (
+        {questionType === 'SHORT_ANSWER' && (
           <div className="form__field">
             <label htmlFor="q-ref" className="form__label">参考答案</label>
             <textarea

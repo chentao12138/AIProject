@@ -26,17 +26,53 @@ export function formatDateTime(value?: string | null): string {
  * undefined / invalid / negative → "—". 0 → "0 B".
  * Binary units (1024), one decimal for KB+.
  */
+/**
+ * Question types the backend accepts (`QuestionService.TYPE_*`). The contract
+ * types `questionType` as a free-form string, so this list — not a guess —
+ * is pinned to the Java constants by `question-type-contract.test.ts`.
+ */
+export const QUESTION_TYPES = [
+  'SINGLE_CHOICE',
+  'MULTIPLE_CHOICE',
+  'TRUE_FALSE',
+  'SHORT_ANSWER',
+  'FILL_BLANK',
+  'ORDERING',
+  'MATCHING',
+] as const;
+
+export type QuestionType = (typeof QUESTION_TYPES)[number];
+
+/**
+ * The subset the renderer can author and answer. The backend also accepts
+ * FILL_BLANK / ORDERING / MATCHING, which have no editor yet — offering them
+ * would let users create questions they cannot fill in.
+ */
+export const AUTHORABLE_QUESTION_TYPES = [
+  'SINGLE_CHOICE',
+  'MULTIPLE_CHOICE',
+  'TRUE_FALSE',
+  'SHORT_ANSWER',
+] as const satisfies readonly QuestionType[];
+
+export type AuthorableQuestionType =
+  (typeof AUTHORABLE_QUESTION_TYPES)[number];
+
 /** Backend question types -> display copy. Unknown values show as-is. */
-const QUESTION_TYPE_LABELS: Record<string, string> = {
+const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   SINGLE_CHOICE: '单选',
   MULTIPLE_CHOICE: '多选',
-  BOOLEAN: '判断',
-  TEXT_ANSWER: '主观题',
+  TRUE_FALSE: '判断',
+  SHORT_ANSWER: '简答',
+  FILL_BLANK: '填空',
+  ORDERING: '排序',
+  MATCHING: '配对',
 };
 
 export function questionTypeLabel(type?: string | null): string {
   if (!type) return '—';
-  return QUESTION_TYPE_LABELS[type.trim().toUpperCase()] ?? type;
+  const normalized = type.trim().toUpperCase();
+  return QUESTION_TYPE_LABELS[normalized as QuestionType] ?? type;
 }
 
 /** Backend difficulty levels -> display copy. */

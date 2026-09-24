@@ -90,6 +90,18 @@ describe('normalizeApiError — error classes', () => {
     expect(normalized.message).toBe('请求失败，请稍后重试。');
   });
 
+  // The backend also reports input problems as a bare detail under
+  // VALIDATION_ERROR; swallowing it left "请求失败" for a fixable mistake.
+  it('surfaces a validation detail when there is no errors[] list', () => {
+    const normalized = normalizeApiError(
+      new ApiRequestError(400, {
+        code: 'VALIDATION_ERROR',
+        detail: 'TRUE_FALSE requires correctBoolean',
+      })
+    );
+    expect(normalized.message).toContain('TRUE_FALSE requires correctBoolean');
+  });
+
   it('maps arbitrary thrown values to unknown', () => {
     expect(normalizeApiError('boom').kind).toBe('unknown');
     expect(normalizeApiError(undefined).kind).toBe('unknown');

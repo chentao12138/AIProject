@@ -1,17 +1,14 @@
 /**
  * Reusable Question renderer (A4/A5/A6 shared component).
  *
- * Renders all stable question types declared in the backend contract:
- * - Single-choice (radio)
- * - Multiple-choice (checkbox)
- * - Boolean (true/false)
- * - Text / reference answer (textarea)
+ * Renders the types the authoring form supports — single choice, multiple
+ * choice, true/false and short answer. `questionType` itself stays a plain
+ * string so a type this component has never seen renders as its options
+ * rather than crashing; see lib/format.ts for the backend vocabulary.
  */
 
 import { type KeyboardEvent } from 'react';
 import { Button } from './Button';
-
-export type QuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'BOOLEAN' | 'TEXT_ANSWER';
 
 interface Option {
   optionKey: string;
@@ -66,8 +63,8 @@ export function QuestionRenderer({
 }: QuestionRendererProps) {
   const qType = (question.questionType ?? '').toUpperCase();
   const isSingle = qType === 'SINGLE_CHOICE';
-  const isBoolean = qType === 'BOOLEAN';
-  const isText = qType === 'TEXT_ANSWER' || qType === 'REFERENCE_ANSWER';
+  const isBoolean = qType === 'TRUE_FALSE';
+  const isText = qType === 'SHORT_ANSWER';
   const isReview = mode === 'review';
   const options = question.options ?? [];
 

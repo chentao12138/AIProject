@@ -15,7 +15,7 @@ import { queryKeys } from '../../lib/query-keys';
 import { spaceQuery } from '../../lib/queries';
 import { useSpaceId } from '../../lib/space-scope';
 import { isPositiveId } from '../../lib/ids';
-import { questionTypeLabel } from '../../lib/format';
+import { questionTypeLabel, QUESTION_TYPES } from '../../lib/format';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -102,10 +102,9 @@ export function QuestionsPage() {
               onChange={(e) => setFilter('questionType', e.target.value)}
             >
               <option value="">全部</option>
-              <option value="SINGLE_CHOICE">单选</option>
-              <option value="MULTIPLE_CHOICE">多选</option>
-              <option value="BOOLEAN">判断</option>
-              <option value="TEXT_ANSWER">主观题</option>
+              {QUESTION_TYPES.map((t) => (
+                <option key={t} value={t}>{questionTypeLabel(t)}</option>
+              ))}
             </select>
           </div>
         </div>

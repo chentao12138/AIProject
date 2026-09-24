@@ -85,30 +85,54 @@ export const NETWORK_MESSAGE = '无法连接到后端服务。请确认服务已
 const UNKNOWN_MESSAGE = '请求失败，请稍后重试。';
 const CLIENT_BUG_MESSAGE = '页面请求未能发出，应用内部出错。请刷新后重试。';
 
-/** `{field, message}` pairs the backend returns for a 4xx validation failure. */
+/** Shape every 4xx problem body the backend returns for user input. */
 interface FieldViolation {
   field?: unknown;
   message?: unknown;
 }
 
+interface ProblemBody {
+  code?: unknown;
+  detail?: unknown;
+  errors?: unknown;
+}
+
+/** Only a validation `detail` may be shown; other details can echo internals. */
+const VALIDATION_CODES = new Set(['VALIDATION_ERROR', 'BAD_REQUEST']);
+
 /**
- * Turn a ProblemDetail `errors[]` list into one readable line. Only the
- * field/message pair is used — never `detail`/`trace`, which can echo
- * server internals.
+ * Turn a ProblemDetail into one readable line. The backend reports input
+ * problems two ways: a structured `errors[]` list, or a bare `detail` under
+ * `code: VALIDATION_ERROR` (e.g. "TRUE_FALSE requires correctBoolean").
+ * Anything else keeps the generic copy, so a server-side detail can never
+ * reach the UI.
  */
 function validationMessage(body: unknown): string | null {
-  const errors = (body as { errors?: unknown } | null)?.errors;
-  if (!Array.isArray(errors) || errors.length === 0) {
-    return null;
+  const problem = (body ?? {}) as ProblemBody;
+
+  if (Array.isArray(problem.errors) && problem.errors.length > 0) {
+    const parts = (problem.errors as FieldViolation[])
+      .map((v) => {
+        const field = typeof v.field === 'string' ? v.field : '';
+        const message = typeof v.message === 'string' ? v.message : '';
+        return [field, message].filter(Boolean).join('：');
+      })
+      .filter(Boolean);
+    if (parts.length > 0) {
+      return `校验未通过：${parts.join('；')}`;
+    }
   }
-  const parts = (errors as FieldViolation[])
-    .map((v) => {
-      const field = typeof v.field === 'string' ? v.field : '';
-      const message = typeof v.message === 'string' ? v.message : '';
-      return [field, message].filter(Boolean).join('：');
-    })
-    .filter(Boolean);
-  return parts.length > 0 ? `校验未通过：${parts.join('；')}` : null;
+
+  if (
+    typeof problem.code === 'string' &&
+    VALIDATION_CODES.has(problem.code) &&
+    typeof problem.detail === 'string' &&
+    problem.detail.trim() !== ''
+  ) {
+    return `校验未通过：${problem.detail.trim()}`;
+  }
+
+  return null;
 }
 
 export function normalizeApiError(

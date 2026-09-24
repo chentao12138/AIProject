@@ -219,7 +219,7 @@ function ActiveSession({
     const qType = (current.questionType ?? '').toUpperCase();
     if (qType === 'SINGLE_CHOICE' || qType === 'MULTIPLE_CHOICE') {
       body.answer.selectedOptionKeys = currentAnswer?.selectedOptionKeys ?? [];
-    } else if (qType === 'BOOLEAN') {
+    } else if (qType === 'TRUE_FALSE') {
       body.answer.booleanAnswer = currentAnswer?.booleanAnswer ?? false;
     } else {
       body.answer.textAnswer = currentAnswer?.textAnswer ?? '';
