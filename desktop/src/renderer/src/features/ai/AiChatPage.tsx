@@ -50,7 +50,7 @@ export function AiChatPage() {
 
   return (
     <div className="page ai-workspace">
-      <PageHeader title="AI Tutor" />
+      <PageHeader title="AI 辅导" />
 
       {settingsQuery.isSuccess && !providerReady && (
         <div className="form__error" role="alert" data-testid="provider-not-ready">

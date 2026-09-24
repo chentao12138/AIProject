@@ -237,7 +237,7 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({ createKnowledgeCategory }));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
     const submit = screen.getByRole('button', { name: '创建' });
     expect(submit).toBeDisabled();
@@ -250,7 +250,7 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({}));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
 
     const select = screen.getByLabelText('父分类（可选）');
@@ -283,7 +283,7 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(apiClient);
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
     const select = screen.getByLabelText('父分类（可选）');
     const optionTexts = Array.from(select.querySelectorAll('option')).map(
@@ -313,7 +313,7 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(apiClient);
 
     await user.click(
-      (await screen.findAllByRole('button', { name: 'Create Knowledge Point' }))[0]
+      (await screen.findAllByRole('button', { name: '创建知识点' }))[0]
     );
     const select = screen.getByLabelText('分类（可选）');
     const optionTexts = Array.from(select.querySelectorAll('option')).map(
@@ -332,7 +332,7 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({ createKnowledgeCategory }));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
 
     await user.type(screen.getByLabelText('名称'), '  Trigonometry  ');
@@ -367,7 +367,7 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({ createKnowledgeCategory }));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
     await user.type(screen.getByLabelText('名称'), 'X');
     await user.type(screen.getByLabelText('排序（可选）'), '-3');
@@ -393,7 +393,7 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({ createKnowledgeCategory }));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
     await user.type(screen.getByLabelText('名称'), 'Trigonometry');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -425,7 +425,7 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({ listKnowledgeCategories, createKnowledgeCategory }));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
     await user.type(screen.getByLabelText('名称'), 'Trigonometry');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -444,7 +444,7 @@ describe('KnowledgePage — point create (PHASE 15)', () => {
     renderKnowledge(baseApi({}));
 
     const pointButtons = await screen.findAllByRole('button', {
-      name: 'Create Knowledge Point',
+      name: '创建知识点',
     });
     await user.click(pointButtons[0]);
 
@@ -468,7 +468,7 @@ describe('KnowledgePage — point create (PHASE 15)', () => {
     renderKnowledge(baseApi({ createKnowledgePoint }));
 
     const pointButtons = await screen.findAllByRole('button', {
-      name: 'Create Knowledge Point',
+      name: '创建知识点',
     });
     await user.click(pointButtons[0]);
 
@@ -515,7 +515,7 @@ describe('KnowledgePage — point create (PHASE 15)', () => {
     renderKnowledge(baseApi({ listKnowledgePoints, createKnowledgePoint }));
 
     const pointButtons = await screen.findAllByRole('button', {
-      name: 'Create Knowledge Point',
+      name: '创建知识点',
     });
     await user.click(pointButtons[0]);
 
@@ -540,7 +540,7 @@ describe('KnowledgePage — point create (PHASE 15)', () => {
     renderKnowledge(baseApi({ createKnowledgePoint }));
 
     const pointButtons = await screen.findAllByRole('button', {
-      name: 'Create Knowledge Point',
+      name: '创建知识点',
     });
     await user.click(pointButtons[0]);
 

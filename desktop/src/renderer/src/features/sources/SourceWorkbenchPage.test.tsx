@@ -164,9 +164,9 @@ describe('SourceWorkbenchPage — PDF reader', () => {
       'Page 1 of 3'
     );
     expect(
-      screen.getByRole('button', { name: 'Previous' })
+      screen.getByRole('button', { name: '上一页' })
     ).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '下一页' })).toBeEnabled();
   });
 
   it('navigates pages with Next', async () => {
@@ -198,7 +198,7 @@ describe('SourceWorkbenchPage — PDF reader', () => {
     );
 
     await screen.findByTestId('page-indicator');
-    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await user.click(screen.getByRole('button', { name: '下一页' }));
     expect(screen.getByTestId('page-indicator')).toHaveTextContent('Page 2 of 2');
   });
 });

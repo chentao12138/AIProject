@@ -38,7 +38,7 @@ describe('SourcesPage', () => {
     });
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Source' })
+      await screen.findByRole('button', { name: '创建学习来源' })
     );
     await user.type(await screen.findByLabelText('标题'), 'Chapter notes');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -66,7 +66,7 @@ describe('SourcesPage', () => {
     });
 
     await userEvent.setup().click(
-      await screen.findByRole('button', { name: 'Create Source' })
+      await screen.findByRole('button', { name: '创建学习来源' })
     );
 
     // The dialog must NOT offer a source type picker.
@@ -144,10 +144,10 @@ describe('SourcesPage', () => {
       routePath: '/spaces/:spaceId/sources',
     });
 
-    const openLink = await screen.findByRole('link', { name: 'Open' });
+    const openLink = await screen.findByRole('link', { name: '打开' });
     expect(openLink).toHaveAttribute('href', '/spaces/7/sources/5');
     // Ghost row has no navigable id — no second Open link.
-    expect(screen.getAllByRole('link', { name: 'Open' })).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: '打开' })).toHaveLength(1);
     // Old FE-001 placeholder note is gone.
     expect(
       screen.queryByText(/File upload will become available/)
@@ -189,7 +189,7 @@ describe('SourcesPage', () => {
     });
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Source' })
+      await screen.findByRole('button', { name: '创建学习来源' })
     );
     await user.type(await screen.findByLabelText('标题'), 'Notes');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -220,7 +220,7 @@ describe('SourcesPage', () => {
     });
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Source' })
+      await screen.findByRole('button', { name: '创建学习来源' })
     );
     await user.type(await screen.findByLabelText('标题'), 'Notes');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -264,7 +264,7 @@ describe('SourcesPage', () => {
     });
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Source' })
+      await screen.findByRole('button', { name: '创建学习来源' })
     );
     const title = await screen.findByLabelText('标题');
     await user.type(title, 'Notes');

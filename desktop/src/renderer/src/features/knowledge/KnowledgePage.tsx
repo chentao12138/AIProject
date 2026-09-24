@@ -127,10 +127,10 @@ export function KnowledgePage() {
         actions={
           <>
             <Button onClick={() => setCreatingCategory(true)}>
-              Create Category
+              创建分类
             </Button>
             <Button variant="primary" onClick={() => setCreatingPoint(true)}>
-              Create Knowledge Point
+              创建知识点
             </Button>
           </>
         }
@@ -167,7 +167,7 @@ export function KnowledgePage() {
                 description="先创建一个知识点，开始搭建你的知识体系。"
                 action={
                   <Button variant="primary" onClick={() => setCreatingPoint(true)}>
-                    Create Knowledge Point
+                    创建知识点
                   </Button>
                 }
               />

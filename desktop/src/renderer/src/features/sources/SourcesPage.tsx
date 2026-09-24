@@ -70,7 +70,7 @@ export function SourcesPage() {
         title="学习来源"
         actions={
           <Button variant="primary" onClick={() => setCreating(true)}>
-            Create Source
+            创建学习来源
           </Button>
         }
       />
@@ -90,7 +90,7 @@ export function SourcesPage() {
           description="先为该空间登记一个学习来源。"
           action={
             <Button variant="primary" onClick={() => setCreating(true)}>
-              Create Source
+              创建学习来源
             </Button>
           }
         />
@@ -125,7 +125,7 @@ export function SourcesPage() {
                         to={`/spaces/${spaceId}/sources/${sourceId}`}
                         className="nav-link"
                       >
-                        Open
+                        打开
                       </Link>
                     ) : (
                       <span className="muted">—</span>
@@ -186,7 +186,7 @@ function CreateSourceDialog({
             setTitle(event.target.value);
             formError.clear();
           }}
-          placeholder="e.g. Chapter 3 notes"
+          placeholder="例如：第三章笔记"
         />
         <p className="form__note">
           Source type is fixed to DESKTOP_UPLOAD for this client.

@@ -373,7 +373,7 @@ function ExamResult({
 
       <div className="form__actions">
         <Button type="button" variant="primary" onClick={() => navigate(`/spaces/${spaceId}/exams`)}>
-          Back to Exams
+          返回考试列表
         </Button>
       </div>
     </div>

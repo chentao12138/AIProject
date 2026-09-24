@@ -144,7 +144,7 @@ export function SourceWorkbenchPage() {
         title={source?.title ?? '来源详情'}
         actions={
           <Button onClick={() => navigate(`/spaces/${spaceId}/sources`)}>
-            Back to Sources
+            返回来源列表
           </Button>
         }
       />
@@ -437,7 +437,7 @@ function UploadSection({
             {busy ? UPLOAD_STAGE_LABELS[stage] : '上传并解析'}
           </Button>
           <Button onClick={clearFile} disabled={busy || !file} type="button">
-            Clear
+            清除
           </Button>
         </div>
       </form>
@@ -547,7 +547,7 @@ function ActiveJobStatus({
           {err.message}
         </p>
         <Button onClick={() => void jobQuery.refetch()} type="button">
-          Retry status request
+          重新请求状态
         </Button>
       </div>
     );
@@ -769,7 +769,7 @@ function ContentSection({
         <h2 className="section-title">内容</h2>
         <EmptyState
           title="尚未上传文件"
-          description="Upload a TXT, Markdown, PDF, or image file to get started."
+          description="上传 TXT、Markdown、PDF 或图片文件即可开始。"
         />
       </section>
     );
@@ -854,7 +854,7 @@ function ContentSection({
           onClick={() => goToPage(safeIndex - 1)}
           disabled={safeIndex <= 0}
         >
-          Previous
+          上一页
         </Button>
         <span className="pdf-reader-nav__label" data-testid="page-indicator">
           Page {safeIndex + 1} of {pages.length}
@@ -864,7 +864,7 @@ function ContentSection({
           onClick={() => goToPage(safeIndex + 1)}
           disabled={safeIndex >= pages.length - 1}
         >
-          Next
+          下一页
         </Button>
       </div>
 

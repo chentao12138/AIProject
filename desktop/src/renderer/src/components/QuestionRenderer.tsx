@@ -109,7 +109,7 @@ export function QuestionRenderer({
             disabled={disabled || isReview}
             onClick={() => onBooleanAnswerChange?.(true)}
           >
-            True
+            正确
           </Button>
           <Button
             type="button"
@@ -123,7 +123,7 @@ export function QuestionRenderer({
             disabled={disabled || isReview}
             onClick={() => onBooleanAnswerChange?.(false)}
           >
-            False
+            错误
           </Button>
         </div>
       )}
