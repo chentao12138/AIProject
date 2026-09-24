@@ -1,6 +1,7 @@
 package com.aistudy.server.question;
 
 import com.aistudy.server.auth.service.JwtAccessTokenService;
+import com.aistudy.server.testsupport.OwnedSpaceReset;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -469,43 +470,7 @@ class QuestionVerticalSliceIntegrationTest {
     // ==================== cleanup ====================
 
     private void cleanBizTestRows() {
-        String placeholders = String.join(",", Collections.nCopies(BIZ_TEST_USERS.size(), "?"));
-        Object[] users = BIZ_TEST_USERS.toArray();
-        String spaceIds = "(SELECT id FROM learning_space WHERE owner_subject IN (" + placeholders + "))";
-        jdbcTemplate.update(
-                "DELETE FROM question_source WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM question_knowledge_point WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM question_option WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM question WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM study_task WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM study_plan WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM mastery WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM knowledge_point_source WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM knowledge_point WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM knowledge_category WHERE space_id IN " + spaceIds + " AND parent_id IS NOT NULL", users);
-        jdbcTemplate.update(
-                "DELETE FROM knowledge_category WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM content_block WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM source_page WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM ingestion_job WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM source_asset WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM source WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM learning_space WHERE owner_subject IN (" + placeholders + ")", users);
+        OwnedSpaceReset.forSubjects(jdbcTemplate, BIZ_TEST_USERS);
     }
 
     private void assertSchemaIsFlywayTest() {

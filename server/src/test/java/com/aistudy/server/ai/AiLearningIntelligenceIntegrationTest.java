@@ -1,6 +1,7 @@
 package com.aistudy.server.ai;
 
 import com.aistudy.server.ai.coach.AiStudyCoachService;
+import com.aistudy.server.testsupport.OwnedSpaceReset;
 import com.aistudy.server.ai.config.AiProperties;
 import com.aistudy.server.ai.dto.AiDto.ConversationView;
 import com.aistudy.server.ai.dto.AiDto.ConversationView;
@@ -339,28 +340,7 @@ class AiLearningIntelligenceIntegrationTest {
     }
 
     private void clean() {
-        for (String user : List.of(USER_A, USER_B)) {
-            jdbc.update("DELETE FROM ai_message_reference WHERE message_id IN "
-                    + "(SELECT m.id FROM ai_message m JOIN ai_conversation c ON c.id = m.conversation_id WHERE c.user_subject=?)", user);
-            jdbc.update("DELETE FROM ai_message WHERE conversation_id IN "
-                    + "(SELECT id FROM ai_conversation WHERE user_subject=?)", user);
-            jdbc.update("DELETE FROM ai_conversation WHERE user_subject=?", user);
-            jdbc.update("DELETE FROM practice_answer WHERE user_subject=?", user);
-            jdbc.update("DELETE FROM practice_session_question WHERE space_id IN "
-                    + "(SELECT id FROM learning_space WHERE owner_subject=?)", user);
-            jdbc.update("DELETE FROM practice_session WHERE user_subject=?", user);
-            jdbc.update("DELETE FROM study_task WHERE user_subject=?", user);
-            jdbc.update("DELETE FROM study_plan WHERE user_subject=?", user);
-            jdbc.update("DELETE FROM wrong_question WHERE user_subject=?", user);
-            jdbc.update("DELETE FROM mastery WHERE user_subject=?", user);
-            jdbc.update("DELETE FROM question WHERE space_id IN "
-                    + "(SELECT id FROM learning_space WHERE owner_subject=?)", user);
-            jdbc.update("DELETE FROM knowledge_point WHERE space_id IN "
-                    + "(SELECT id FROM learning_space WHERE owner_subject=?)", user);
-            jdbc.update("DELETE FROM source WHERE space_id IN "
-                    + "(SELECT id FROM learning_space WHERE owner_subject=?)", user);
-            jdbc.update("DELETE FROM learning_space WHERE owner_subject=?", user);
-        }
+        OwnedSpaceReset.forSubjects(jdbc, USER_A, USER_B);
     }
 
     private void assertSchema() {

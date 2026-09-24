@@ -1,6 +1,7 @@
 package com.aistudy.server.search;
 
 import com.aistudy.server.auth.service.JwtAccessTokenService;
+import com.aistudy.server.testsupport.OwnedSpaceReset;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -176,20 +177,7 @@ class SearchSecurityIntegrationTest {
     }
 
     private void clean() {
-        for (String user : new String[]{USER_A, USER_B}) {
-            jdbcTemplate.update("DELETE FROM wrong_question WHERE user_subject=?", user);
-        }
-        for (String user : new String[]{USER_A, USER_B}) {
-            String spaces = "(SELECT id FROM learning_space WHERE owner_subject=?)";
-            jdbcTemplate.update("DELETE FROM wrong_question WHERE space_id IN " + spaces, user);
-            jdbcTemplate.update("DELETE FROM content_block WHERE space_id IN " + spaces, user);
-            jdbcTemplate.update("DELETE FROM source_page WHERE space_id IN " + spaces, user);
-            jdbcTemplate.update("DELETE FROM source_asset WHERE space_id IN " + spaces, user);
-            jdbcTemplate.update("DELETE FROM question WHERE space_id IN " + spaces, user);
-            jdbcTemplate.update("DELETE FROM knowledge_point WHERE space_id IN " + spaces, user);
-            jdbcTemplate.update("DELETE FROM source WHERE space_id IN " + spaces, user);
-            jdbcTemplate.update("DELETE FROM learning_space WHERE owner_subject=?", user);
-        }
+        OwnedSpaceReset.forSubjects(jdbcTemplate, USER_A, USER_B);
     }
 
     private void assertSchema() {

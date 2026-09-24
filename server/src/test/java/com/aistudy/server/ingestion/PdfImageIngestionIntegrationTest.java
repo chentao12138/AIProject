@@ -1,6 +1,7 @@
 package com.aistudy.server.ingestion;
 
 import com.aistudy.server.auth.service.JwtAccessTokenService;
+import com.aistudy.server.testsupport.OwnedSpaceReset;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -458,20 +459,7 @@ class PdfImageIngestionIntegrationTest {
     }
 
     private void cleanBizTestRows() {
-        Object[] users = BIZ_TEST_USERS.toArray();
-        String spaceIds = "(SELECT id FROM learning_space WHERE owner_subject IN (?))";
-        jdbcTemplate.update(
-                "DELETE FROM content_block WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM source_page WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM ingestion_job WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM source_asset WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM source WHERE space_id IN " + spaceIds, users);
-        jdbcTemplate.update(
-                "DELETE FROM learning_space WHERE owner_subject IN (?)", users);
+        OwnedSpaceReset.forSubjects(jdbcTemplate, BIZ_TEST_USERS);
     }
 
     private void assertSchemaIsFlywayTest() {

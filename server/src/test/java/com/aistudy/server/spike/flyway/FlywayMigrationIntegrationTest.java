@@ -115,8 +115,12 @@ class FlywayMigrationIntegrationTest {
 
     @AfterEach
     void cleanupTestData() {
-        // The schema is reset at the start of every test; this is a
-        // defensive no-op so test failures don't leave stray data.
+        // This class is the only one that cleans the shared schema, and it leaves
+        // the schema mid-chain on purpose (a test migrates to V001 only). Other
+        // integration tests do not run Flyway themselves, so handing the schema
+        // back at latest is what keeps V031+ columns visible to them.
+        assertSchemaIsFlywayTest();
+        flyway().migrate();
     }
 
     // ==================== TEST A ====================

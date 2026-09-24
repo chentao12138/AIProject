@@ -1,6 +1,7 @@
 package com.aistudy.server.ai;
 
 import com.aistudy.server.ai.config.AiProperties;
+import com.aistudy.server.testsupport.OwnedSpaceReset;
 import com.aistudy.server.ai.dto.AiDto.SendMessageResponse;
 import com.aistudy.server.ai.dto.AiDto.ConversationView;
 import com.aistudy.server.ai.mapper.AiConversationMapper;
@@ -233,10 +234,7 @@ class AiTutorConversationIntegrationTest {
     }
 
     private void clean() {
-        jdbc.update("DELETE FROM ai_message WHERE conversation_id IN "
-                + "(SELECT id FROM ai_conversation WHERE user_subject=?)", OWNER);
-        jdbc.update("DELETE FROM ai_conversation WHERE user_subject=?", OWNER);
-        jdbc.update("DELETE FROM learning_space WHERE owner_subject=?", OWNER);
+        OwnedSpaceReset.forSubjects(jdbc, OWNER);
     }
 
     private void assertSchema() {

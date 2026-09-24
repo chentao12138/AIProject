@@ -1,6 +1,7 @@
 package com.aistudy.server.ai.settings;
 
 import com.aistudy.server.auth.service.JwtAccessTokenService;
+import com.aistudy.server.testsupport.OwnedSpaceReset;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
@@ -185,15 +186,9 @@ class AiSettingsIntegrationTest {
     }
 
     private void clean() {
-        jdbc.update("DELETE FROM ai_message_reference WHERE message_id IN "
-                + "(SELECT m.id FROM ai_message m JOIN ai_conversation c ON c.id = m.conversation_id "
-                + " WHERE c.user_subject IN (?,?))", USER_A, USER_B);
-        jdbc.update("DELETE FROM ai_message WHERE conversation_id IN "
-                + "(SELECT id FROM ai_conversation WHERE user_subject IN (?,?))", USER_A, USER_B);
-        jdbc.update("DELETE FROM ai_conversation WHERE user_subject IN (?,?)", USER_A, USER_B);
         jdbc.update("DELETE FROM ai_provider_secret WHERE user_subject IN (?,?)", USER_A, USER_B);
         jdbc.update("DELETE FROM ai_provider_settings WHERE user_subject IN (?,?)", USER_A, USER_B);
-        jdbc.update("DELETE FROM learning_space WHERE owner_subject IN (?,?)", USER_A, USER_B);
+        OwnedSpaceReset.forSubjects(jdbc, USER_A, USER_B);
     }
 
     private void assertSchema() {
