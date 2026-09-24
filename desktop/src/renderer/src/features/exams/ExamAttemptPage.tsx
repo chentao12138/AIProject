@@ -226,7 +226,7 @@ function ActiveExam({
   return (
     <div className="page">
       <PageHeader
-        title={`Exam Attempt #${attemptId}`}
+        title={`考试作答 #${attemptId}`}
         actions={
           <Button type="button" variant="primary" onClick={onSubmit} disabled={submitting}>
             {submitting ? '交卷中…' : '交卷'}
@@ -236,7 +236,7 @@ function ActiveExam({
       <div className="practice-layout">
         <div className="practice-main">
           <div className="practice-progress">
-            Question {currentIndex + 1} of {total}
+            第 {currentIndex + 1} / {total} 题
           </div>
           <QuestionRenderer
             question={payload}
@@ -330,14 +330,14 @@ function ExamResult({
 
   return (
     <div className="page">
-      <PageHeader title={`Exam Attempt #${attemptId} — Result`} />
+      <PageHeader title={`考试作答 #${attemptId} — 成绩`} />
       <div className="practice-result">
         <p>
-          Score: {result?.score ?? '—'} / {result?.maxScore ?? '—'}
+          得分：{result?.score ?? '—'} / {result?.maxScore ?? '—'}
         </p>
         <p>
-          Correct: {result?.correctCount ?? '—'} · Wrong: {result?.wrongCount ?? '—'} ·
-          Unanswered: {result?.unansweredCount ?? '—'}
+          答对 {result?.correctCount ?? '—'} · 答错 {result?.wrongCount ?? '—'} ·
+          未作答 {result?.unansweredCount ?? '—'}
         </p>
       </div>
 
@@ -347,7 +347,7 @@ function ExamResult({
           {items.map((item, idx) => (
             <div key={idx} className="result-item">
               <p>
-                <strong>Q{idx + 1}:</strong>{' '}
+                <strong>第 {idx + 1} 题：</strong>{' '}
                 {isPositiveId(item.questionId) ? (
                   <Link
                     className="nav-link"
@@ -364,7 +364,7 @@ function ExamResult({
                 {item.score ?? 0} / {item.maxScore ?? 0}
               </p>
               {item.correctAnswer && (
-                <p className="muted">Correct answer: {item.correctAnswer}</p>
+                <p className="muted">正确答案：{item.correctAnswer}</p>
               )}
               {item.explanation && (
                 <p>{item.explanation}</p>

@@ -336,7 +336,7 @@ describe('KnowledgePointDetailPage', () => {
     });
 
     expect(await screen.findByText('Published, no timestamp')).toBeInTheDocument();
-    expect(screen.getByText(/Published at —/)).toBeInTheDocument();
+    expect(screen.getByText(/发布时间：—/)).toBeInTheDocument();
   });
 
   it('preserves readable content whitespace (PHASE 16)', async () => {
@@ -532,7 +532,7 @@ describe('KnowledgePointDetailPage', () => {
       expect(getKnowledgePoint).toHaveBeenCalledTimes(2);
     });
     expect(
-      await screen.findByText(/Published at 2026/)
+      await screen.findByText(/发布时间：2026/)
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: '发布' })

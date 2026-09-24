@@ -113,7 +113,7 @@ export function ExamDetailPage() {
 
       {exam.description && <p className="page__note">{exam.description}</p>}
       {exam.publishedAt && (
-        <p className="page__note">Published at {formatDateTime(exam.publishedAt)}</p>
+        <p className="page__note">发布时间：{formatDateTime(exam.publishedAt)}</p>
       )}
 
       <dl className="detail-list">

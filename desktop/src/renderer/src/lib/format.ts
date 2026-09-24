@@ -104,6 +104,33 @@ export const PRACTICE_SESSION_STATUSES = {
 export type PracticeSessionStatus =
   (typeof PRACTICE_SESSION_STATUSES)[keyof typeof PRACTICE_SESSION_STATUSES];
 
+/**
+ * Knowledge origin types (`KnowledgePoint.ORIGIN_TYPE_*`), pinned to the
+ * backend by `backend-vocabulary-contract.test.ts`.
+ */
+export const KNOWLEDGE_ORIGIN_TYPES = {
+  USER_CURATED: 'USER_CURATED',
+  ADMIN_CURATED: 'ADMIN_CURATED',
+  AI_DERIVED: 'AI_DERIVED',
+  SOURCE_DERIVED: 'SOURCE_DERIVED',
+} as const;
+
+export type KnowledgeOriginType =
+  (typeof KNOWLEDGE_ORIGIN_TYPES)[keyof typeof KNOWLEDGE_ORIGIN_TYPES];
+
+const ORIGIN_TYPE_LABELS: Record<KnowledgeOriginType, string> = {
+  USER_CURATED: '本人整理',
+  ADMIN_CURATED: '管理员整理',
+  AI_DERIVED: 'AI 生成',
+  SOURCE_DERIVED: '来源提取',
+};
+
+export function originLabel(origin?: string | null): string {
+  if (!origin) return '—';
+  const normalized = origin.trim().toUpperCase();
+  return ORIGIN_TYPE_LABELS[normalized as KnowledgeOriginType] ?? origin;
+}
+
 /** Backend difficulty levels -> display copy. */
 const DIFFICULTY_LABELS: Record<string, string> = {
   EASY: '简单',

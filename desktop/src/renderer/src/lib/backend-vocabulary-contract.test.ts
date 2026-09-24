@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   EXAM_ATTEMPT_STATUSES,
+  KNOWLEDGE_ORIGIN_TYPES,
   PRACTICE_SESSION_STATUSES,
   QUESTION_TYPES,
 } from './format';
@@ -57,6 +58,12 @@ const VOCABULARIES = {
     read: (src: string) =>
       [...src.matchAll(/String\s+STATUS_[A-Z_]+\s*=\s*"([A-Z_]+)"/g)].map((m) => m[1]),
     frontend: Object.values(PRACTICE_SESSION_STATUSES) as string[],
+  },
+  'knowledge origin type': {
+    file: join(SERVER, 'knowledge', 'point', 'service', 'KnowledgePointService.java'),
+    read: (src: string) =>
+      [...src.matchAll(/String\s+ORIGIN_TYPE_[A-Z_]+\s*=\s*"([A-Z_]+)"/g)].map((m) => m[1]),
+    frontend: Object.values(KNOWLEDGE_ORIGIN_TYPES) as string[],
   },
 } as const;
 

@@ -34,6 +34,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { Input } from '../../components/Input';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
+import { originLabel } from '../../lib/format';
 import { Select } from '../../components/Select';
 import { StatusBadge } from '../../components/StatusBadge';
 import { TextArea } from '../../components/TextArea';
@@ -196,7 +197,7 @@ export function KnowledgePage() {
                           )}
                         {point.originType && (
                           <span className="badge badge--unknown">
-                            {point.originType}
+                            {originLabel(point.originType)}
                           </span>
                         )}
                         {point.difficulty && (

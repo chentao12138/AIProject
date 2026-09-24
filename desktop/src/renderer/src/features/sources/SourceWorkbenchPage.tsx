@@ -388,7 +388,7 @@ function UploadSection({
       >
         <div className="form__field">
           <label htmlFor="source-upload-input" className="form__label">
-            File (TXT / Markdown / PDF / PNG / JPEG)
+            文件（TXT / Markdown / PDF / PNG / JPEG）
           </label>
           <input
             id="source-upload-input"
@@ -561,7 +561,7 @@ function ActiveJobStatus({
   return (
     <div className="ingestion-active" data-testid="active-job">
       <p role="status" aria-live="polite">
-        Ingestion: {formatIngestionStage(job?.stage, status)}
+        解析：{formatIngestionStage(job?.stage, status)}
       </p>
       {kind === 'failure-terminal' && (
         <div>

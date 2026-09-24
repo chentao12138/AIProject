@@ -15,7 +15,7 @@ import { queryKeys } from '../../lib/query-keys';
 import { spaceQuery } from '../../lib/queries';
 import { useSpaceId } from '../../lib/space-scope';
 import { isPositiveId } from '../../lib/ids';
-import { questionTypeLabel, QUESTION_TYPES } from '../../lib/format';
+import { difficultyLabel, questionTypeLabel, QUESTION_TYPES } from '../../lib/format';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -139,7 +139,7 @@ export function QuestionsPage() {
                 <td>{questionTypeLabel(q.questionType)}</td>
                 <td>{q.stem?.slice(0, 80) ?? '—'}</td>
                 <td><StatusBadge status={q.status} /></td>
-                <td>{q.difficulty ?? '—'}</td>
+                <td>{difficultyLabel(q.difficulty)}</td>
                 <td>
                   <Button
                     type="button"

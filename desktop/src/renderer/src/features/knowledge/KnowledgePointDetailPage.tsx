@@ -23,7 +23,7 @@ import {
 import { entityQuery, spaceQuery } from '../../lib/queries';
 import { requireId, useSpaceId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
-import { formatDateTime } from '../../lib/format';
+import { formatDateTime, originLabel } from '../../lib/format';
 import { provenanceExtras } from '../../lib/types';
 import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
 import { Button } from '../../components/Button';
@@ -157,7 +157,7 @@ export function KnowledgePointDetailPage() {
 
       {isPublished && (
         <p className="page__note">
-          Published at {formatDateTime(point.publishedAt)}
+          发布时间：{formatDateTime(point.publishedAt)}
         </p>
       )}
 
@@ -171,7 +171,7 @@ export function KnowledgePointDetailPage() {
         {point.originType && (
           <div className="detail-list__row">
             <dt>来源</dt>
-            <dd>{point.originType}</dd>
+            <dd>{originLabel(point.originType)}</dd>
           </div>
         )}
         <div className="detail-list__row">
