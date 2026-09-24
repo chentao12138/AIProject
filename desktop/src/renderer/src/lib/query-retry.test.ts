@@ -40,6 +40,11 @@ describe('shouldRetryQuery', () => {
     expect(shouldRetryQuery(0, new TypeError('api.listExams is not a function'))).toBe(false);
   });
 
+  // 502 is "the provider refused this configuration" — retrying cannot help.
+  it('never retries an upstream rejection', () => {
+    expect(shouldRetryQuery(0, new ApiRequestError(502))).toBe(false);
+  });
+
   it('retries 5xx with a hard bound', () => {
     expect(shouldRetryQuery(0, new ApiRequestError(500))).toBe(true);
     expect(shouldRetryQuery(1, new ApiRequestError(503))).toBe(true);

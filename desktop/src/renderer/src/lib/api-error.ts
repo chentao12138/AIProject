@@ -25,6 +25,7 @@ export type ApiErrorKind =
   | 'forbidden'
   | 'not-found'
   | 'server'
+  | 'upstream'
   | 'unknown';
 
 export interface NormalizedApiError {
@@ -79,6 +80,10 @@ const FORBIDDEN_MESSAGE = '当前会话无权执行此操作。';
 /** Anti-IDOR wording — exported so guards and pages share one source. */
 export const NOT_FOUND_MESSAGE = '资源不存在或当前不可访问。';
 const SERVER_MESSAGE = '服务器暂时无法完成请求，请稍后重试。';
+/** 502 means our server reached something that refused us — most often the AI
+ * provider rejecting a key or model. Telling the user to "retry later" sends
+ * them to the wrong place, so it gets its own copy. */
+const UPSTREAM_MESSAGE = '上游服务拒绝了请求，请检查相关配置（如 API Key、模型名）。';
 /** Also the copy for a session that cannot be confirmed because the
  * backend is unreachable — reused by RequireAuth so the wording has one source. */
 export const NETWORK_MESSAGE = '无法连接到后端服务。请确认服务已启动后重试。';
@@ -152,6 +157,9 @@ export function normalizeApiError(
     }
     if (status === 404) {
       return { kind: 'not-found', status, message: NOT_FOUND_MESSAGE };
+    }
+    if (status === 502) {
+      return { kind: 'upstream', status, message: UPSTREAM_MESSAGE };
     }
     if (status >= 500) {
       return { kind: 'server', status, message: SERVER_MESSAGE };

@@ -37,12 +37,20 @@ describe('normalizeApiError — error classes', () => {
   });
 
   it('maps 5xx to server with retry-encouraging wording', () => {
-    for (const status of [500, 502, 503, 504]) {
+    for (const status of [500, 503, 504]) {
       const normalized = normalizeApiError(new ApiRequestError(status));
       expect(normalized.kind).toBe('server');
       expect(normalized.status).toBe(status);
       expect(normalized.message).toBe('服务器暂时无法完成请求，请稍后重试。');
     }
+  });
+
+  // A 502 from the AI endpoints means our server reached a provider that said
+  // no; "retry later" sends the user to the wrong thing.
+  it('maps 502 to a distinct upstream failure', () => {
+    const normalized = normalizeApiError(new ApiRequestError(502));
+    expect(normalized.kind).toBe('upstream');
+    expect(normalized.message).toContain('上游服务拒绝了请求');
   });
 
   it('maps NetworkUnavailableError (fetch rejected) to network', () => {
