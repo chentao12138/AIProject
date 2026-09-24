@@ -294,7 +294,7 @@ class ExamDiagnosisIntegrationTest {
                 .andExpect(jsonPath("$.examAttemptId").value(attemptId))
                 .andExpect(jsonPath("$.summary").value("Exam score 5/5"))
                 .andExpect(jsonPath("$.createdAt").exists())
-                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items.length()").value(4))
                 .andExpect(jsonPath("$.items[0].dimensionType").value("KNOWLEDGE_POINT"))
                 .andExpect(jsonPath("$.items[0].dimensionId").value(kpId))
                 .andExpect(jsonPath("$.items[0].label").value("点1"))
@@ -306,7 +306,10 @@ class ExamDiagnosisIntegrationTest {
                 .andExpect(jsonPath("$.items[1].dimensionId").doesNotExist())
                 .andExpect(jsonPath("$.items[1].label").value("SINGLE_CHOICE"))
                 .andExpect(jsonPath("$.items[1].score").value(5))
-                .andExpect(jsonPath("$.items[1].maxScore").value(5));
+                .andExpect(jsonPath("$.items[1].maxScore").value(5))
+                // the point has no category, which used to crash submit
+                .andExpect(jsonPath("$.items[?(@.dimensionType=='CATEGORY')].label")
+                        .value(org.hamcrest.Matchers.contains("UNCATEGORIZED")));
     }
 
     /** (2) KP + question-type aggregation over multiple items. */
@@ -353,7 +356,7 @@ class ExamDiagnosisIntegrationTest {
         mockMvc.perform(get(DIAGNOSIS, spaceId, attemptId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.items.length()").value(5))
                 .andExpect(jsonPath("$.items[0].dimensionId").value(kp1))
                 .andExpect(jsonPath("$.items[0].score").value(4))
                 .andExpect(jsonPath("$.items[0].maxScore").value(4))
@@ -402,7 +405,7 @@ class ExamDiagnosisIntegrationTest {
         mockMvc.perform(get(DIAGNOSIS, spaceId, attemptId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items.length()").value(4))
                 .andExpect(jsonPath("$.items[0].dimensionType").value("KNOWLEDGE_POINT"))
                 .andExpect(jsonPath("$.items[0].maxScore").value(2))
                 .andExpect(jsonPath("$.items[0].evidenceCount").value(1))
