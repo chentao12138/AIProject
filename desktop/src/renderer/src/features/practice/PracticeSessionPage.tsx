@@ -106,9 +106,12 @@ export function PracticeSessionPage() {
   }
 
   const rawQuestions = (session.questions ?? []) as PracticeQuestion[];
+  // The backend's only vocabulary is CREATED -> IN_PROGRESS -> SUBMITTED.
+  // Matching FINISHED/COMPLETED here meant a submitted session fell through to
+  // the answering UI with an empty local answer map.
   const status = (session.status ?? '').toUpperCase();
 
-  if (status === 'CREATED' || status === 'PENDING') {
+  if (status === 'CREATED') {
     return (
       <div className="page">
         <PageHeader title={`Practice #${session.id}`} />
@@ -124,7 +127,7 @@ export function PracticeSessionPage() {
     );
   }
 
-  if (status === 'FINISHED' || status === 'COMPLETED') {
+  if (status === 'SUBMITTED') {
     return (
       <PracticeResult
         spaceId={spaceId}

@@ -64,7 +64,7 @@ describe('PracticeSessionPage', () => {
     const completedData = {
       data: {
         id: 1,
-        status: 'COMPLETED',
+        status: 'SUBMITTED',
         score: 1,
         maxScore: 1,
         answeredCount: 1,
@@ -100,5 +100,37 @@ describe('PracticeSessionPage', () => {
 
     expect(await screen.findByText(/Practice #1/)).toBeInTheDocument();
     expect(screen.getByText(/Score:/)).toBeInTheDocument();
+  });
+
+  // Re-opening a session the backend already reports SUBMITTED must not offer
+  // a fresh answer form: the detail carries no answers, so it used to look like
+  // every answer had been lost.
+  it('renders the result view when a submitted session is reopened', async () => {
+    renderWithProviders(<PracticeSessionPage />, {
+      apiClient: mockApiClient({
+        getPracticeSession: vi.fn(async () => ({
+          data: {
+            id: 1,
+            status: 'SUBMITTED',
+            questionCount: 1,
+            questions: [
+              {
+                practiceSessionQuestionId: 11,
+                questionId: 101,
+                questionType: 'SINGLE_CHOICE',
+                stem: 'Pick one',
+              },
+            ],
+          },
+          response: { status: 200 },
+        })),
+      }),
+      initialEntries: ['/spaces/7/practice/1'],
+      routePath: '/spaces/:spaceId/practice/:sessionId',
+    });
+
+    expect(await screen.findByText(/Result/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Finish' })).not.toBeInTheDocument();
   });
 });
