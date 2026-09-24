@@ -17,6 +17,7 @@ import { entityQuery } from '../../lib/queries';
 import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { parsePositiveIdParam } from '../../lib/ids';
+import { PRACTICE_SESSION_STATUSES } from '../../lib/format';
 import type { PracticeSubmitSummary } from '../../lib/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
@@ -111,7 +112,7 @@ export function PracticeSessionPage() {
   // the answering UI with an empty local answer map.
   const status = (session.status ?? '').toUpperCase();
 
-  if (status === 'CREATED') {
+  if (status === PRACTICE_SESSION_STATUSES.CREATED) {
     return (
       <div className="page">
         <PageHeader title={`练习 #${session.id}`} />
@@ -127,7 +128,7 @@ export function PracticeSessionPage() {
     );
   }
 
-  if (status === 'SUBMITTED') {
+  if (status === PRACTICE_SESSION_STATUSES.SUBMITTED) {
     return (
       <PracticeResult
         spaceId={spaceId}

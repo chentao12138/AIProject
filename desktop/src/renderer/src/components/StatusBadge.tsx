@@ -25,9 +25,11 @@ const STATUS_LABELS: Record<string, string> = {
   ACTIVE: '启用',
   INACTIVE: '停用',
   CREATED: '待开始',
+  NOT_STARTED: '未开始',
   IN_PROGRESS: '进行中',
   SUBMITTED: '已交卷',
   FINISHED: '已完成',
+  PARTIAL_FAILED: '部分失败',
   FAILED: '失败',
 };
 

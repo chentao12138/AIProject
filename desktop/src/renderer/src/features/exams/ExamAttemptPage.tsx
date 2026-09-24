@@ -17,7 +17,7 @@ import { entityQuery } from '../../lib/queries';
 import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
-import { formatDateTime } from '../../lib/format';
+import { EXAM_ATTEMPT_STATUSES, formatDateTime } from '../../lib/format';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -97,16 +97,19 @@ export function ExamAttemptPage() {
   }
 
   const rawQuestions = (attempt.questions ?? []) as ExamQuestion[];
+  // ExamAttemptService only ever reports NOT_STARTED / IN_PROGRESS / SUBMITTED.
+  // Matching CREATED/PENDING meant a fresh attempt skipped its start screen, so
+  // every answer was rejected with 409 "exam attempt is not IN_PROGRESS".
   const status = (attempt.status ?? '').toUpperCase();
 
-  if (status === 'CREATED' || status === 'PENDING') {
+  if (status === EXAM_ATTEMPT_STATUSES.NOT_STARTED) {
     return (
       <div className="page">
-        <PageHeader title={`Exam Attempt #${attempt.id}`} />
-        <p className="page__note">{rawQuestions.length} questions.</p>
+        <PageHeader title={`考试作答 #${attempt.id}`} />
+        <p className="page__note">共 {rawQuestions.length} 题。</p>
         {attempt.deadlineAt && (
           <p className="page__note">
-            Deadline: {formatDateTime(attempt.deadlineAt)}
+            截止时间：{formatDateTime(attempt.deadlineAt)}
           </p>
         )}
         <Button
@@ -120,7 +123,7 @@ export function ExamAttemptPage() {
     );
   }
 
-  if (status === 'SUBMITTED' || status === 'GRADED') {
+  if (status === EXAM_ATTEMPT_STATUSES.SUBMITTED) {
     return <ExamResult spaceId={spaceId} attemptId={attemptId} />;
   }
 
