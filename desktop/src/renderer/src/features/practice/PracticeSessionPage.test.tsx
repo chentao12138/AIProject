@@ -95,11 +95,11 @@ describe('PracticeSessionPage', () => {
     });
 
     await user.click(await screen.findByRole('button', { name: 'Alpha' }));
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
-    await user.click(screen.getByRole('button', { name: 'Finish' }));
+    await user.click(screen.getByRole('button', { name: '提交' }));
+    await user.click(screen.getByRole('button', { name: '交卷' }));
 
-    expect(await screen.findByText(/Practice #1/)).toBeInTheDocument();
-    expect(screen.getByText(/Score:/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /练习 #1/ })).toBeInTheDocument();
+    expect(screen.getByText(/得分：/)).toBeInTheDocument();
   });
 
   // Re-opening a session the backend already reports SUBMITTED must not offer
@@ -129,8 +129,8 @@ describe('PracticeSessionPage', () => {
       routePath: '/spaces/:spaceId/practice/:sessionId',
     });
 
-    expect(await screen.findByText(/Result/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Finish' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /成绩/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '提交' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '交卷' })).not.toBeInTheDocument();
   });
 });

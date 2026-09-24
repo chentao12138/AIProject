@@ -68,11 +68,11 @@ export function PracticePage() {
 
   return (
     <div className="page">
-      <PageHeader title="Practice" />
-      <section className="workbench-section" aria-label="Start practice">
-        <h2 className="section-title">Start Practice</h2>
+      <PageHeader title="练习" />
+      <section className="workbench-section" aria-label="开始练习">
+        <h2 className="section-title">开始练习</h2>
         <p className="page__note">
-          Create a practice session to begin answering questions.
+          创建一次练习会话，然后逐题作答。
         </p>
         <form
           className="form"
@@ -82,7 +82,7 @@ export function PracticePage() {
           }}
         >
           <div className="form__field">
-            <label htmlFor="p-count" className="form__label">Number of Questions</label>
+            <label htmlFor="p-count" className="form__label">题目数量</label>
             <input
               id="p-count"
               className="input"
@@ -94,14 +94,14 @@ export function PracticePage() {
             />
           </div>
           <div className="form__field">
-            <label htmlFor="p-kp" className="form__label">Focus Knowledge Point (optional)</label>
+            <label htmlFor="p-kp" className="form__label">限定知识点（可选）</label>
             <select
               id="p-kp"
               className="select"
               value={knowledgePointId}
               onChange={(e) => setKnowledgePointId(e.target.value)}
             >
-              <option value="">All</option>
+              <option value="">全部</option>
               {(kpQuery.data ?? []).map((kp) => (
                 <option key={kp.id} value={String(kp.id)}>{kp.title ?? `#${kp.id}`}</option>
               ))}
@@ -114,14 +114,14 @@ export function PracticePage() {
           )}
           <div className="form__actions">
             <Button type="submit" variant="primary" disabled={start.isPending}>
-              {start.isPending ? 'Starting…' : 'Start Practice'}
+              {start.isPending ? '创建中…' : '开始练习'}
             </Button>
           </div>
         </form>
       </section>
 
-      <section className="workbench-section" aria-label="History">
-        <h2 className="section-title">History</h2>
+      <section className="workbench-section" aria-label="练习历史">
+        <h2 className="section-title">练习历史</h2>
         <PracticeHistory spaceId={spaceId} />
       </section>
     </div>
@@ -148,18 +148,18 @@ function PracticeHistory({ spaceId }: { spaceId: number }) {
 
   const items = listQuery.data ?? [];
   if (items.length === 0) {
-    return <p className="muted">No practice sessions yet.</p>;
+    return <p className="muted">还没有练习记录。</p>;
   }
 
   return (
     <table className="table">
       <thead>
         <tr>
-          <th>Session</th>
-          <th>Status</th>
-          <th>Questions</th>
-          <th>Started</th>
-          <th>Actions</th>
+          <th>会话</th>
+          <th>状态</th>
+          <th>题目数</th>
+          <th>开始时间</th>
+          <th>操作</th>
         </tr>
       </thead>
       <tbody>
@@ -174,7 +174,7 @@ function PracticeHistory({ spaceId }: { spaceId: number }) {
                 type="button"
                 onClick={() => navigate(`/spaces/${spaceId}/practice/${s.id}`)}
               >
-                Open
+                打开
               </Button>
             </td>
           </tr>

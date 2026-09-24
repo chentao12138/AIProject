@@ -67,7 +67,7 @@ export function SourcesPage() {
   return (
     <div className="page">
       <PageHeader
-        title="Sources"
+        title="学习来源"
         actions={
           <Button variant="primary" onClick={() => setCreating(true)}>
             Create Source
@@ -86,8 +86,8 @@ export function SourcesPage() {
 
       {sourcesQuery.isSuccess && sources.length === 0 && (
         <EmptyState
-          title="No sources yet"
-          description="Register your first source for this space."
+          title="还没有学习来源"
+          description="先为该空间登记一个学习来源。"
           action={
             <Button variant="primary" onClick={() => setCreating(true)}>
               Create Source
@@ -100,11 +100,11 @@ export function SourcesPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Title</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Created</th>
-              <th>Actions</th>
+              <th>标题</th>
+              <th>类型</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -167,7 +167,7 @@ function CreateSourceDialog({
   const formError = useFormError(error);
 
   return (
-    <Dialog title="Create Source" onClose={onClose} busy={pending}>
+    <Dialog title="创建学习来源" onClose={onClose} busy={pending}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -179,7 +179,7 @@ function CreateSourceDialog({
         }}
       >
         <Input
-          label="Title"
+          label="标题"
           required
           value={title}
           onChange={(event) => {
@@ -202,10 +202,10 @@ function CreateSourceDialog({
             variant="primary"
             disabled={pending || !title.trim()}
           >
-            {pending ? 'Creating…' : 'Create'}
+            {pending ? '创建中…' : '创建'}
           </Button>
           <Button onClick={onClose} disabled={pending}>
-            Cancel
+            取消
           </Button>
         </div>
       </form>

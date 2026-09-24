@@ -13,6 +13,7 @@ import { queryKeys } from '../../lib/query-keys';
 import { spaceQuery } from '../../lib/queries';
 import { useSpaceId } from '../../lib/space-scope';
 import { isPositiveId } from '../../lib/ids';
+import { resultTypeLabel } from '../../lib/format';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -81,9 +82,9 @@ export function SearchPage() {
 
   return (
     <div className="page">
-      <PageHeader title="Search" />
-      <section className="workbench-section" aria-label="Search">
-        <h2 className="section-title">Search</h2>
+      <PageHeader title="搜索" />
+      <section className="workbench-section" aria-label="搜索">
+        <h2 className="section-title">搜索</h2>
         <form
           className="form"
           onSubmit={(e) => {
@@ -92,17 +93,17 @@ export function SearchPage() {
           }}
         >
           <div className="form__field">
-            <label htmlFor="s-q" className="form__label">Query</label>
+            <label htmlFor="s-q" className="form__label">关键词</label>
             <input
               id="s-q"
               className="input"
               value={localQuery}
               onChange={(e) => setLocalQuery(e.target.value)}
-              placeholder="Search sources, knowledge, questions, notes…"
+              placeholder="搜索学习来源、知识、题目、笔记…"
             />
           </div>
           <div className="form__actions">
-            <Button type="submit" variant="primary">Search</Button>
+            <Button type="submit" variant="primary">搜索</Button>
           </div>
         </form>
       </section>
@@ -115,11 +116,11 @@ export function SearchPage() {
         />
       )}
       {!searching && !searchQuery.isError && rawQuery && results.length === 0 && (
-        <EmptyState title="No results" description={`No results for "${rawQuery}".`} />
+        <EmptyState title="没有匹配结果" description={`没有与“${rawQuery}”匹配的内容。`} />
       )}
       {!searching && !searchQuery.isError && results.length > 0 && (
         <>
-          <p className="page__note">{total} results</p>
+          <p className="page__note">共 {total} 条结果</p>
           <ul className="point-list">
             {results.map((r, idx) => {
               const rType = r.type ?? 'UNKNOWN';
@@ -140,7 +141,7 @@ export function SearchPage() {
                   ) : (
                     <span>{r.title ?? `#${r.id}`}</span>
                   )}
-                  <span className="muted"> · {rType}</span>
+                  <span className="muted"> · {resultTypeLabel(rType)}</span>
                   {r.snippet && <p className="muted">{r.snippet.slice(0, 120)}</p>}
                 </li>
               );
@@ -148,9 +149,9 @@ export function SearchPage() {
           </ul>
           {totalPages > 1 && (
             <div className="practice-nav">
-              <Button type="button" onClick={() => goPage(page - 1)} disabled={page <= 0}>Previous</Button>
-              <span className="muted">Page {page + 1} of {totalPages}</span>
-              <Button type="button" onClick={() => goPage(page + 1)} disabled={page >= totalPages - 1}>Next</Button>
+              <Button type="button" onClick={() => goPage(page - 1)} disabled={page <= 0}>上一页</Button>
+              <span className="muted">第 {page + 1} / {totalPages} 页</span>
+              <Button type="button" onClick={() => goPage(page + 1)} disabled={page >= totalPages - 1}>下一页</Button>
             </div>
           )}
         </>

@@ -114,14 +114,14 @@ export function PracticeSessionPage() {
   if (status === 'CREATED') {
     return (
       <div className="page">
-        <PageHeader title={`Practice #${session.id}`} />
-        <p className="page__note">Session ready. {rawQuestions.length} questions.</p>
+        <PageHeader title={`练习 #${session.id}`} />
+        <p className="page__note">会话已就绪，共 {rawQuestions.length} 题。</p>
         <Button
           variant="primary"
           disabled={startSession.isPending}
           onClick={() => startSession.mutate()}
         >
-          {startSession.isPending ? 'Starting…' : 'Start'}
+          {startSession.isPending ? '开始中…' : '开始作答'}
         </Button>
       </div>
     );
@@ -197,7 +197,7 @@ function ActiveSession({
   });
 
   if (!current) {
-    return <EmptyState title="No questions in this session." />;
+    return <EmptyState title="本次练习没有题目" />;
   }
 
   const currentAnswer = answers[current.practiceSessionQuestionId];
@@ -248,17 +248,17 @@ function ActiveSession({
   return (
     <div className="page">
       <PageHeader
-        title={`Practice #${sessionId}`}
+        title={`练习 #${sessionId}`}
         actions={
           <Button type="button" variant="primary" onClick={onFinish} disabled={finishing}>
-            {finishing ? 'Finishing…' : 'Finish'}
+            {finishing ? '交卷中…' : '交卷'}
           </Button>
         }
       />
       <div className="practice-layout">
         <div className="practice-main">
           <div className="practice-progress">
-            Question {currentIndex + 1} of {total} · {answeredCount} answered
+            第 {currentIndex + 1} / {total} 题 · 已作答 {answeredCount}
           </div>
           <QuestionRenderer
             question={payload}
@@ -285,21 +285,21 @@ function ActiveSession({
               }))
             }
             onSubmit={handleSubmit}
-            submitLabel={isCurrentSubmitted ? 'Submitted' : 'Submit'}
+            submitLabel={isCurrentSubmitted ? '已提交' : '提交'}
             disabled={isCurrentSubmitted || submitAnswer.isPending}
           />
           {submitError && <p className="form__error" role="alert">{submitError}</p>}
           <div className="practice-nav">
             <Button type="button" onClick={goPrev} disabled={currentIndex <= 0}>
-              Previous
+              上一题
             </Button>
             <Button type="button" onClick={goNext} disabled={currentIndex >= total - 1}>
-              Next
+              下一题
             </Button>
           </div>
         </div>
         <aside className="practice-sidebar">
-          <h3 className="section-title">Questions</h3>
+          <h3 className="section-title">题目</h3>
           <ol className="practice-question-list">
             {questions.map((q, idx) => {
               const qid = q.practiceSessionQuestionId;
@@ -339,25 +339,25 @@ function PracticeResult({
 
   return (
     <div className="page">
-      <PageHeader title={`Practice #${sessionId} — Result`} />
+      <PageHeader title={`练习 #${sessionId} — 成绩`} />
       <div className="practice-result">
         {summary ? (
           <>
             <p>
-              Score: {summary.score ?? '—'} / {summary.maxScore ?? '—'}
+              得分：{summary.score ?? '—'} / {summary.maxScore ?? '—'}
             </p>
             <p>
-              Answered: {summary.answeredCount ?? 0} /{' '}
+              已作答：{summary.answeredCount ?? 0} /{' '}
               {summary.questionCount ?? questionCount}
             </p>
-            <p>Correct: {summary.correctCount ?? 0}</p>
+            <p>答对：{summary.correctCount ?? 0}</p>
           </>
         ) : (
           /* A session finished in an earlier visit has no readable score:
              the contract exposes no practice-result endpoint (A5.3), and
              computing one here would copy server-side rules (ADR-031). */
           <>
-            <p>Questions: {questionCount}</p>
+            <p>题目数：{questionCount}</p>
             <p className="page__note">
               成绩汇总仅在交卷响应中返回，历史会话需要后端结果接口才能读取。
             </p>
@@ -370,7 +370,7 @@ function PracticeResult({
           variant="primary"
           onClick={() => navigate(`/spaces/${spaceId}/practice`)}
         >
-          New Practice
+          再练一次
         </Button>
       </div>
     </div>

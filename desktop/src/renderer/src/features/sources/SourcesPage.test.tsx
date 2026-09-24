@@ -40,8 +40,8 @@ describe('SourcesPage', () => {
     await user.click(
       await screen.findByRole('button', { name: 'Create Source' })
     );
-    await user.type(await screen.findByLabelText('Title'), 'Chapter notes');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(await screen.findByLabelText('标题'), 'Chapter notes');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     await waitFor(() => {
       expect(createSource).toHaveBeenCalledWith(7, {
@@ -87,7 +87,7 @@ describe('SourcesPage', () => {
       routePath: '/spaces/:spaceId/sources',
     });
 
-    expect(await screen.findByText('No sources yet')).toBeInTheDocument();
+    expect(await screen.findByText('还没有学习来源')).toBeInTheDocument();
   });
 
   it('renders source rows with safe optional fields (PHASE 11)', async () => {
@@ -191,8 +191,8 @@ describe('SourcesPage', () => {
     await user.click(
       await screen.findByRole('button', { name: 'Create Source' })
     );
-    await user.type(await screen.findByLabelText('Title'), 'Notes');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(await screen.findByLabelText('标题'), 'Notes');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('请求失败，请稍后重试。');
@@ -222,10 +222,10 @@ describe('SourcesPage', () => {
     await user.click(
       await screen.findByRole('button', { name: 'Create Source' })
     );
-    await user.type(await screen.findByLabelText('Title'), 'Notes');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(await screen.findByLabelText('标题'), 'Notes');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
-    const submit = await screen.findByRole('button', { name: 'Creating…' });
+    const submit = await screen.findByRole('button', { name: '创建中…' });
     expect(submit).toBeDisabled();
     await user.keyboard('{Escape}');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -266,9 +266,9 @@ describe('SourcesPage', () => {
     await user.click(
       await screen.findByRole('button', { name: 'Create Source' })
     );
-    const title = await screen.findByLabelText('Title');
+    const title = await screen.findByLabelText('标题');
     await user.type(title, 'Notes');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
 

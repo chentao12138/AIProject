@@ -8,8 +8,8 @@
 export function NotFoundPage() {
   return (
     <div className="page">
-      <h1 className="page__title">Not found</h1>
-      <p className="muted">The page you requested does not exist.</p>
+      <h1 className="page__title">页面不存在</h1>
+      <p className="muted">你访问的页面不存在。</p>
     </div>
   );
 }

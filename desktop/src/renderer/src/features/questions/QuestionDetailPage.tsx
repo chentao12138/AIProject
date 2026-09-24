@@ -16,7 +16,7 @@ import { queryKeys } from '../../lib/query-keys';
 import { entityQuery } from '../../lib/queries';
 import { requireId, useSpaceId } from '../../lib/space-scope';
 import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
-import { formatDateTime } from '../../lib/format';
+import { difficultyLabel, formatDateTime, questionTypeLabel } from '../../lib/format';
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
@@ -106,7 +106,7 @@ export function QuestionDetailPage() {
   return (
     <div className="page">
       <PageHeader
-        title={`Question #${q.id}`}
+        title={`题目 #${q.id}`}
         actions={
           <>
             <StatusBadge status={q.status} />
@@ -116,7 +116,7 @@ export function QuestionDetailPage() {
                 disabled={publish.isPending}
                 onClick={() => publish.mutate()}
               >
-                {publish.isPending ? 'Publishing…' : 'Publish'}
+                {publish.isPending ? '发布中…' : '发布'}
               </Button>
             )}
           </>
@@ -130,30 +130,30 @@ export function QuestionDetailPage() {
 
       <dl className="detail-list">
         <div className="detail-list__row">
-          <dt>Type</dt>
-          <dd>{q.questionType ?? '—'}</dd>
+          <dt>题型</dt>
+          <dd>{questionTypeLabel(q.questionType)}</dd>
         </div>
         {q.difficulty && (
           <div className="detail-list__row">
-            <dt>Difficulty</dt>
-            <dd>{q.difficulty}</dd>
+            <dt>难度</dt>
+            <dd>{difficultyLabel(q.difficulty)}</dd>
           </div>
         )}
         <div className="detail-list__row">
-          <dt>Created</dt>
+          <dt>创建时间</dt>
           <dd>{formatDateTime(q.createdAt)}</dd>
         </div>
       </dl>
 
       {q.knowledgePointIds && q.knowledgePointIds.length > 0 && (
-        <section className="workbench-section" aria-label="Knowledge Points">
-          <h2 className="section-title">Knowledge Points</h2>
+        <section className="workbench-section" aria-label="关联知识点">
+          <h2 className="section-title">关联知识点</h2>
           <ul className="point-list">
             {q.knowledgePointIds.map((kpId) => (
               <li key={kpId}>
                   {isPositiveId(kpId) && spaceId !== null ? (
                     <Link to={`/spaces/${spaceId}/knowledge/${kpId}`} className="nav-link">
-                      Knowledge Point #{kpId}
+                      知识点 #{kpId}
                     </Link>
                   ) : (
                     <span className="muted">#{kpId}</span>
@@ -164,8 +164,8 @@ export function QuestionDetailPage() {
         </section>
       )}
 
-      <section className="workbench-section" aria-label="Question">
-        <h2 className="section-title">Content</h2>
+      <section className="workbench-section" aria-label="题目内容">
+        <h2 className="section-title">题目内容</h2>
         <QuestionRenderer question={payload} answer={answer} mode="review" />
       </section>
     </div>

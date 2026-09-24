@@ -48,7 +48,7 @@ function renderWB(api: ReturnType<typeof mockApiClient>) {
 }
 
 async function waitForm() {
-  await screen.findByRole('button', { name: /upload & ingest/i });
+  await screen.findByRole('button', { name: /上传并解析/i });
 }
 
 function pickFile(name: string, type = 'text/plain') {
@@ -130,7 +130,7 @@ describe('Critical — upload errors', () => {
     );
     await waitForm();
     pickFile('a.txt');
-    await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
+    await user.click(screen.getByRole('button', { name: /上传并解析/i }));
     expect(await screen.findByText(pattern as RegExp)).toBeInTheDocument();
   });
 });
@@ -159,7 +159,7 @@ describe('Critical — polling stops on terminal', () => {
     await waitForm();
     pickFile('a.txt');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
+    await user.click(screen.getByRole('button', { name: /上传并解析/i }));
 
     await waitFor(() => {
       expect(screen.getByTestId('active-job')).toBeInTheDocument();
@@ -200,13 +200,13 @@ describe('Critical — polling stops on terminal', () => {
     await waitForm();
     pickFile('a.pdf', 'application/pdf');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
+    await user.click(screen.getByRole('button', { name: /上传并解析/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /PDF 文件格式无效/
     );
     expect(
-      screen.getByRole('button', { name: /retry ingestion/i })
+      screen.getByRole('button', { name: /重新解析/i })
     ).toBeInTheDocument();
   });
 });
@@ -344,7 +344,7 @@ describe('Critical — retry semantics', () => {
         })),
       })
     );
-    const retryButtons = await screen.findAllByRole('button', { name: 'Retry' });
+    const retryButtons = await screen.findAllByRole('button', { name: '重试' });
     // Only the FAILED job gets a Retry button.
     expect(retryButtons).toHaveLength(1);
   });
@@ -378,10 +378,10 @@ describe('Critical — retry semantics', () => {
     await waitForm();
     pickFile('a.txt');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
+    await user.click(screen.getByRole('button', { name: /上传并解析/i }));
 
     const retryButton = await screen.findByRole('button', {
-      name: /retry ingestion/i,
+      name: /重新解析/i,
     });
     const before = listIngestionJobs.mock.calls.length;
 
@@ -409,7 +409,7 @@ describe('Critical — size precheck', () => {
     fireEvent.change(input, { target: { files: [file] } });
     expect(await screen.findByRole('alert')).toHaveTextContent(/100 MB/);
     expect(
-      screen.getByRole('button', { name: /upload & ingest/i })
+      screen.getByRole('button', { name: /上传并解析/i })
     ).toBeDisabled();
   });
 });

@@ -114,7 +114,7 @@ export function ExamAttemptPage() {
           disabled={startAttempt.isPending}
           onClick={() => startAttempt.mutate()}
         >
-          {startAttempt.isPending ? 'Starting…' : 'Start Exam'}
+          {startAttempt.isPending ? '开始中…' : '开始考试'}
         </Button>
       </div>
     );
@@ -178,7 +178,7 @@ function ActiveExam({
   });
 
   if (!current) {
-    return <EmptyState title="No questions in this exam." />;
+    return <EmptyState title="本次考试没有题目。" />;
   }
 
   const currentAnswer = answers[current.examQuestionId];
@@ -226,7 +226,7 @@ function ActiveExam({
         title={`Exam Attempt #${attemptId}`}
         actions={
           <Button type="button" variant="primary" onClick={onSubmit} disabled={submitting}>
-            {submitting ? 'Submitting…' : 'Submit Exam'}
+            {submitting ? '交卷中…' : '交卷'}
           </Button>
         }
       />
@@ -260,17 +260,17 @@ function ActiveExam({
               }))
             }
             onSubmit={handleSubmit}
-            submitLabel={submitAnswer.isSuccess ? 'Saved' : 'Save Answer'}
+            submitLabel={submitAnswer.isSuccess ? '已保存' : '保存答案'}
             disabled={submitAnswer.isSuccess}
           />
           {submitError && <p className="form__error" role="alert">{submitError}</p>}
           <div className="practice-nav">
-            <Button type="button" onClick={goPrev} disabled={currentIndex <= 0}>Previous</Button>
-            <Button type="button" onClick={goNext} disabled={currentIndex >= total - 1}>Next</Button>
+            <Button type="button" onClick={goPrev} disabled={currentIndex <= 0}>上一题</Button>
+            <Button type="button" onClick={goNext} disabled={currentIndex >= total - 1}>下一题</Button>
           </div>
         </div>
         <aside className="practice-sidebar">
-          <h3 className="section-title">Questions</h3>
+          <h3 className="section-title">题目</h3>
           <ol className="practice-question-list">
             {questions.map((q, idx) => {
               const qid = q.examQuestionId;
@@ -339,8 +339,8 @@ function ExamResult({
       </div>
 
       {items.length > 0 && (
-        <section className="workbench-section" aria-label="Per-question review">
-          <h2 className="section-title">Review</h2>
+        <section className="workbench-section" aria-label="逐题回顾">
+          <h2 className="section-title">逐题回顾</h2>
           {items.map((item, idx) => (
             <div key={idx} className="result-item">
               <p>
@@ -357,7 +357,7 @@ function ExamResult({
                 )}
               </p>
               <p>
-                {item.isCorrect ? 'Correct' : 'Incorrect'} ·
+                {item.isCorrect ? '答对' : '答错'} ·
                 {item.score ?? 0} / {item.maxScore ?? 0}
               </p>
               {item.correctAnswer && (

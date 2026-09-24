@@ -123,7 +123,7 @@ export function KnowledgePage() {
   return (
     <div className="page">
       <PageHeader
-        title="Knowledge"
+        title="知识库"
         actions={
           <>
             <Button onClick={() => setCreatingCategory(true)}>
@@ -150,21 +150,21 @@ export function KnowledgePage() {
 
       {!loading && !error && (
         <div className="knowledge-layout">
-          <section className="knowledge-layout__tree" aria-label="Category tree">
-            <h2 className="section-title">Categories</h2>
+          <section className="knowledge-layout__tree" aria-label="分类树">
+            <h2 className="section-title">分类</h2>
             {categories.length === 0 ? (
-              <p className="muted">No categories yet.</p>
+              <p className="muted">还没有分类。</p>
             ) : (
               <CategoryTree nodes={tree} />
             )}
           </section>
 
-          <section className="knowledge-layout__points" aria-label="Knowledge points">
-            <h2 className="section-title">Points</h2>
+          <section className="knowledge-layout__points" aria-label="知识点">
+            <h2 className="section-title">知识点</h2>
             {points.length === 0 ? (
               <EmptyState
-                title="No knowledge points yet"
-                description="Create a knowledge point to start building your catalog."
+                title="还没有知识点"
+                description="先创建一个知识点，开始搭建你的知识体系。"
                 action={
                   <Button variant="primary" onClick={() => setCreatingPoint(true)}>
                     Create Knowledge Point
@@ -179,7 +179,7 @@ export function KnowledgePage() {
                   const content = (
                     <>
                       <span className="point-list__title">
-                        {point.title ?? 'Untitled'}
+                        {point.title ?? '未命名'}
                       </span>
                       {point.summary && (
                         <span className="point-list__summary">
@@ -279,7 +279,7 @@ function CategoryTreeItem({ node }: { node: CategoryNode }) {
   return (
     <li className="category-tree__item">
       <span className="category-tree__label">
-        {hasChildren ? '▾' : '·'} {node.category.name ?? 'Untitled'}
+        {hasChildren ? '▾' : '·'} {node.category.name ?? '未命名'}
         {node.category.description && (
           <span className="category-tree__desc"> — {node.category.description}</span>
         )}
@@ -323,7 +323,7 @@ function CreateCategoryDialog({
   const formError = useFormError(error);
 
   return (
-    <Dialog title="Create Category" onClose={onClose} busy={pending}>
+    <Dialog title="创建分类" onClose={onClose} busy={pending}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -340,7 +340,7 @@ function CreateCategoryDialog({
         }}
       >
         <Input
-          label="Name"
+          label="名称"
           required
           value={name}
           onChange={(event) => {
@@ -349,7 +349,7 @@ function CreateCategoryDialog({
           }}
         />
         <Input
-          label="Description (optional)"
+          label="说明（可选）"
           value={description}
           onChange={(event) => {
             setDescription(event.target.value);
@@ -357,7 +357,7 @@ function CreateCategoryDialog({
           }}
         />
         <Select
-          label="Parent category (optional)"
+          label="父分类（可选）"
           value={parentId}
           onChange={(event) => {
             setParentId(event.target.value);
@@ -374,7 +374,7 @@ function CreateCategoryDialog({
             ))}
         </Select>
         <Input
-          label="Sort order (optional)"
+          label="排序（可选）"
           type="number"
           value={sortOrder}
           onChange={(event) => {
@@ -387,10 +387,10 @@ function CreateCategoryDialog({
         )}
         <div className="form__actions">
           <Button type="submit" variant="primary" disabled={pending || !name.trim()}>
-            {pending ? 'Creating…' : 'Create'}
+            {pending ? '创建中…' : '创建'}
           </Button>
           <Button onClick={onClose} disabled={pending}>
-            Cancel
+            取消
           </Button>
         </div>
       </form>
@@ -425,7 +425,7 @@ function CreatePointDialog({
   const formError = useFormError(error);
 
   return (
-    <Dialog title="Create Knowledge Point" onClose={onClose} busy={pending}>
+    <Dialog title="创建知识点" onClose={onClose} busy={pending}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -443,7 +443,7 @@ function CreatePointDialog({
         }}
       >
         <Input
-          label="Title"
+          label="标题"
           required
           value={title}
           onChange={(event) => {
@@ -452,7 +452,7 @@ function CreatePointDialog({
           }}
         />
         <Input
-          label="Summary (optional)"
+          label="摘要（可选）"
           value={summary}
           onChange={(event) => {
             setSummary(event.target.value);
@@ -460,7 +460,7 @@ function CreatePointDialog({
           }}
         />
         <TextArea
-          label="Content"
+          label="正文"
           required
           rows={6}
           value={content}
@@ -470,7 +470,7 @@ function CreatePointDialog({
           }}
         />
         <Select
-          label="Category (optional)"
+          label="分类（可选）"
           value={categoryId}
           onChange={(event) => {
             setCategoryId(event.target.value);
@@ -487,7 +487,7 @@ function CreatePointDialog({
             ))}
         </Select>
         <Input
-          label="Difficulty (optional free text)"
+          label="难度（可选，自由填写）"
           value={difficulty}
           onChange={(event) => {
             setDifficulty(event.target.value);
@@ -503,10 +503,10 @@ function CreatePointDialog({
             variant="primary"
             disabled={pending || !title.trim() || !content.trim()}
           >
-            {pending ? 'Creating…' : 'Create'}
+            {pending ? '创建中…' : '创建'}
           </Button>
           <Button onClick={onClose} disabled={pending}>
-            Cancel
+            取消
           </Button>
         </div>
       </form>

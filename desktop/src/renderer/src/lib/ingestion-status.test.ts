@@ -93,14 +93,12 @@ describe('UPLOAD_STAGE_LABELS', () => {
   });
 
   it('covers the documented stage list', () => {
-    expect(UPLOAD_STAGE_LABELS.ready).toBe('Ready');
-    expect(UPLOAD_STAGE_LABELS.uploading).toBe('Uploading…');
-    expect(UPLOAD_STAGE_LABELS.uploaded).toBe('Uploaded');
-    expect(UPLOAD_STAGE_LABELS['waiting-ingestion']).toBe(
-      'Waiting for ingestion…'
-    );
-    expect(UPLOAD_STAGE_LABELS.ingesting).toBe('Ingesting…');
-    expect(UPLOAD_STAGE_LABELS.succeeded).toBe('Succeeded');
-    expect(UPLOAD_STAGE_LABELS.failed).toBe('Failed');
+    expect(UPLOAD_STAGE_LABELS.ready).toBe('待上传');
+    expect(UPLOAD_STAGE_LABELS.uploading).toBe('上传中…');
+    expect(UPLOAD_STAGE_LABELS.uploaded).toBe('已上传');
+    expect(UPLOAD_STAGE_LABELS['waiting-ingestion']).toBe('等待解析…');
+    expect(UPLOAD_STAGE_LABELS.ingesting).toBe('解析中…');
+    expect(UPLOAD_STAGE_LABELS.succeeded).toBe('解析成功');
+    expect(UPLOAD_STAGE_LABELS.failed).toBe('解析失败');
   });
 });

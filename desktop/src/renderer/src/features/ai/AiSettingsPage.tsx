@@ -140,7 +140,7 @@ export function AiSettingsPage() {
 
   return (
     <div className="page">
-      <PageHeader title="AI Provider Settings" />
+      <PageHeader title="AI 服务配置" />
       <form
         className="form"
         onSubmit={(e) => {
@@ -161,37 +161,37 @@ export function AiSettingsPage() {
         </div>
 
         <div className="form__field">
-          <label className="form__label" htmlFor="ai-provider">Provider</label>
+          <label className="form__label" htmlFor="ai-provider">服务类型</label>
           <select
             id="ai-provider"
             className="select"
             value={provider}
             onChange={(e) => setProvider(e.target.value)}
           >
-            <option value="OPENAI_COMPATIBLE">OpenAI Compatible</option>
+            <option value="OPENAI_COMPATIBLE">OpenAI 兼容接口</option>
           </select>
         </div>
 
         <div className="form__field">
-          <label className="form__label" htmlFor="ai-preset">Preset</label>
+          <label className="form__label" htmlFor="ai-preset">服务商预设</label>
           <select
             id="ai-preset"
             className="select"
             value={preset}
             onChange={(e) => applyPreset(e.target.value)}
           >
-            <option value="STEPFUN">StepFun</option>
+            <option value="STEPFUN">StepFun（阶跃星辰）</option>
           </select>
         </div>
 
         <Input
-          label="Base URL"
+          label="接口地址"
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
           placeholder="https://api.stepfun.com/v1"
         />
         <Input
-          label="Model"
+          label="模型"
           value={model}
           onChange={(e) => setModel(e.target.value)}
           placeholder="step-3.5-flash"

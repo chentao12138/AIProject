@@ -131,7 +131,7 @@ function ConversationList({
   const conversations = listQuery.data?.content ?? [];
 
   return (
-    <aside className="ai-sidebar" aria-label="Conversations">
+    <aside className="ai-sidebar" aria-label="会话列表">
       <Button
         variant="primary"
         onClick={() => create.mutate()}
@@ -299,7 +299,7 @@ function ChatPanel({
   };
 
   return (
-    <section className="ai-chat" aria-label="Chat">
+    <section className="ai-chat" aria-label="对话">
       <div className="ai-messages" data-testid="ai-messages">
         {messagesQuery.isPending && messages.length === 0 && !busy && (
           <LoadingState text="加载消息…" />
@@ -400,7 +400,7 @@ function ChatPanel({
           placeholder="输入你的问题… (按 Enter 发送，Shift + Enter 换行)"
           rows={3}
           disabled={busy}
-          aria-label="Message"
+          aria-label="消息"
         />
         <Button
           type="submit"

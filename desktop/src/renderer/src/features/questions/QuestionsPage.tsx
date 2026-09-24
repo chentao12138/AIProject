@@ -15,6 +15,7 @@ import { queryKeys } from '../../lib/query-keys';
 import { spaceQuery } from '../../lib/queries';
 import { useSpaceId } from '../../lib/space-scope';
 import { isPositiveId } from '../../lib/ids';
+import { questionTypeLabel } from '../../lib/format';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -65,46 +66,46 @@ export function QuestionsPage() {
   return (
     <div className="page">
       <PageHeader
-        title="Questions"
+        title="题库"
         actions={
           <Button
             variant="primary"
             onClick={() => navigate(`/spaces/${spaceId}/questions/new`)}
           >
-            New Question
+            新建题目
           </Button>
         }
       />
 
-      <section className="workbench-section" aria-label="Filters">
-        <h2 className="section-title">Filters</h2>
+      <section className="workbench-section" aria-label="筛选">
+        <h2 className="section-title">筛选</h2>
         <div className="form">
           <div className="form__field">
-            <label htmlFor="q-status" className="form__label">Status</label>
+            <label htmlFor="q-status" className="form__label">状态</label>
             <select
               id="q-status"
               className="select"
               value={status ?? ''}
               onChange={(e) => setFilter('status', e.target.value)}
             >
-              <option value="">All</option>
-              <option value="DRAFT">Draft</option>
-              <option value="PUBLISHED">Published</option>
+              <option value="">全部</option>
+              <option value="DRAFT">草稿</option>
+              <option value="PUBLISHED">已发布</option>
             </select>
           </div>
           <div className="form__field">
-            <label htmlFor="q-type" className="form__label">Type</label>
+            <label htmlFor="q-type" className="form__label">题型</label>
             <select
               id="q-type"
               className="select"
               value={questionType ?? ''}
               onChange={(e) => setFilter('questionType', e.target.value)}
             >
-              <option value="">All</option>
-              <option value="SINGLE_CHOICE">Single Choice</option>
-              <option value="MULTIPLE_CHOICE">Multiple Choice</option>
-              <option value="BOOLEAN">Boolean</option>
-              <option value="TEXT_ANSWER">Text Answer</option>
+              <option value="">全部</option>
+              <option value="SINGLE_CHOICE">单选</option>
+              <option value="MULTIPLE_CHOICE">多选</option>
+              <option value="BOOLEAN">判断</option>
+              <option value="TEXT_ANSWER">主观题</option>
             </select>
           </div>
         </div>
@@ -118,25 +119,25 @@ export function QuestionsPage() {
         />
       )}
       {listQuery.isSuccess && items.length === 0 && (
-        <EmptyState title="No questions yet" description="Create your first question to get started." />
+        <EmptyState title="还没有题目" description="先创建一道题，才能开始练习和考试。" />
       )}
       {listQuery.isSuccess && items.length > 0 && (
         <table className="table">
           <thead>
             <tr>
               <th>ID</th>
-              <th>Type</th>
-              <th>Stem</th>
-              <th>Status</th>
-              <th>Difficulty</th>
-              <th>Actions</th>
+              <th>题型</th>
+              <th>题干</th>
+              <th>状态</th>
+              <th>难度</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             {items.map((q, idx) => (
               <tr key={q.id ?? `q-${idx}`}>
                 <td>#{q.id}</td>
-                <td>{q.questionType ?? '—'}</td>
+                <td>{questionTypeLabel(q.questionType)}</td>
                 <td>{q.stem?.slice(0, 80) ?? '—'}</td>
                 <td><StatusBadge status={q.status} /></td>
                 <td>{q.difficulty ?? '—'}</td>
@@ -145,7 +146,7 @@ export function QuestionsPage() {
                     type="button"
                     onClick={() => spaceId !== null && navigate(`/spaces/${spaceId}/questions/${q.id}`)}
                   >
-                    View
+                    查看
                   </Button>
                 </td>
               </tr>

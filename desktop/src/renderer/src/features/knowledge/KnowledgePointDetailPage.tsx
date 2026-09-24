@@ -132,7 +132,7 @@ export function KnowledgePointDetailPage() {
   return (
     <div className="page">
       <PageHeader
-        title={point.title ?? 'Untitled'}
+        title={point.title ?? '未命名'}
         actions={
           <>
             <StatusBadge status={point.status} />
@@ -142,7 +142,7 @@ export function KnowledgePointDetailPage() {
                 disabled={publish.isPending}
                 onClick={() => publish.mutate()}
               >
-                {publish.isPending ? 'Publishing…' : 'Publish'}
+                {publish.isPending ? '发布中…' : '发布'}
               </Button>
             )}
           </>
@@ -163,19 +163,19 @@ export function KnowledgePointDetailPage() {
 
       <dl className="detail-list">
         <div className="detail-list__row">
-          <dt>Status</dt>
+          <dt>状态</dt>
           <dd>
             <StatusBadge status={point.status} />
           </dd>
         </div>
         {point.originType && (
           <div className="detail-list__row">
-            <dt>Origin</dt>
+            <dt>来源</dt>
             <dd>{point.originType}</dd>
           </div>
         )}
         <div className="detail-list__row">
-          <dt>Category</dt>
+          <dt>分类</dt>
           <dd>
             {isPositiveId(point.categoryId)
               ? categoryNameFor(point.categoryId)
@@ -184,41 +184,41 @@ export function KnowledgePointDetailPage() {
         </div>
         {point.difficulty && (
           <div className="detail-list__row">
-            <dt>Difficulty</dt>
+            <dt>难度</dt>
             <dd>{point.difficulty}</dd>
           </div>
         )}
         {point.summary && (
           <div className="detail-list__row">
-            <dt>Summary</dt>
+            <dt>摘要</dt>
             <dd>{point.summary}</dd>
           </div>
         )}
         <div className="detail-list__row">
-          <dt>Created</dt>
+          <dt>创建时间</dt>
           <dd>{formatDateTime(point.createdAt)}</dd>
         </div>
         <div className="detail-list__row">
-          <dt>Updated</dt>
+          <dt>更新时间</dt>
           <dd>{formatDateTime(point.updatedAt)}</dd>
         </div>
       </dl>
 
       <section className="content-block">
-        <h2 className="section-title">Content</h2>
+        <h2 className="section-title">正文</h2>
         <div className="content-block__body">{point.content || '—'}</div>
       </section>
 
-      <section className="workbench-section" aria-label="Provenance">
-        <h2 className="section-title">Provenance</h2>
+      <section className="workbench-section" aria-label="来源追溯">
+        <h2 className="section-title">来源追溯</h2>
         {provenanceQuery.isPending && (
-          <p className="muted">Loading sources…</p>
+          <p className="muted">加载来源…</p>
         )}
         {provenanceQuery.isError && (
-          <p className="muted">Provenance unavailable.</p>
+          <p className="muted">来源追溯暂不可用。</p>
         )}
         {provenanceQuery.isSuccess && provenanceLinks.length === 0 && (
-          <p className="muted">No linked source content yet.</p>
+          <p className="muted">尚未关联任何来源内容。</p>
         )}
         {provenanceQuery.isSuccess && provenanceLinks.length > 0 && (
           <ul className="point-list">

@@ -141,7 +141,7 @@ export function SourceWorkbenchPage() {
   return (
     <div className="page">
       <PageHeader
-        title={source?.title ?? 'Source workbench'}
+        title={source?.title ?? '来源详情'}
         actions={
           <Button onClick={() => navigate(`/spaces/${spaceId}/sources`)}>
             Back to Sources
@@ -244,25 +244,25 @@ function BusinessSummary({
   }
 
   return (
-    <section className="workbench-section" aria-label="Source summary" data-testid="business-summary">
-      <h2 className="section-title">Summary</h2>
+    <section className="workbench-section" aria-label="来源概览" data-testid="business-summary">
+      <h2 className="section-title">概览</h2>
       <p className="workbench-summary" data-testid="summary-line">
         {summaryLine}
       </p>
       <dl className="meta-list">
         <div>
-          <dt>Type</dt>
+          <dt>类型</dt>
           <dd>{source?.sourceType ?? '—'}</dd>
         </div>
         <div>
-          <dt>Source status</dt>
+          <dt>来源状态</dt>
           <dd>
             <StatusBadge status={source?.status} />
           </dd>
         </div>
         {latestAsset && (
           <div>
-            <dt>Latest file</dt>
+            <dt>最近文件</dt>
             <dd title={latestAsset.originalName}>
               {latestAsset.originalName ?? '—'}
               {latestAsset.sizeBytes !== undefined
@@ -273,21 +273,21 @@ function BusinessSummary({
         )}
         {latestJob && (
           <div>
-            <dt>Latest ingestion</dt>
+            <dt>最近解析</dt>
             <dd>
               <StatusBadge status={latestJob.status} />
             </dd>
           </div>
         )}
         <div>
-          <dt>Content</dt>
+          <dt>内容</dt>
           <dd data-testid="content-state">
             {CONTENT_STATE_LABELS[contentState]}
           </dd>
         </div>
         {latestAsset?.createdAt && (
           <div>
-            <dt>Uploaded</dt>
+            <dt>上传时间</dt>
             <dd>{formatDateTime(latestAsset.createdAt)}</dd>
           </div>
         )}
@@ -372,8 +372,8 @@ function UploadSection({
   const busy = uploadAndIngest.isPending;
 
   return (
-    <section className="workbench-section" aria-label="Upload file">
-      <h2 className="section-title">Upload</h2>
+    <section className="workbench-section" aria-label="上传文件">
+      <h2 className="section-title">上传</h2>
       <form
         className="form"
         onSubmit={(event) => {
@@ -434,7 +434,7 @@ function UploadSection({
             variant="primary"
             disabled={!file || busy || uploadError !== null}
           >
-            {busy ? UPLOAD_STAGE_LABELS[stage] : 'Upload & Ingest'}
+            {busy ? UPLOAD_STAGE_LABELS[stage] : '上传并解析'}
           </Button>
           <Button onClick={clearFile} disabled={busy || !file} type="button">
             Clear
@@ -537,7 +537,7 @@ function ActiveJobStatus({
   });
 
   if (jobQuery.isPending) {
-    return <p className="muted">Loading ingestion job…</p>;
+    return <p className="muted">加载解析任务…</p>;
   }
   if (jobQuery.isError) {
     const err = normalizeApiError(jobQuery.error);
@@ -572,7 +572,7 @@ function ActiveJobStatus({
               onClick={() => retry.mutate()}
               disabled={retry.isPending}
             >
-              {retry.isPending ? 'Retrying…' : 'Retry ingestion'}
+              {retry.isPending ? '重试中…' : '重新解析'}
             </Button>
           )}
         </div>
@@ -641,21 +641,21 @@ function IngestionHistory({
   }, [jobs]);
 
   return (
-    <section className="workbench-section" aria-label="Ingestion history">
-      <h2 className="section-title">Ingestion history</h2>
+    <section className="workbench-section" aria-label="解析历史">
+      <h2 className="section-title">解析历史</h2>
       {sorted.length === 0 ? (
-        <p className="muted">No ingestion jobs yet.</p>
+        <p className="muted">还没有解析任务。</p>
       ) : (
         <table className="table">
           <thead>
             <tr>
               <th>Job</th>
-              <th>File</th>
-              <th>Status</th>
-              <th>Stage</th>
-              <th>Created</th>
-              <th>Finished</th>
-              <th>Actions</th>
+              <th>文件</th>
+              <th>状态</th>
+              <th>阶段</th>
+              <th>创建时间</th>
+              <th>完成时间</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -692,7 +692,7 @@ function IngestionHistory({
                         onClick={() => retry.mutate(jobId)}
                         disabled={retry.isPending}
                       >
-                        {retry.isPending ? 'Retrying…' : 'Retry'}
+                        {retry.isPending ? '重试中…' : '重试'}
                       </Button>
                     ) : (
                       <span className="muted">—</span>
@@ -765,10 +765,10 @@ function ContentSection({
 
   if (!latestAssetId) {
     return (
-      <section className="workbench-section" aria-label="Content">
-        <h2 className="section-title">Content</h2>
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
         <EmptyState
-          title="No file uploaded yet"
+          title="尚未上传文件"
           description="Upload a TXT, Markdown, PDF, or image file to get started."
         />
       </section>
@@ -777,8 +777,8 @@ function ContentSection({
 
   if (status === 'PENDING' || status === 'RUNNING') {
     return (
-      <section className="workbench-section" aria-label="Content">
-        <h2 className="section-title">Content</h2>
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
         <p className="page__note" role="status" data-testid="processing-note">
           新文件正在处理中，完成后内容将自动更新。
         </p>
@@ -788,8 +788,8 @@ function ContentSection({
 
   if (status === 'FAILED') {
     return (
-      <section className="workbench-section" aria-label="Content">
-        <h2 className="section-title">Content</h2>
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
         <p className="form__error" role="alert" data-testid="failed-note">
           最新文件处理失败。请查看上方错误信息，或上传其它文件。
         </p>
@@ -799,8 +799,8 @@ function ContentSection({
 
   if (status !== 'SUCCEEDED') {
     return (
-      <section className="workbench-section" aria-label="Content">
-        <h2 className="section-title">Content</h2>
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
         <p className="muted">等待开始处理。</p>
       </section>
     );
@@ -809,8 +809,8 @@ function ContentSection({
   // SUCCEEDED
   if (pages.length === 0) {
     return (
-      <section className="workbench-section" aria-label="Content">
-        <h2 className="section-title">Content</h2>
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
         <p className="muted">处理成功，但没有生成内容页面。</p>
       </section>
     );
@@ -833,8 +833,8 @@ function ContentSection({
   }
 
   return (
-    <section className="workbench-section" aria-label="Content">
-      <h2 className="section-title">Content</h2>
+    <section className="workbench-section" aria-label="内容">
+      <h2 className="section-title">内容</h2>
 
       {isImagePages && (
         <p className="page__note" data-testid="image-success-note">
@@ -869,7 +869,7 @@ function ContentSection({
       </div>
 
       {/* Page list for direct selection */}
-      <div className="content-nav" role="navigation" aria-label="Pages">
+      <div className="content-nav" role="navigation" aria-label="页码">
         {pages.map((page, index) => {
           const pageId = page.id;
           if (!isPositiveId(pageId)) {

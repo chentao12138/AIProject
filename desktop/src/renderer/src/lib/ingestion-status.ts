@@ -108,11 +108,11 @@ export type UploadStage =
 
 export const UPLOAD_STAGE_LABELS: Record<UploadStage, string> = {
   idle: '—',
-  ready: 'Ready',
-  uploading: 'Uploading…',
-  uploaded: 'Uploaded',
-  'waiting-ingestion': 'Waiting for ingestion…',
-  ingesting: 'Ingesting…',
-  succeeded: 'Succeeded',
-  failed: 'Failed',
+  ready: '待上传',
+  uploading: '上传中…',
+  uploaded: '已上传',
+  'waiting-ingestion': '等待解析…',
+  ingesting: '解析中…',
+  succeeded: '解析成功',
+  failed: '解析失败',
 };

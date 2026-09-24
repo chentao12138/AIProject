@@ -21,7 +21,7 @@ describe('QuestionsPage', () => {
       routePath: '/spaces/:spaceId/questions',
     });
 
-    expect(await screen.findByText('No questions yet')).toBeInTheDocument();
+    expect(await screen.findByText('还没有题目')).toBeInTheDocument();
   });
 
   it('renders a question list and links to detail', async () => {
@@ -41,7 +41,7 @@ describe('QuestionsPage', () => {
 
     expect(await screen.findByText('What is 1+1?')).toBeInTheDocument();
     expect(screen.getByText('The sky is blue.')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'View' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: '查看' })).toHaveLength(2);
   });
 
   it('filters by status and question type via URL search params', async () => {
@@ -65,7 +65,7 @@ describe('QuestionsPage', () => {
       });
     });
 
-    await user.selectOptions(await screen.findByLabelText('Status'), 'DRAFT');
+    await user.selectOptions(await screen.findByLabelText('状态'), 'DRAFT');
     await waitFor(() => {
       expect(listQuestions).toHaveBeenCalledWith(7, {
         status: 'DRAFT',

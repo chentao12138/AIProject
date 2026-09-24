@@ -125,22 +125,22 @@ export function QuestionForm() {
       <PageHeader title="新建题目" />
       <form className="form" onSubmit={handleSubmit}>
         <div className="form__field">
-          <label htmlFor="q-type" className="form__label">Type</label>
+          <label htmlFor="q-type" className="form__label">题型</label>
           <select
             id="q-type"
             className="select"
             value={questionType}
             onChange={(e) => setQuestionType(e.target.value as QuestionType)}
           >
-            <option value="SINGLE_CHOICE">Single Choice</option>
-            <option value="MULTIPLE_CHOICE">Multiple Choice</option>
-            <option value="BOOLEAN">Boolean</option>
-            <option value="TEXT_ANSWER">Text Answer</option>
+            <option value="SINGLE_CHOICE">单选</option>
+            <option value="MULTIPLE_CHOICE">多选</option>
+            <option value="BOOLEAN">判断</option>
+            <option value="TEXT_ANSWER">主观题</option>
           </select>
         </div>
 
         <div className="form__field">
-          <label htmlFor="q-stem" className="form__label">Stem</label>
+          <label htmlFor="q-stem" className="form__label">题干</label>
           <textarea
             id="q-stem"
             className="textarea"
@@ -153,7 +153,7 @@ export function QuestionForm() {
 
         {(questionType === 'SINGLE_CHOICE' || questionType === 'MULTIPLE_CHOICE') && (
           <div className="form__field">
-            <label className="form__label">Options</label>
+            <label className="form__label">选项</label>
             {options.map((opt, idx) => (
               <div key={idx} className="form__row">
                 <input
@@ -166,7 +166,7 @@ export function QuestionForm() {
                   className="input form__row-main"
                   value={opt.content}
                   onChange={(e) => updateOptionContent(idx, e.target.value)}
-                  placeholder={`Option ${opt.optionKey}`}
+                  placeholder={`选项 ${opt.optionKey}`}
                 />
                 <Button
                   type="button"
@@ -174,19 +174,19 @@ export function QuestionForm() {
                   onClick={() => removeOption(idx)}
                   disabled={options.length <= 2}
                 >
-                  Remove
+                  删除
                 </Button>
               </div>
             ))}
             <Button type="button" variant="secondary" onClick={addOption}>
-              Add Option
+              添加选项
             </Button>
           </div>
         )}
 
         {questionType === 'SINGLE_CHOICE' && (
           <div className="form__field">
-            <label htmlFor="q-correct" className="form__label">Correct Option</label>
+            <label htmlFor="q-correct" className="form__label">正确答案</label>
             <select
               id="q-correct"
               className="select"
@@ -195,7 +195,7 @@ export function QuestionForm() {
             >
               <option value="">—</option>
               {options.map((o) => (
-                <option key={o.optionKey} value={o.optionKey}>{o.optionKey}: {o.content || '(empty)'}</option>
+                <option key={o.optionKey} value={o.optionKey}>{o.optionKey}: {o.content || '（空）'}</option>
               ))}
             </select>
           </div>
@@ -203,7 +203,7 @@ export function QuestionForm() {
 
         {questionType === 'MULTIPLE_CHOICE' && (
           <div className="form__field">
-            <label className="form__label">Correct Options</label>
+            <label className="form__label">正确选项（可多选）</label>
             <div className="form__checkboxes">
               {options.map((o) => (
                 <label key={o.optionKey} className="form__checkbox">
@@ -218,7 +218,7 @@ export function QuestionForm() {
                       }
                     }}
                   />
-                  {o.optionKey}: {o.content || '(empty)'}
+                  {o.optionKey}: {o.content || '（空）'}
                 </label>
               ))}
             </div>
@@ -227,7 +227,7 @@ export function QuestionForm() {
 
         {questionType === 'BOOLEAN' && (
           <div className="form__field">
-            <label className="form__label">Correct Answer</label>
+            <label className="form__label">正确答案</label>
             <div className="form__radios">
               <label className="form__radio">
                 <input
@@ -236,7 +236,7 @@ export function QuestionForm() {
                   checked={correctBoolean === true}
                   onChange={() => setCorrectBoolean(true)}
                 />
-                True
+                正确
               </label>
               <label className="form__radio">
                 <input
@@ -245,7 +245,7 @@ export function QuestionForm() {
                   checked={correctBoolean === false}
                   onChange={() => setCorrectBoolean(false)}
                 />
-                False
+                错误
               </label>
             </div>
           </div>
@@ -253,7 +253,7 @@ export function QuestionForm() {
 
         {questionType === 'TEXT_ANSWER' && (
           <div className="form__field">
-            <label htmlFor="q-ref" className="form__label">Reference Answer</label>
+            <label htmlFor="q-ref" className="form__label">参考答案</label>
             <textarea
               id="q-ref"
               className="textarea"
@@ -265,7 +265,7 @@ export function QuestionForm() {
         )}
 
         <div className="form__field">
-          <label htmlFor="q-explanation" className="form__label">Explanation</label>
+          <label htmlFor="q-explanation" className="form__label">解析</label>
           <textarea
             id="q-explanation"
             className="textarea"
@@ -276,7 +276,7 @@ export function QuestionForm() {
         </div>
 
         <div className="form__field">
-          <label htmlFor="q-difficulty" className="form__label">Difficulty</label>
+          <label htmlFor="q-difficulty" className="form__label">难度</label>
           <select
             id="q-difficulty"
             className="select"
@@ -284,20 +284,20 @@ export function QuestionForm() {
             onChange={(e) => setDifficulty(e.target.value)}
           >
             <option value="">—</option>
-            <option value="EASY">Easy</option>
-            <option value="MEDIUM">Medium</option>
-            <option value="HARD">Hard</option>
+            <option value="EASY">简单</option>
+            <option value="MEDIUM">中等</option>
+            <option value="HARD">困难</option>
           </select>
         </div>
 
         <div className="form__field">
-          <label htmlFor="q-kp" className="form__label">Knowledge Point IDs (comma-separated)</label>
+          <label htmlFor="q-kp" className="form__label">关联知识点 ID（逗号分隔）</label>
           <input
             id="q-kp"
             className="input"
             value={knowledgePointIds}
             onChange={(e) => setKnowledgePointIds(e.target.value)}
-            placeholder="e.g. 1, 2, 3"
+            placeholder="例如：1, 2, 3"
           />
         </div>
 
@@ -307,10 +307,10 @@ export function QuestionForm() {
 
         <div className="form__actions">
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? 'Creating…' : 'Create'}
+            {busy ? '创建中…' : '创建'}
           </Button>
           <Button type="button" variant="secondary" onClick={() => navigate(`/spaces/${spaceId}/questions`)}>
-            Cancel
+            取消
           </Button>
         </div>
       </form>

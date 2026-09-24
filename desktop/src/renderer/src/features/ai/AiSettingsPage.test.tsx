@@ -62,7 +62,7 @@ describe('AI Settings — key security semantics', () => {
     await screen.findByRole('button', { name: '保存' });
 
     // Change a non-key field and save.
-    const modelInput = screen.getByLabelText('Model');
+    const modelInput = screen.getByLabelText('模型');
     fireEvent.change(modelInput, { target: { value: 'step-3.5-pro' } });
     await user.click(screen.getByRole('button', { name: '保存' }));
 

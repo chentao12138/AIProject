@@ -16,9 +16,9 @@
  *  - Sources/Knowledge child links render ONLY when the current space
  *    query succeeded with a valid space. While pending or errored they
  *    are hidden (never present links that look navigable but are not).
- *  - space error label: 404 -> "not found or inaccessible"
+ *  - space error label: 404 -> "空间不存在或无权访问"
  *    (authorization-safe), everything else (401/403/network/5xx) ->
- *    neutral "Space unavailable".
+ *    neutral "空间暂不可用".
  */
 
 import { NavLink, Outlet } from 'react-router-dom';
@@ -52,16 +52,16 @@ export function AppShell() {
     : null;
   const spaceLabel = spaceError
     ? spaceError.status === 404
-      ? 'Space not found or inaccessible'
-      : 'Space unavailable'
-    : spaceName ?? 'Space';
+      ? '空间不存在或无权访问'
+      : '空间暂不可用'
+    : spaceName ?? '当前空间';
 
   return (
     <div className="app-shell">
       <header className="app-shell__header">
         <div className="app-shell__brand">AIStudy</div>
         <div className="app-shell__api-target" title={apiConfig.baseUrl}>
-          API target: {apiConfig.baseUrl}
+          后端地址：{apiConfig.baseUrl}
         </div>
         <div className="app-shell__auth">
           <UserMenu />
@@ -69,7 +69,7 @@ export function AppShell() {
       </header>
 
       <div className="app-shell__body">
-        <nav className="app-shell__nav" aria-label="Main navigation">
+        <nav className="app-shell__nav" aria-label="主导航">
           {/* `end`: Spaces stays active ONLY on the exact /spaces route —
               never on /spaces/:spaceId/... nested routes. */}
           <NavLink
@@ -79,14 +79,14 @@ export function AppShell() {
               isActive ? 'nav-link nav-link--active' : 'nav-link'
             }
           >
-            Spaces
+            学习空间
           </NavLink>
 
           {spaceId !== null && (
             <div className="nav-section">
               <span
                 className="nav-section__space-name"
-                title={spaceName ?? 'Space'}
+                title={spaceName ?? '当前空间'}
               >
                 {spaceLabel}
               </span>
@@ -98,7 +98,7 @@ export function AppShell() {
                       isActive ? 'nav-link nav-link--active' : 'nav-link'
                     }
                   >
-                    Sources
+                    学习来源
                   </NavLink>
                   <NavLink
                     to={`/spaces/${spaceId}/knowledge`}
@@ -106,7 +106,7 @@ export function AppShell() {
                       isActive ? 'nav-link nav-link--active' : 'nav-link'
                     }
                   >
-                    Knowledge
+                    知识库
                   </NavLink>
                   <NavLink
                     to={`/spaces/${spaceId}/questions`}
@@ -114,7 +114,7 @@ export function AppShell() {
                       isActive ? 'nav-link nav-link--active' : 'nav-link'
                     }
                   >
-                    Questions
+                    题库
                   </NavLink>
                   <NavLink
                     to={`/spaces/${spaceId}/practice`}
@@ -122,7 +122,7 @@ export function AppShell() {
                       isActive ? 'nav-link nav-link--active' : 'nav-link'
                     }
                   >
-                    Practice
+                    练习
                   </NavLink>
                   <NavLink
                     to={`/spaces/${spaceId}/exams`}
@@ -130,7 +130,7 @@ export function AppShell() {
                       isActive ? 'nav-link nav-link--active' : 'nav-link'
                     }
                   >
-                    Exams
+                    考试
                   </NavLink>
                   <NavLink
                     to={`/spaces/${spaceId}/search`}
@@ -138,7 +138,7 @@ export function AppShell() {
                       isActive ? 'nav-link nav-link--active' : 'nav-link'
                     }
                   >
-                    Search
+                    搜索
                   </NavLink>
                   <NavLink
                     to={`/spaces/${spaceId}/ai`}
@@ -146,7 +146,7 @@ export function AppShell() {
                       isActive ? 'nav-link nav-link--active' : 'nav-link'
                     }
                   >
-                    AI Tutor
+                    AI 辅导
                   </NavLink>
                 </>
               )}
@@ -159,7 +159,7 @@ export function AppShell() {
               isActive ? 'nav-link nav-link--active' : 'nav-link'
             }
           >
-            AI Settings
+            AI 设置
           </NavLink>
         </nav>
 

@@ -40,7 +40,7 @@ describe('KnowledgePointDetailPage', () => {
     });
 
     expect(await screen.findByText('Draft note')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Publish' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '发布' })).toBeInTheDocument();
   });
 
   it('shows no active publish CTA for a PUBLISHED point (K1.10)', async () => {
@@ -71,9 +71,9 @@ describe('KnowledgePointDetailPage', () => {
 
     expect(await screen.findByText('Published note')).toBeInTheDocument();
     // badge appears in the page header and in the Status row
-    expect(screen.getAllByText('PUBLISHED').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已发布').length).toBeGreaterThan(0);
     expect(
-      screen.queryByRole('button', { name: 'Publish' })
+      screen.queryByRole('button', { name: '发布' })
     ).not.toBeInTheDocument();
   });
 
@@ -117,7 +117,7 @@ describe('KnowledgePointDetailPage', () => {
       routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Publish' }));
+    await user.click(await screen.findByRole('button', { name: '发布' }));
 
     await waitFor(() => {
       expect(publishKnowledgePoint).toHaveBeenCalledWith(3, 5);
@@ -151,9 +151,9 @@ describe('KnowledgePointDetailPage', () => {
     });
 
     expect(await screen.findByText('No category')).toBeInTheDocument();
-    const row = screen.getByText('Category').closest('div');
+    const row = screen.getByText('分类').closest('div');
     expect(row).toBeTruthy();
-    expect(row!.textContent).toBe('Category—');
+    expect(row!.textContent).toBe('分类—');
     expect(screen.queryByText(/#null|#undefined|#NaN/)).not.toBeInTheDocument();
   });
 
@@ -419,10 +419,10 @@ describe('KnowledgePointDetailPage', () => {
       routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Publish' }));
+    await user.click(await screen.findByRole('button', { name: '发布' }));
 
     const publishing = await screen.findByRole('button', {
-      name: 'Publishing…',
+      name: '发布中…',
     });
     expect(publishing).toBeDisabled();
     await user.click(publishing);
@@ -471,12 +471,12 @@ describe('KnowledgePointDetailPage', () => {
       routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Publish' }));
+    await user.click(await screen.findByRole('button', { name: '发布' }));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('服务器暂时无法完成请求，请稍后重试。');
     // CTA stays available for a retry
-    expect(screen.getByRole('button', { name: 'Publish' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '发布' })).toBeInTheDocument();
   });
 
   it('refetches the detail after publish and updates to PUBLISHED (PHASE 16)', async () => {
@@ -525,7 +525,7 @@ describe('KnowledgePointDetailPage', () => {
       routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Publish' }));
+    await user.click(await screen.findByRole('button', { name: '发布' }));
 
     // invalidate -> detail refetched
     await waitFor(() => {
@@ -535,9 +535,9 @@ describe('KnowledgePointDetailPage', () => {
       await screen.findByText(/Published at 2026/)
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'Publish' })
+      screen.queryByRole('button', { name: '发布' })
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText('PUBLISHED').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已发布').length).toBeGreaterThan(0);
   });
 });
 
@@ -603,7 +603,7 @@ describe('KnowledgePointDetailPage — provenance (FE-002A PHASE 19)', () => {
     });
 
     expect(
-      await screen.findByText('No linked source content yet.')
+      await screen.findByText('尚未关联任何来源内容。')
     ).toBeInTheDocument();
   });
 
@@ -631,6 +631,6 @@ describe('KnowledgePointDetailPage — provenance (FE-002A PHASE 19)', () => {
     });
 
     expect(await screen.findByText('Point')).toBeInTheDocument();
-    expect(await screen.findByText('Provenance unavailable.')).toBeInTheDocument();
+    expect(await screen.findByText('来源追溯暂不可用。')).toBeInTheDocument();
   });
 });

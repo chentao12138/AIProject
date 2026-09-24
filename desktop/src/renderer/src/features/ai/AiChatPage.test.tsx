@@ -111,7 +111,7 @@ describe('AI Chat — conversation switching', () => {
       routePath: '/spaces/:spaceId/ai/:conversationId',
     });
 
-    const textarea = await screen.findByLabelText('Message');
+    const textarea = await screen.findByLabelText('消息');
     await user.type(textarea, 'MSG-CONV-ONE');
     await user.click(screen.getByRole('button', { name: '发送' }));
     expect(await screen.findByText('REPLY-CONV-ONE')).toBeInTheDocument();

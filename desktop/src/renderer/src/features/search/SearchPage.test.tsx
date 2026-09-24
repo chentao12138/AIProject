@@ -21,8 +21,8 @@ describe('SearchPage', () => {
       routePath: '/spaces/:spaceId/search',
     });
 
-    expect(await screen.findByLabelText('Query')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('关键词')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '搜索' })).toBeInTheDocument();
   });
 
   it('renders search results and deep-links to entities', async () => {
@@ -47,8 +47,8 @@ describe('SearchPage', () => {
       routePath: '/spaces/:spaceId/search',
     });
 
-    await user.type(await screen.findByLabelText('Query'), 'bayes');
-    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await user.type(await screen.findByLabelText('关键词'), 'bayes');
+    await user.click(screen.getByRole('button', { name: '搜索' }));
 
     expect(await screen.findByText('Sample Source')).toBeInTheDocument();
     expect(screen.getByText('Bayes theorem')).toBeInTheDocument();

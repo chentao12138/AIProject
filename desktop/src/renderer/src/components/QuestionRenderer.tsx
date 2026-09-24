@@ -61,7 +61,7 @@ export function QuestionRenderer({
   onBooleanAnswerChange,
   onTextAnswerChange,
   onSubmit,
-  submitLabel = 'Submit',
+  submitLabel = '提交',
   disabled = false,
 }: QuestionRendererProps) {
   const qType = (question.questionType ?? '').toUpperCase();
@@ -137,7 +137,7 @@ export function QuestionRenderer({
           placeholder="输入你的答案…"
           rows={3}
           disabled={disabled || isReview}
-          aria-label="Answer"
+          aria-label="作答"
         />
       )}
 
@@ -171,7 +171,7 @@ export function QuestionRenderer({
 
       {isReview && answer?.explanation && (
         <div className="question-renderer__explanation" data-testid="question-explanation">
-          <strong>Explanation:</strong> {answer.explanation}
+          <strong>解析：</strong> {answer.explanation}
         </div>
       )}
 

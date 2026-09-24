@@ -24,7 +24,7 @@ describe('PracticePage', () => {
       routePath: '/spaces/:spaceId/practice',
     });
 
-    expect(await screen.findByText('No practice sessions yet.')).toBeInTheDocument();
+    expect(await screen.findByText('还没有练习记录。')).toBeInTheDocument();
   });
 
   it('starts a practice session and navigates to the session page', async () => {
@@ -49,7 +49,7 @@ describe('PracticePage', () => {
       routePath: '/spaces/:spaceId/practice',
     });
 
-    const countInput = await screen.findByLabelText('Number of Questions');
+    const countInput = await screen.findByLabelText('题目数量');
     fireEvent.change(countInput, { target: { value: '5' } });
     fireEvent.submit(countInput.closest('form')!);
 

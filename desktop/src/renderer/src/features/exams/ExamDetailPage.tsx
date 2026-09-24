@@ -118,25 +118,25 @@ export function ExamDetailPage() {
 
       <dl className="detail-list">
         <div className="detail-list__row">
-          <dt>Status</dt>
+          <dt>状态</dt>
           <dd>
             <StatusBadge status={exam.status} />
           </dd>
         </div>
         <div className="detail-list__row">
-          <dt>Duration</dt>
+          <dt>时长</dt>
           <dd>{exam.timeLimitMinutes ?? '—'} 分钟</dd>
         </div>
         <div className="detail-list__row">
-          <dt>Total score</dt>
+          <dt>总分</dt>
           <dd>{exam.totalScore ?? '—'}</dd>
         </div>
         <div className="detail-list__row">
-          <dt>Questions</dt>
+          <dt>题目数</dt>
           <dd>{questions.length}</dd>
         </div>
         <div className="detail-list__row">
-          <dt>Created</dt>
+          <dt>创建时间</dt>
           <dd>{formatDateTime(exam.createdAt)}</dd>
         </div>
       </dl>
@@ -149,7 +149,7 @@ export function ExamDetailPage() {
             disabled={publish.isPending}
             onClick={() => publish.mutate()}
           >
-            {publish.isPending ? 'Publishing…' : '发布考试'}
+            {publish.isPending ? '发布中…' : '发布考试'}
           </Button>
         )}
         {status === 'PUBLISHED' && (
@@ -159,7 +159,7 @@ export function ExamDetailPage() {
             disabled={startAttempt.isPending}
             onClick={() => startAttempt.mutate()}
           >
-            {startAttempt.isPending ? 'Starting…' : '开始考试'}
+            {startAttempt.isPending ? '开始中…' : '开始考试'}
           </Button>
         )}
         <Button
@@ -177,7 +177,7 @@ export function ExamDetailPage() {
         </p>
       )}
 
-      <section className="workbench-section" aria-label="Exam papers">
+      <section className="workbench-section" aria-label="试卷列表">
         <h2 className="section-title">题目</h2>
         {questions.length === 0 ? (
           <p className="page__note">这份考试还没有题目，请在考试中添加题目后再发布。</p>

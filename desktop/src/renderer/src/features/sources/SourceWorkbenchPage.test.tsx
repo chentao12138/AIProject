@@ -87,7 +87,7 @@ function renderWorkbench(apiClient: ReturnType<typeof mockApiClient>) {
 }
 
 async function waitForWorkbench() {
-  await screen.findByRole('button', { name: /upload & ingest/i });
+  await screen.findByRole('button', { name: /上传并解析/i });
 }
 
 describe('SourceWorkbenchPage — business summary', () => {
@@ -351,15 +351,15 @@ describe('SourceWorkbenchPage — upload and ingestion history', () => {
     expect(rows.length).toBe(2);
     // Latest job has the badge.
     expect(rows[0].getAttribute('data-latest')).toBe('true');
-    // FAILED job has Retry button.
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    // FAILED job has 重试 button.
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
   });
 
   it('disables upload submit until file selected', async () => {
     renderWorkbench(contentReadyApi());
     await waitForWorkbench();
     expect(
-      screen.getByRole('button', { name: /upload & ingest/i })
+      screen.getByRole('button', { name: /上传并解析/i })
     ).toBeDisabled();
   });
 });

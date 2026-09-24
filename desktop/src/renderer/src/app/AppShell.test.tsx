@@ -62,7 +62,7 @@ describe('AppShell — backend indicator semantics (PHASE 7)', () => {
   it('renders a neutral API target label, not a fake online indicator', () => {
     renderShell(['/spaces'], mockApiClient());
 
-    const label = screen.getByText(/API target: http:\/\/localhost:8080/);
+    const label = screen.getByText(/后端地址：http:\/\/localhost:8080/);
     expect(label).toBeInTheDocument();
 
     // No green-dot / online wording anywhere in the shell.
@@ -78,7 +78,7 @@ describe('AppShell — shell structure and navigation (PHASE 8)', () => {
 
     expect(screen.getByRole('banner')).toBeInTheDocument();
     expect(
-      screen.getByRole('navigation', { name: 'Main navigation' })
+      screen.getByRole('navigation', { name: '主导航' })
     ).toBeInTheDocument();
     expect(screen.getByRole('main')).toBeInTheDocument();
   });
@@ -86,7 +86,7 @@ describe('AppShell — shell structure and navigation (PHASE 8)', () => {
   it('marks the active navigation link with aria-current', () => {
     renderShell(['/spaces'], mockApiClient());
 
-    const spacesLink = screen.getByRole('link', { name: 'Spaces' });
+    const spacesLink = screen.getByRole('link', { name: '学习空间' });
     expect(spacesLink).toHaveAttribute('aria-current', 'page');
   });
 
@@ -95,23 +95,23 @@ describe('AppShell — shell structure and navigation (PHASE 8)', () => {
 
     expect(await screen.findByText('My Research Space')).toBeInTheDocument();
     expect(
-      screen.getByRole('link', { name: 'Sources' })
+      screen.getByRole('link', { name: '学习来源' })
     ).toBeInTheDocument();
   });
 
   it('shows no Sources/Knowledge links without a valid current space', () => {
     renderShell(['/spaces'], mockApiClient());
 
-    expect(screen.queryByRole('link', { name: 'Sources' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Knowledge' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Spaces' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '学习来源' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '知识库' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '学习空间' })).toBeInTheDocument();
   });
 });
 
 describe('AppShell — single active primary nav link (FIX-01)', () => {
   it('/spaces keeps Spaces active with aria-current=page', () => {
     renderShell(['/spaces'], mockApiClient());
-    expect(screen.getByRole('link', { name: 'Spaces' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '学习空间' })).toHaveAttribute(
       'aria-current',
       'page'
     );
@@ -120,14 +120,14 @@ describe('AppShell — single active primary nav link (FIX-01)', () => {
   it('/spaces/7/sources: Sources active, Spaces NOT active', async () => {
     renderShell(['/spaces/7/sources'], spaceOkApiClient());
 
-    expect(await screen.findByRole('link', { name: 'Sources' })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: '学习来源' })).toHaveAttribute(
       'aria-current',
       'page'
     );
-    expect(screen.getByRole('link', { name: 'Spaces' })).not.toHaveAttribute(
+    expect(screen.getByRole('link', { name: '学习空间' })).not.toHaveAttribute(
       'aria-current'
     );
-    expect(screen.getByRole('link', { name: 'Knowledge' })).not.toHaveAttribute(
+    expect(screen.getByRole('link', { name: '知识库' })).not.toHaveAttribute(
       'aria-current'
     );
   });
@@ -135,14 +135,14 @@ describe('AppShell — single active primary nav link (FIX-01)', () => {
   it('/spaces/7/knowledge: Knowledge active, Spaces NOT active', async () => {
     renderShell(['/spaces/7/knowledge'], spaceOkApiClient());
 
-    expect(await screen.findByRole('link', { name: 'Knowledge' })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: '知识库' })).toHaveAttribute(
       'aria-current',
       'page'
     );
-    expect(screen.getByRole('link', { name: 'Spaces' })).not.toHaveAttribute(
+    expect(screen.getByRole('link', { name: '学习空间' })).not.toHaveAttribute(
       'aria-current'
     );
-    expect(screen.getByRole('link', { name: 'Sources' })).not.toHaveAttribute(
+    expect(screen.getByRole('link', { name: '学习来源' })).not.toHaveAttribute(
       'aria-current'
     );
   });
@@ -150,9 +150,9 @@ describe('AppShell — single active primary nav link (FIX-01)', () => {
   it('at most one primary nav link carries aria-current at any time', async () => {
     renderShell(['/spaces/7/sources'], spaceOkApiClient());
 
-    await screen.findByRole('link', { name: 'Sources' });
+    await screen.findByRole('link', { name: '学习来源' });
     const activeLinks = screen
-      .getAllByRole('link', { name: /Spaces|Sources|Knowledge/ })
+      .getAllByRole('link', { name: /学习空间|学习来源|知识库/ })
       .filter((link) => link.getAttribute('aria-current') !== null);
     expect(activeLinks).toHaveLength(1);
     expect(activeLinks[0]).toHaveAttribute('aria-current', 'page');
@@ -164,13 +164,13 @@ describe('AppShell — space unavailable semantics (FIX-01)', () => {
     renderShell(['/spaces/404'], spaceHttpErrorApiClient(404));
 
     expect(
-      await screen.findByText('Space not found or inaccessible')
+      await screen.findByText('空间不存在或无权访问')
     ).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Sources' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Knowledge' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '学习来源' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '知识库' })).not.toBeInTheDocument();
   });
 
-  it('network failure shows the neutral "Space unavailable" and NO child links', async () => {
+  it('network failure shows the neutral "空间暂不可用" and NO child links', async () => {
     const apiClient = mockApiClient({
       getLearningSpace: vi.fn(async () => {
         throw new TypeError('fetch failed');
@@ -178,25 +178,25 @@ describe('AppShell — space unavailable semantics (FIX-01)', () => {
     });
     renderShell(['/spaces/7/sources'], apiClient);
 
-    expect(await screen.findByText('Space unavailable')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Sources' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Knowledge' })).not.toBeInTheDocument();
+    expect(await screen.findByText('空间暂不可用')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '学习来源' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '知识库' })).not.toBeInTheDocument();
   });
 
-  it('401 shows the neutral "Space unavailable" and NO child links', async () => {
+  it('401 shows the neutral "空间暂不可用" and NO child links', async () => {
     renderShell(['/spaces/7/sources'], spaceHttpErrorApiClient(401));
 
-    expect(await screen.findByText('Space unavailable')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Sources' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Knowledge' })).not.toBeInTheDocument();
+    expect(await screen.findByText('空间暂不可用')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '学习来源' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '知识库' })).not.toBeInTheDocument();
   });
 
-  it('5xx shows the neutral "Space unavailable" and NO child links', async () => {
+  it('5xx shows the neutral "空间暂不可用" and NO child links', async () => {
     renderShell(['/spaces/7/sources'], spaceHttpErrorApiClient(500));
 
-    expect(await screen.findByText('Space unavailable')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Sources' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Knowledge' })).not.toBeInTheDocument();
+    expect(await screen.findByText('空间暂不可用')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '学习来源' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '知识库' })).not.toBeInTheDocument();
   });
 
   it('pending space query shows NO seemingly-valid child links', async () => {
@@ -205,16 +205,16 @@ describe('AppShell — space unavailable semantics (FIX-01)', () => {
     });
     renderShell(['/spaces/7/sources'], apiClient);
 
-    expect(screen.getByText('Space')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Sources' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Knowledge' })).not.toBeInTheDocument();
+    expect(screen.getByText('学习空间')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '学习来源' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '知识库' })).not.toBeInTheDocument();
   });
 
   it('successful space query shows the space name AND both child links', async () => {
     renderShell(['/spaces/7/sources'], spaceOkApiClient());
 
     expect(await screen.findByText('My Research Space')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Sources' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Knowledge' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '学习来源' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '知识库' })).toBeInTheDocument();
   });
 });

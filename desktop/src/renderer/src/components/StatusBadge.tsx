@@ -17,6 +17,20 @@ const KNOWN_STATUS_VARIANTS: Record<string, 'published' | 'draft' | 'active'> = 
   ACTIVE: 'active',
 };
 
+/** Display copy only — `title` still carries the raw backend value. */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: '草稿',
+  PUBLISHED: '已发布',
+  ARCHIVED: '已归档',
+  ACTIVE: '启用',
+  INACTIVE: '停用',
+  CREATED: '待开始',
+  IN_PROGRESS: '进行中',
+  SUBMITTED: '已交卷',
+  FINISHED: '已完成',
+  FAILED: '失败',
+};
+
 export function StatusBadge({ status }: StatusBadgeProps) {
   if (!status) {
     return <span className="badge badge--unknown">—</span>;
@@ -25,7 +39,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   const variant = KNOWN_STATUS_VARIANTS[normalized] ?? 'unknown';
   return (
     <span className={`badge badge--${variant}`} title={status}>
-      {status}
+      {STATUS_LABELS[normalized] ?? status}
     </span>
   );
 }
