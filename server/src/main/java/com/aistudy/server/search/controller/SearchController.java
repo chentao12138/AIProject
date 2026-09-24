@@ -27,8 +27,8 @@ import org.springframework.web.server.ResponseStatusException;
 @SecurityRequirement(name = "bearerAuth")
 public class SearchController {
 
-    private static final String TYPE_PATTERN = "^(SOURCE|CONTENT_BLOCK|KNOWLEDGE_POINT|QUESTION|WRONG_QUESTION)(,(" +
-            "SOURCE|CONTENT_BLOCK|KNOWLEDGE_POINT|QUESTION|WRONG_QUESTION))*$";
+    private static final String TYPE_PATTERN = "^(SOURCE|CONTENT_BLOCK|KNOWLEDGE_POINT|QUESTION|WRONG_QUESTION|NOTE)(,(" +
+            "SOURCE|CONTENT_BLOCK|KNOWLEDGE_POINT|QUESTION|WRONG_QUESTION|NOTE))*$";
 
     private final SearchService searchService;
 
@@ -51,7 +51,8 @@ public class SearchController {
                     @Parameter(name = "q", in = ParameterIn.QUERY, required = true,
                             schema = @Schema(type = "string", minLength = 1, maxLength = 200)),
                     @Parameter(name = "types", in = ParameterIn.QUERY, required = false,
-                            schema = @Schema(type = "string", example = "SOURCE,QUESTION")),
+                            description = "Comma-separated: SOURCE,CONTENT_BLOCK,KNOWLEDGE_POINT,QUESTION,WRONG_QUESTION,NOTE",
+                            schema = @Schema(type = "string", example = "SOURCE,QUESTION,NOTE")),
                     @Parameter(name = "page", in = ParameterIn.QUERY, required = false,
                             schema = @Schema(type = "integer", minimum = "0", defaultValue = "0")),
                     @Parameter(name = "size", in = ParameterIn.QUERY, required = false,
@@ -68,7 +69,7 @@ public class SearchController {
             @PathVariable Long spaceId,
             @RequestParam("q") @Size(min = 1, max = 200, message = "q must be 1..200 characters") String query,
             @RequestParam(value = "types", required = false) @Pattern(regexp = TYPE_PATTERN,
-            message = "types must be a comma-separated subset of SOURCE,CONTENT_BLOCK,KNOWLEDGE_POINT,QUESTION,WRONG_QUESTION") String types,
+                    message = "types must be a comma-separated subset of SOURCE,CONTENT_BLOCK,KNOWLEDGE_POINT,QUESTION,WRONG_QUESTION,NOTE") String types,
             @RequestParam(value = "page", required = false, defaultValue = "0") @Min(0) Integer page,
             @RequestParam(value = "size", required = false, defaultValue = "20") @Min(1) @Max(100) Integer size,
             Authentication authentication) {

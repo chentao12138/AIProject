@@ -48,6 +48,17 @@ public class SourcePage {
 
     private Long sourceAssetId;
 
+    /** Extraction revision this page belongs to (V053). */
+    private Long extractionRevisionId;
+
+    public Long getExtractionRevisionId() {
+        return extractionRevisionId;
+    }
+
+    public void setExtractionRevisionId(Long extractionRevisionId) {
+        this.extractionRevisionId = extractionRevisionId;
+    }
+
     private Integer sourcePageNumber;
 
     private Integer pageOrder;

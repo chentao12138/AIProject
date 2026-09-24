@@ -18,6 +18,10 @@ import java.util.List;
  *                             questions of that point, id ASC, first N
  * </pre>
  *
+ * <p>Auto-pick supports additional filters (all optional, AND-ed):
+ * knowledgeCategoryId, difficulty, questionType. When seed is provided
+ * the candidate list is shuffled deterministically before picking.
+ *
  * <p>Both modes only ever select PUBLISHED non-deleted questions of
  * the caller's own space; any violation rejects the WHOLE create
  * (404, zero rows).
@@ -30,6 +34,16 @@ public record CreatePracticeSessionRequest(
 
         @Min(value = 1, message = "count must be >= 1")
         @Max(value = 100, message = "count must be <= 100")
-        Integer count
+        Integer count,
+
+        Long knowledgeCategoryId,
+
+        @Size(max = 32, message = "difficulty must be at most 32 characters")
+        String difficulty,
+
+        @Size(max = 32, message = "questionType must be at most 32 characters")
+        String questionType,
+
+        Long seed
 ) {
 }

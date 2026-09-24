@@ -111,6 +111,11 @@ public class TestProfileMapperMocks {
     }
 
     @Bean
+    public com.aistudy.server.wrong.mapper.ReviewStateMapper reviewStateMapper() {
+        return Mockito.mock(com.aistudy.server.wrong.mapper.ReviewStateMapper.class);
+    }
+
+    @Bean
     public com.aistudy.server.exam.mapper.ExamMapper examMapper() {
         return Mockito.mock(com.aistudy.server.exam.mapper.ExamMapper.class);
     }
@@ -208,5 +213,85 @@ public class TestProfileMapperMocks {
     @Bean
     public com.aistudy.server.ai.settings.AiProviderSecretMapper aiProviderSecretMapper() {
         return Mockito.mock(com.aistudy.server.ai.settings.AiProviderSecretMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.ai.mapper.AIGenerationJobMapper aiGenerationJobMapper() {
+        return Mockito.mock(com.aistudy.server.ai.mapper.AIGenerationJobMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.ai.mapper.AiUsageRecordMapper aiUsageRecordMapper() {
+        return Mockito.mock(com.aistudy.server.ai.mapper.AiUsageRecordMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.config.mapper.SystemConfigMapper systemConfigMapper() {
+        return Mockito.mock(com.aistudy.server.config.mapper.SystemConfigMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.exam.mapper.ExamBlueprintMapper examBlueprintMapper() {
+        return Mockito.mock(com.aistudy.server.exam.mapper.ExamBlueprintMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.exam.mapper.ExamStatisticsMapper examStatisticsMapper() {
+        return Mockito.mock(com.aistudy.server.exam.mapper.ExamStatisticsMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.ingestion.issue.mapper.IngestionIssueMapper ingestionIssueMapper() {
+        return Mockito.mock(com.aistudy.server.ingestion.issue.mapper.IngestionIssueMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.ingestion.revision.mapper.ExtractionRevisionMapper extractionRevisionMapper() {
+        return Mockito.mock(com.aistudy.server.ingestion.revision.mapper.ExtractionRevisionMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.knowledge.point.mapper.KnowledgePointRelationMapper knowledgePointRelationMapper() {
+        return Mockito.mock(com.aistudy.server.knowledge.point.mapper.KnowledgePointRelationMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.mastery.mapper.MasteryCalibrationConfigMapper masteryCalibrationConfigMapper() {
+        return Mockito.mock(com.aistudy.server.mastery.mapper.MasteryCalibrationConfigMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.note.mapper.NoteMapper noteMapper() {
+        return Mockito.mock(com.aistudy.server.note.mapper.NoteMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.note.mapper.NoteKnowledgePointMapper noteKnowledgePointMapper() {
+        return Mockito.mock(com.aistudy.server.note.mapper.NoteKnowledgePointMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.note.mapper.NoteSourceMapper noteSourceMapper() {
+        return Mockito.mock(com.aistudy.server.note.mapper.NoteSourceMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.question.mapper.QuestionSourceMapper questionSourceMapper() {
+        return Mockito.mock(com.aistudy.server.question.mapper.QuestionSourceMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.source.folder.mapper.FolderImportSnapshotMapper folderImportSnapshotMapper() {
+        return Mockito.mock(com.aistudy.server.source.folder.mapper.FolderImportSnapshotMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.source.folder.mapper.FolderImportEntryMapper folderImportEntryMapper() {
+        return Mockito.mock(com.aistudy.server.source.folder.mapper.FolderImportEntryMapper.class);
+    }
+
+    @Bean
+    public com.aistudy.server.source.outline.mapper.SourceOutlineNodeMapper sourceOutlineNodeMapper() {
+        return Mockito.mock(com.aistudy.server.source.outline.mapper.SourceOutlineNodeMapper.class);
     }
 }

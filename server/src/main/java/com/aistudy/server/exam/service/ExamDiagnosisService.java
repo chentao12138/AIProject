@@ -10,11 +10,14 @@ import com.aistudy.server.exam.entity.ExamQuestion;
 import com.aistudy.server.exam.mapper.ExamAttemptMapper;
 import com.aistudy.server.exam.mapper.ExamDiagnosisItemMapper;
 import com.aistudy.server.exam.mapper.ExamDiagnosisMapper;
+import com.aistudy.server.knowledge.category.mapper.KnowledgeCategoryMapper;
 import com.aistudy.server.knowledge.point.entity.KnowledgePoint;
 import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
+import com.aistudy.server.question.entity.Question;
 import com.aistudy.server.question.eval.AnswerDataCodec;
 import com.aistudy.server.question.eval.AnswerDataCodec.SnapshotView;
 import com.aistudy.server.question.mapper.QuestionKnowledgePointMapper;
+import com.aistudy.server.question.mapper.QuestionMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,68 +26,44 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-/**
- * BUSINESS-015 — structured ExamDiagnosis generation + read.
- *
- * <p>Diagnosis is generated DETERMINISTICALLY inside the exam submit
- * transaction (after exam_result insert + SUBMITTED transition) from
- * the paper's frozen snapshot and the attempt's graded answers. No
- * AI, no client input, no invented severity/recommendation taxonomy
- * (both stay NULL in V1).
- *
- * <h3>Dimensions V1</h3>
- *
- * <ul>
- *   <li>{@code KNOWLEDGE_POINT}: per linked point, score/maxScore via
- *       CURRENT question→point links at submit time (documented V1
- *       limitation; diagnosis rows persist the historical snapshot).</li>
- *   <li>{@code QUESTION_TYPE}: per objective type, aggregated from
- *       the same graded items.</li>
- * </ul>
- *
- * <p>Multi-KP V1 rule: an item's score/maxScore contributes to EVERY
- * linked knowledge point (full attribution). SHORT_ANSWER (UNGRADED)
- * items are excluded, consistent with exam scoring.
- */
 @Service
 public class ExamDiagnosisService {
 
     public static final String DIMENSION_KNOWLEDGE_POINT = "KNOWLEDGE_POINT";
     public static final String DIMENSION_QUESTION_TYPE = "QUESTION_TYPE";
+    public static final String DIMENSION_CATEGORY = "CATEGORY";
+    public static final String DIMENSION_DIFFICULTY = "DIFFICULTY";
 
     private final ExamAttemptMapper examAttemptMapper;
     private final ExamDiagnosisMapper examDiagnosisMapper;
     private final ExamDiagnosisItemMapper examDiagnosisItemMapper;
     private final QuestionKnowledgePointMapper questionKnowledgePointMapper;
     private final KnowledgePointMapper knowledgePointMapper;
+    private final QuestionMapper questionMapper;
+    private final KnowledgeCategoryMapper knowledgeCategoryMapper;
 
     public ExamDiagnosisService(ExamAttemptMapper examAttemptMapper,
                                 ExamDiagnosisMapper examDiagnosisMapper,
                                 ExamDiagnosisItemMapper examDiagnosisItemMapper,
                                 QuestionKnowledgePointMapper questionKnowledgePointMapper,
-                                KnowledgePointMapper knowledgePointMapper) {
+                                KnowledgePointMapper knowledgePointMapper,
+                                QuestionMapper questionMapper,
+                                KnowledgeCategoryMapper knowledgeCategoryMapper) {
         this.examAttemptMapper = examAttemptMapper;
         this.examDiagnosisMapper = examDiagnosisMapper;
         this.examDiagnosisItemMapper = examDiagnosisItemMapper;
         this.questionKnowledgePointMapper = questionKnowledgePointMapper;
         this.knowledgePointMapper = knowledgePointMapper;
+        this.questionMapper = questionMapper;
+        this.knowledgeCategoryMapper = knowledgeCategoryMapper;
     }
 
-    /**
-     * Generates + persists the diagnosis of a submitted attempt.
-     * Called by {@link ExamAttemptService#submit} INSIDE the submit
-     * transaction, after the SUBMITTED transition. One diagnosis per
-     * attempt (uk_exam_diagnosis_attempt); a second generation would
-     * fail the unique key and roll back the transaction.
-     *
-     * @param resultScore / resultMaxScore from the freshly computed
-     *                     exam_result (same numbers as the result view)
-     */
     @Transactional
     public void generate(String ownerSubject, Long spaceId, Long attemptId,
                          List<ExamQuestion> slots, Map<Long, ExamAnswer> answersBySlot,
@@ -106,14 +85,6 @@ public class ExamDiagnosisService {
         }
     }
 
-    /**
-     * Owner-scoped diagnosis read.
-     *
-     * @throws ResponseStatusException 404 (attempt absent / not
-     *         owner / wrong space), 409 (attempt not SUBMITTED, or
-     *         submitted attempt with missing diagnosis — internal
-     *         state inconsistency; no lazy generation)
-     */
     public ExamDiagnosisView getMine(String ownerSubject, Long spaceId, Long attemptId) {
         ExamAttempt attempt = examAttemptMapper.selectByIdSpaceOwnerUser(
                 attemptId, spaceId, ownerSubject, ownerSubject);
@@ -140,30 +111,44 @@ public class ExamDiagnosisService {
                                                List<ExamQuestion> slots,
                                                Map<Long, ExamAnswer> answersBySlot,
                                                Long diagnosisId, LocalDateTime now) {
-        // Deterministic aggregates: KP rows ordered by kp id, type
-        // rows ordered by label.
         TreeMap<Long, Agg> byKp = new TreeMap<>();
         TreeMap<String, Agg> byType = new TreeMap<>();
+        TreeMap<String, Agg> byCategory = new TreeMap<>();
+        TreeMap<String, Agg> byDifficulty = new TreeMap<>();
+
+        Map<Long, Question> questionCache = new HashMap<>();
+        Map<Long, KnowledgePoint> kpCache = new HashMap<>();
 
         for (ExamQuestion slot : slots) {
             SnapshotView snapshot = AnswerDataCodec.parseSnapshot(slot.getQuestionSnapshotJson());
             if ("SHORT_ANSWER".equals(snapshot.questionType())) {
-                continue; // ungraded — excluded, consistent with exam scoring
+                continue;
             }
             ExamAnswer answer = answersBySlot.get(slot.getId());
             boolean correct = answer != null && Boolean.TRUE.equals(answer.getIsCorrect());
             int itemScore = correct ? slot.getScore() : 0;
             int maxScore = slot.getScore();
 
-            byType.computeIfAbsent(snapshot.questionType(), k -> new Agg())
-                    .add(itemScore, maxScore);
+            byType.computeIfAbsent(snapshot.questionType(), k -> new Agg()).add(itemScore, maxScore);
 
-            // CURRENT question→KP links at submit time (V1 limitation,
-            // documented); full attribution per linked point.
+            String difficulty = "UNKNOWN";
+            Question q = questionCache.computeIfAbsent(slot.getQuestionId(), qid ->
+                    questionMapper.selectById(qid));
+            if (q != null && q.getDifficulty() != null && !q.getDifficulty().isBlank()) {
+                difficulty = q.getDifficulty();
+            }
+            byDifficulty.computeIfAbsent(difficulty, k -> new Agg()).add(itemScore, maxScore);
+
             List<Long> kpIds = questionKnowledgePointMapper
                     .selectKnowledgePointIdsByQuestionId(spaceId, slot.getQuestionId());
             for (Long kpId : kpIds) {
                 byKp.computeIfAbsent(kpId, k -> new Agg()).add(itemScore, maxScore);
+
+                KnowledgePoint kp = kpCache.computeIfAbsent(kpId, id ->
+                        knowledgePointMapper.selectByIdSpaceOwner(id, spaceId, ownerSubject));
+                String categoryLabel = kp != null && kp.getCategoryId() != null
+                        ? "CATEGORY-" + kp.getCategoryId() : "UNCATEGORIZED";
+                byCategory.computeIfAbsent(categoryLabel, k -> new Agg()).add(itemScore, maxScore);
             }
         }
 
@@ -176,6 +161,14 @@ public class ExamDiagnosisService {
             items.add(item(diagnosisId, DIMENSION_QUESTION_TYPE, null,
                     e.getKey(), e.getValue(), now));
         }
+        for (Map.Entry<String, Agg> e : byCategory.entrySet()) {
+            items.add(item(diagnosisId, DIMENSION_CATEGORY, e.getKey(),
+                    e.getKey().toString(), e.getValue(), now));
+        }
+        for (Map.Entry<String, Agg> e : byDifficulty.entrySet()) {
+            items.add(item(diagnosisId, DIMENSION_DIFFICULTY, null,
+                    e.getKey(), e.getValue(), now));
+        }
         return items;
     }
 
@@ -184,19 +177,23 @@ public class ExamDiagnosisService {
         return kp == null ? "KP-" + kpId : kp.getTitle();
     }
 
-    private ExamDiagnosisItem item(Long diagnosisId, String dimensionType, Long dimensionId,
+    private ExamDiagnosisItem item(Long diagnosisId, String dimensionType, Object dimensionId,
                                    String label, Agg agg, LocalDateTime now) {
         ExamDiagnosisItem item = new ExamDiagnosisItem();
         item.setExamDiagnosisId(diagnosisId);
         item.setDimensionType(dimensionType);
-        item.setDimensionId(dimensionId);
+        if (dimensionId instanceof Long l) {
+            item.setDimensionId(l);
+        } else if (dimensionId != null) {
+            item.setDimensionId(Long.parseLong(dimensionId.toString().replace("CATEGORY-", "")));
+        }
         item.setLabel(label);
         item.setScore(agg.score);
         item.setMaxScore(agg.maxScore);
         item.setAccuracy(agg.maxScore > 0
                 ? Math.min(1.0, (double) agg.score / agg.maxScore) : 0.0);
         item.setEvidenceCount(agg.count);
-        item.setSeverity(null); // V1: no invented threshold taxonomy
+        item.setSeverity(null);
         item.setRecommendation(null);
         item.setCreatedAt(now);
         return item;

@@ -1,9 +1,13 @@
 package com.aistudy.server.mastery.service;
 
 import com.aistudy.server.mastery.entity.Mastery;
+import com.aistudy.server.mastery.entity.MasteryCalibrationConfig;
 import com.aistudy.server.mastery.mapper.MasteryMapper;
+import com.aistudy.server.mastery.mapper.MasteryCalibrationConfigMapper;
+import com.aistudy.server.mastery.mapper.MasteryCalibrationConfigMapper;
 import com.aistudy.server.question.mapper.QuestionKnowledgePointMapper;
 import com.aistudy.server.space.service.LearningSpaceService;
+import com.aistudy.server.studyplan.service.StudyPlanService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,13 +36,19 @@ public class MasteryService {
     private final MasteryMapper masteryMapper;
     private final QuestionKnowledgePointMapper questionKnowledgePointMapper;
     private final LearningSpaceService learningSpaceService;
+    private final MasteryCalibrationConfigMapper calibrationConfigMapper;
+    private final StudyPlanService studyPlanService;
 
     public MasteryService(MasteryMapper masteryMapper,
                           QuestionKnowledgePointMapper questionKnowledgePointMapper,
-                          LearningSpaceService learningSpaceService) {
+                          LearningSpaceService learningSpaceService,
+                          MasteryCalibrationConfigMapper calibrationConfigMapper,
+                          StudyPlanService studyPlanService) {
         this.masteryMapper = masteryMapper;
         this.questionKnowledgePointMapper = questionKnowledgePointMapper;
         this.learningSpaceService = learningSpaceService;
+        this.calibrationConfigMapper = calibrationConfigMapper;
+        this.studyPlanService = studyPlanService;
     }
 
     /**
@@ -61,6 +71,21 @@ public class MasteryService {
         }
     }
 
+    /** Recomputes mastery of every KP linked to a review-completed question. */
+    @Transactional
+    public void recomputeForReviewQuestion(String ownerSubject, Long spaceId, Long questionId) {
+        if (questionId == null) {
+            return;
+        }
+        List<Long> kpIds = masteryMapper.selectKpIdsByQuestion(spaceId, questionId);
+        if (kpIds == null) {
+            return;
+        }
+        for (Long kpId : kpIds) {
+            recompute(ownerSubject, spaceId, kpId);
+        }
+    }
+
     /** Recomputes ONE knowledge point's mastery row (upsert). */
     @Transactional
     public void recompute(String ownerSubject, Long spaceId, Long kpId) {
@@ -72,23 +97,28 @@ public class MasteryService {
                 spaceId, ownerSubject, kpId);
 
         int practiceCount = ((Number) practice.get("cnt")).intValue();
-        int practiceCorrect = ((Number) practice.get("correct")).intValue();
+        int practiceCorrect = ((Number) practice.getOrDefault("correct", 0)).intValue();
         int examCount = ((Number) exam.get("cnt")).intValue();
-        int examCorrect = ((Number) exam.get("correct")).intValue();
+        int examCorrect = ((Number) exam.getOrDefault("correct", 0)).intValue();
         int reviewCount = ((Number) review.get("cnt")).intValue();
+        int reviewCorrect = ((Number) review.getOrDefault("correct", 0)).intValue();
 
-        int gradedCount = practiceCount + examCount;
-        int correctCount = practiceCorrect + examCorrect;
+        // Three evidence types enter the deterministic policy (C-07.7 / C-09.1).
+        int gradedCount = practiceCount + examCount + reviewCount;
+        int correctCount = practiceCorrect + examCorrect + reviewCorrect;
+
+        MasteryCalibrationConfig activeConfig = calibrationConfigMapper.selectActive();
+        String algorithmVersion = activeConfig != null && activeConfig.getVersion() != null
+                ? activeConfig.getVersion() : "1.0";
+        int confidenceSamples = activeConfig != null && activeConfig.getConfidenceFullSamples() != null
+                ? activeConfig.getConfidenceFullSamples() : MasteryScoringPolicy.CONFIDENCE_FULL_SAMPLES;
+
         double score = MasteryScoringPolicy.score(correctCount, gradedCount);
-        double confidence = MasteryScoringPolicy.confidence(gradedCount);
+        double confidence = MasteryScoringPolicy.confidence(gradedCount, confidenceSamples);
 
         LocalDateTime lastPractice = asLocalDateTime(practice.get("last_at"));
         LocalDateTime lastExam = asLocalDateTime(exam.get("last_at"));
         LocalDateTime lastReview = asLocalDateTime(review.get("last_at"));
-        // lastEvidenceAt = max(practice, exam, review): review
-        // completion participates in the evidence timestamp even
-        // though review COUNT is explanatory and does NOT enter the
-        // score/confidence formula (docs/data-model.md §15 + V019).
         LocalDateTime lastEvidenceAt = latestEvidenceAt(lastPractice, lastExam, lastReview);
 
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
@@ -100,6 +130,7 @@ public class MasteryService {
             mastery.setKnowledgePointId(kpId);
             mastery.setMasteryScore(score);
             mastery.setConfidence(confidence);
+            mastery.setAlgorithmVersion(algorithmVersion);
             mastery.setPracticeEvidenceCount(practiceCount);
             mastery.setExamEvidenceCount(examCount);
             mastery.setReviewEvidenceCount(reviewCount);
@@ -110,9 +141,12 @@ public class MasteryService {
         } else {
             masteryMapper.updateByIdAndSpace(
                     existing.getId(), spaceId, ownerSubject,
-                    score, confidence, practiceCount, examCount, reviewCount,
+                    score, confidence, algorithmVersion,
+                    practiceCount, examCount, reviewCount,
                     lastEvidenceAt, now);
         }
+
+        studyPlanService.bumpRelatedStudyTaskPriorities(ownerSubject, spaceId, kpId);
     }
 
     /** All mastery rows of the caller's space (weakest first). */

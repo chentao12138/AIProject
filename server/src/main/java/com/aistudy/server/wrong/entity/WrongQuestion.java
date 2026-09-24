@@ -41,6 +41,8 @@ public class WrongQuestion {
 
     private LocalDateTime updatedAt;
 
+    private LocalDateTime dismissedAt;
+
     public Long getId() {
         return id;
     }
@@ -127,5 +129,13 @@ public class WrongQuestion {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public LocalDateTime getDismissedAt() {
+        return dismissedAt;
+    }
+
+    public void setDismissedAt(LocalDateTime dismissedAt) {
+        this.dismissedAt = dismissedAt;
     }
 }

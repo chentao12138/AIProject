@@ -185,9 +185,14 @@ public class LocalStorageService implements StorageService, LocalStorageOperatio
      * symlink / special-file check, and bounded write enforcement.
      *
      * <p>For {@code load}/{@code delete} the target must exist and be a
-     * regular file (not a symlink / directory / special file). For
-     * {@code store} the target is freshly generated and does not yet
-     * exist, so only the first two defenses apply.
+     * regular file (not a symlink / directory / special file). A symlink
+     * at a key position is never a legitimate storage object (server
+     * keys are server-generated), so it is rejected as an invalid key
+     * ({@link StorageInvalidKeyException}) — including a link pointing
+     * outside the root — while a simply absent target throws
+     * {@link StorageNotFoundException}. For {@code store} the target is
+     * freshly generated and does not yet exist, so only the first two
+     * defenses apply.
      */
     private Path resolveWithinRoot(String storageKey, boolean requireRegularFile) {
         if (storageKey == null || storageKey.isBlank()) {
@@ -201,6 +206,10 @@ public class LocalStorageService implements StorageService, LocalStorageOperatio
         }
         if (requireRegularFile) {
             if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+                if (Files.isSymbolicLink(target)) {
+                    throw new StorageInvalidKeyException(
+                            "storageKey must not reference a symbolic link");
+                }
                 throw new StorageNotFoundException(storageKey);
             }
         }

@@ -21,8 +21,10 @@ import java.time.LocalDateTime;
  * @param title      material title
  * @param sourceType documented sourceType value (data-model.md §5.1)
  * @param status     REGISTERED in this slice
+ * @param reviewStatus NEEDS_REVIEW / PUBLISHED / null
  * @param createdAt  registration timestamp
  * @param updatedAt  last-update timestamp (equals createdAt on create)
+ * @param archivedAt archive timestamp, null when not archived
  */
 public record SourceResponse(
         Long id,
@@ -30,8 +32,10 @@ public record SourceResponse(
         String title,
         String sourceType,
         String status,
+        String reviewStatus,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        LocalDateTime archivedAt
 ) {
 
     /**
@@ -47,8 +51,10 @@ public record SourceResponse(
                 source.getTitle(),
                 source.getSourceType(),
                 source.getStatus(),
+                source.getReviewStatus(),
                 source.getCreatedAt(),
-                source.getUpdatedAt()
+                source.getUpdatedAt(),
+                source.getArchivedAt()
         );
     }
 }

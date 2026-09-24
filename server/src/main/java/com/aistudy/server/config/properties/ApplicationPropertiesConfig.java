@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
         CorsProperties.class,
         OperationsProperties.class,
         BootstrapAdminProperties.class,
+        IngestionWorkerProperties.class,
         AiProperties.class
 })
 public class ApplicationPropertiesConfig {

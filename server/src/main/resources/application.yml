@@ -38,6 +38,18 @@ aistudy:
       max-scan-entries: ${AISTUDY_OPS_RECONCILE_MAX_SCAN:10000}
       min-age: ${AISTUDY_OPS_RECONCILE_MIN_AGE:PT1H}
   ingestion:
+    worker:
+      # Bounded pool for the in-process ingestion worker (architecture.md §6.2).
+      # Overflow jobs stay QUEUED and are dispatched by the recovery tick.
+      core-size: ${AISTUDY_INGESTION_WORKER_CORE_SIZE:2}
+      max-size: ${AISTUDY_INGESTION_WORKER_MAX_SIZE:4}
+      queue-capacity: ${AISTUDY_INGESTION_WORKER_QUEUE_CAPACITY:64}
+      shutdown-grace: ${AISTUDY_INGESTION_WORKER_SHUTDOWN_GRACE:PT20S}
+      # A claim older than this is treated as abandoned and requeued.
+      stale-lease: ${AISTUDY_INGESTION_WORKER_STALE_LEASE:PT30M}
+      heartbeat: ${AISTUDY_INGESTION_WORKER_HEARTBEAT:PT5M}
+      recovery-interval-ms: ${AISTUDY_INGESTION_WORKER_RECOVERY_INTERVAL_MS:60000}
+      recovery-enabled: ${AISTUDY_INGESTION_WORKER_RECOVERY_ENABLED:true}
     zip:
       max-entries: ${AISTUDY_INGESTION_ZIP_MAX_ENTRIES:10000}
       max-entry-uncompressed-bytes: ${AISTUDY_INGESTION_ZIP_MAX_ENTRY_BYTES:4GB}

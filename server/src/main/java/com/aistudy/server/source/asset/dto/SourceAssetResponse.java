@@ -32,9 +32,14 @@ public record SourceAssetResponse(
         String mimeType,
         Long sizeBytes,
         String sha256,
-        LocalDateTime createdAt) {
+        LocalDateTime createdAt,
+        boolean isDuplicate) {
 
     public static SourceAssetResponse from(SourceAsset asset) {
+        return from(asset, false);
+    }
+
+    public static SourceAssetResponse from(SourceAsset asset, boolean isDuplicate) {
         return new SourceAssetResponse(
                 asset.getId(),
                 asset.getSpaceId(),
@@ -44,6 +49,7 @@ public record SourceAssetResponse(
                 asset.getMimeType(),
                 asset.getSizeBytes(),
                 asset.getSha256(),
-                asset.getCreatedAt());
+                asset.getCreatedAt(),
+                isDuplicate);
     }
 }

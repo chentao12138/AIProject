@@ -174,14 +174,24 @@ observed keys instead of selecting distinct keys from the entire table.
 
 ## Stale ingestion jobs
 
-Permanently `RUNNING` ingestion jobs can remain after a process crash
-because the existing schema records `startedAt` and `finishedAt`.
+A job whose worker dies is reclaimed by a lease, not by a restart:
 
-BUSINESS-025 does not introduce an automatic recovery endpoint.
-This is recorded as a known operational risk.
+- the worker atomically claims `QUEUED → IMPORTING` and renews `claimed_at`
+  between assets (`heartbeat`);
+- `requeueStaleProcessing` requeues any non-terminal job whose claim is older
+  than `stale-lease` (default `PT30M`);
+- recovery runs at startup **and** every `recovery-interval-ms` (default 60s),
+  so a crash no longer strands a job until the next boot.
 
-A future phase may add a read-only admin stale-job operation if the
-state machine supports safe recovery without data corruption.
+Re-running a job is expected to be safe: completed stages are skipped via
+`last_stage_status`, and re-extraction deletes the asset's un-published
+pages/blocks before inserting. Residual: a ZIP re-extract inserts fresh
+`source_asset` rows per entry, so repeated retries of a ZIP source multiply
+those rows (tracked, not yet fixed).
+
+Knobs: `runtime-configuration.md` §Ingestion worker. Setting
+`AISTUDY_INGESTION_WORKER_RECOVERY_ENABLED=false` stops the periodic tick; the
+`test` and `flyway-it` profiles do that so tests drive job state by hand.
 
 ## Residual risks
 

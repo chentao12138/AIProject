@@ -104,6 +104,10 @@ public class SourceAssetService {
             "jpg", Set.of("image/jpeg", "application/octet-stream"),
             "jpeg", Set.of("image/jpeg", "application/octet-stream"),
             "png", Set.of("image/png", "application/octet-stream"),
+            "webp", Set.of("image/webp", "application/octet-stream"),
+            "docx", Set.of(
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "application/octet-stream"),
             "md", Set.of("text/markdown", "text/plain", "application/octet-stream"),
             "markdown", Set.of("text/markdown", "text/plain", "application/octet-stream"),
             "txt", Set.of("text/plain", "application/octet-stream")
@@ -124,6 +128,25 @@ public class SourceAssetService {
         this.sourceService = sourceService;
         this.storageService = storageService;
         this.maxUploadBytes = uploadProperties.getMaxFileSize().toBytes();
+    }
+
+    /**
+     * Owner-scoped RAW binary open for authorized download.
+     * Never exposes storageKey; streams from StorageService.
+     */
+    public record RawAsset(SourceAsset asset, java.io.InputStream stream) {
+    }
+
+    public RawAsset openRaw(String ownerSubject, Long spaceId, Long sourceId, Long assetId) {
+        SourceAsset asset = getMine(ownerSubject, spaceId, sourceId, assetId);
+        if (asset == null) {
+            return null;
+        }
+        try {
+            return new RawAsset(asset, storageService.load(asset.getStorageKey()));
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "SourceAsset content not found");
+        }
     }
 
     /**
@@ -243,6 +266,10 @@ public class SourceAssetService {
         return sourceAssetMapper.selectByIdSpaceSourceOwner(assetId, spaceId, sourceId, ownerSubject);
     }
 
+    public SourceAsset checkDuplicate(String ownerSubject, Long spaceId, Long sourceId, String sha256) {
+        return sourceAssetMapper.selectBySpaceAndSha256(spaceId, sha256, ownerSubject);
+    }
+
     // ==================== validation helpers ====================
 
     /**
@@ -297,5 +324,27 @@ public class SourceAssetService {
     /** .zip → ORIGINAL_PACKAGE; everything else in the allowlist → ORIGINAL_FILE. */
     private String roleFor(String extension) {
         return "zip".equals(extension) ? ROLE_ORIGINAL_PACKAGE : ROLE_ORIGINAL_FILE;
+    }
+
+    public static String extractExtension(String originalName) {
+        if (originalName == null) return null;
+        int dot = originalName.lastIndexOf('.');
+        if (dot < 0 || dot == originalName.length() - 1) return null;
+        return originalName.substring(dot + 1).toLowerCase(Locale.ROOT);
+    }
+
+    public static String mimeForExtension(String extension) {
+        if (extension == null) return FALLBACK_MIME;
+        Set<String> mimes = ALLOWED_MIME_BY_EXTENSION.getOrDefault(extension.toLowerCase(Locale.ROOT), Set.of(FALLBACK_MIME));
+        return mimes.iterator().next();
+    }
+
+    public static String roleForExtension(String extension) {
+        if (extension == null) return ROLE_ORIGINAL_FILE;
+        return "zip".equals(extension.toLowerCase(Locale.ROOT)) ? ROLE_ORIGINAL_PACKAGE : ROLE_ORIGINAL_FILE;
+    }
+
+    public static boolean isAllowedExtension(String ext) {
+        return ALLOWED_MIME_BY_EXTENSION.containsKey(ext.toLowerCase(Locale.ROOT));
     }
 }

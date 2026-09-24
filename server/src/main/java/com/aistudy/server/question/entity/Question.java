@@ -53,6 +53,10 @@ public class Question {
 
     private LocalDateTime publishedAt;
 
+    private LocalDateTime archivedAt;
+    private LocalDateTime rejectedAt;
+    private String rejectedReason;
+
     private LocalDateTime deletedAt;
 
     public Long getId() {
@@ -157,6 +161,30 @@ public class Question {
 
     public void setPublishedAt(LocalDateTime publishedAt) {
         this.publishedAt = publishedAt;
+    }
+
+    public LocalDateTime getArchivedAt() {
+        return archivedAt;
+    }
+
+    public void setArchivedAt(LocalDateTime archivedAt) {
+        this.archivedAt = archivedAt;
+    }
+
+    public LocalDateTime getRejectedAt() {
+        return rejectedAt;
+    }
+
+    public void setRejectedAt(LocalDateTime rejectedAt) {
+        this.rejectedAt = rejectedAt;
+    }
+
+    public String getRejectedReason() {
+        return rejectedReason;
+    }
+
+    public void setRejectedReason(String rejectedReason) {
+        this.rejectedReason = rejectedReason;
     }
 
     public LocalDateTime getDeletedAt() {

@@ -31,6 +31,17 @@ public class ExamAttempt {
 
     private String status;
 
+    /** GRADED | PARTIALLY_GRADED after subjective slots exist. */
+    private String gradingStatus;
+
+    public String getGradingStatus() {
+        return gradingStatus;
+    }
+
+    public void setGradingStatus(String gradingStatus) {
+        this.gradingStatus = gradingStatus;
+    }
+
     private LocalDateTime startedAt;
 
     private LocalDateTime deadlineAt;

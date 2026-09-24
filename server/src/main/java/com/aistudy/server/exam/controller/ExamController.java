@@ -2,40 +2,22 @@ package com.aistudy.server.exam.controller;
 
 import com.aistudy.server.exam.dto.ExamDto.CreateExamRequest;
 import com.aistudy.server.exam.dto.ExamDto.ExamResponse;
+import com.aistudy.server.exam.dto.UpdateExamRequest;
 import com.aistudy.server.exam.entity.Exam;
 import com.aistudy.server.exam.entity.ExamPaper;
+import com.aistudy.server.exam.entity.ExamQuestion;
+import com.aistudy.server.exam.mapper.ExamQuestionMapper;
 import com.aistudy.server.exam.service.ExamService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
-/**
- * BUSINESS-012 — Exam definition REST API.
- *
- * <pre>
- *   POST /api/v1/spaces/{spaceId}/exams              → 201 authoring view
- *   GET  /api/v1/spaces/{spaceId}/exams              → 200 typed list
- *   GET  /api/v1/spaces/{spaceId}/exams/{examId}     → 200 / 404
- *   POST /api/v1/spaces/{spaceId}/exams/{examId}/publish → 200
- *        (exam + paper DRAFT → PUBLISHED; idempotent)
- * </pre>
- *
- * <p>Owner-scoped, 404 anti-probing. Question views in responses are
- * SAFE (no answer data) — attempts (013) carry the answer-secrecy
- * contract.
- */
 @RestController
 @RequestMapping("/api/v1/spaces/{spaceId}/exams")
 @SecurityRequirement(name = "bearerAuth")
@@ -55,8 +37,7 @@ public class ExamController {
                                Authentication authentication) {
         Exam exam = examService.create(authentication.getName(), spaceId, request);
         if (exam == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "LearningSpace or Question not found");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "LearningSpace or Question not found");
         }
         return toResponse(exam);
     }
@@ -82,6 +63,29 @@ public class ExamController {
         return toResponse(exam);
     }
 
+    @PutMapping(value = "/{examId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ExamResponse update(@PathVariable Long spaceId,
+                               @PathVariable Long examId,
+                               @Valid @RequestBody UpdateExamRequest request,
+                               Authentication authentication) {
+        Exam updated = examService.update(authentication.getName(), spaceId, examId, request);
+        if (updated == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found");
+        }
+        return toResponse(updated);
+    }
+
+    @PostMapping(value = "/{examId}/archive", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ExamResponse archive(@PathVariable Long spaceId,
+                                @PathVariable Long examId,
+                                Authentication authentication) {
+        Exam updated = examService.archive(authentication.getName(), spaceId, examId);
+        if (updated == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found");
+        }
+        return toResponse(updated);
+    }
+
     @PostMapping(value = "/{examId}/publish", produces = MediaType.APPLICATION_JSON_VALUE)
     public ExamResponse publish(@PathVariable Long spaceId,
                                 @PathVariable Long examId,
@@ -91,6 +95,79 @@ public class ExamController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found");
         }
         return toResponse(exam);
+    }
+
+    // ==================== draft paper composition ====================
+
+    public record AddQuestionRequest(
+            @jakarta.validation.constraints.NotNull(message = "questionId must not be null")
+            Long questionId,
+
+            @jakarta.validation.constraints.Min(value = 1, message = "score must be >= 1")
+            Integer score
+    ) {
+    }
+
+    @PostMapping(value = "/{examId}/paper/questions",
+            produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    public ExamQuestion addQuestion(@PathVariable Long spaceId,
+                                    @PathVariable Long examId,
+                                    @Valid @RequestBody AddQuestionRequest request,
+                                    Authentication authentication) {
+        ExamQuestion slot = examService.addQuestionToPaper(
+                authentication.getName(), spaceId, examId,
+                request.questionId(), request.score());
+        if (slot == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found");
+        }
+        return slot;
+    }
+
+    @DeleteMapping(value = "/{examId}/paper/questions/{examQuestionId}",
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ExamQuestion removeQuestion(@PathVariable Long spaceId,
+                                       @PathVariable Long examId,
+                                       @PathVariable Long examQuestionId,
+                                       Authentication authentication) {
+        ExamQuestion slot = examService.removeQuestionFromPaper(
+                authentication.getName(), spaceId, examId, examQuestionId);
+        if (slot == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found");
+        }
+        return slot;
+    }
+
+    @PutMapping(value = "/{examId}/paper/questions/reorder",
+            produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+    public List<ExamQuestion> reorder(@PathVariable Long spaceId,
+                                      @PathVariable Long examId,
+                                      @Valid @RequestBody List<ExamQuestionMapper.SortSlot> slots,
+                                      Authentication authentication) {
+        List<ExamQuestion> result = examService.reorderQuestions(
+                authentication.getName(), spaceId, examId, slots);
+        if (result == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found");
+        }
+        return result;
+    }
+
+    @PutMapping(value = "/{examId}/paper/questions/{examQuestionId}/score",
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ExamQuestion updateScore(@PathVariable Long spaceId,
+                                    @PathVariable Long examId,
+                                    @PathVariable Long examQuestionId,
+                                    @RequestParam(name = "score") Integer score,
+                                    Authentication authentication) {
+        if (score == null || score < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "score must be >= 1");
+        }
+        ExamQuestion slot = examService.updateQuestionScore(
+                authentication.getName(), spaceId, examId, examQuestionId, score);
+        if (slot == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found");
+        }
+        return slot;
     }
 
     private ExamResponse toResponse(Exam exam) {

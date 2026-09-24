@@ -36,8 +36,11 @@ public final class ExamDto {
             @Size(max = 1000, message = "description must be at most 1000 characters")
             String description,
 
-            @Min(value = 1, message = "durationMinutes must be >= 1")
-            Integer durationMinutes,
+            @Size(max = 32, message = "examType must be at most 32 characters")
+            String examType,
+
+            @Min(value = 1, message = "timeLimitMinutes must be >= 1")
+            Integer timeLimitMinutes,
 
             @NotEmpty(message = "questions must not be empty")
             @Size(max = 100, message = "at most 100 questions per exam")

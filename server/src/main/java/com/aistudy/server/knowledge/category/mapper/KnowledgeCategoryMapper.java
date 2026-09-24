@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -57,12 +59,74 @@ public interface KnowledgeCategoryMapper extends BaseMapper<KnowledgeCategory> {
      * IN SQL via the JOIN — this method can never list categories of
      * an unowned space even if a caller bypasses the service layer.
      */
-    @Select("SELECT c.* "
-            + "FROM knowledge_category c "
+    @Select("SELECT c.* FROM knowledge_category c "
             + "JOIN learning_space ls ON ls.id = c.space_id "
-            + "WHERE c.space_id = #{spaceId} "
-            + "  AND ls.owner_subject = #{ownerSubject} "
+            + "WHERE c.space_id = #{spaceId} AND ls.owner_subject = #{ownerSubject} "
             + "ORDER BY c.sort_order ASC, c.id ASC")
     List<KnowledgeCategory> selectBySpaceAndOwner(@Param("spaceId") Long spaceId,
                                                   @Param("ownerSubject") String ownerSubject);
+
+    @Select("SELECT c.* FROM knowledge_category c "
+            + "JOIN learning_space ls ON ls.id = c.space_id "
+            + "WHERE c.space_id = #{spaceId} AND ls.owner_subject = #{ownerSubject} "
+            + "ORDER BY c.sort_order ASC, c.id ASC")
+    List<KnowledgeCategory> selectByOwnerIncludingDeleted(@Param("spaceId") Long spaceId,
+                                                          @Param("ownerSubject") String ownerSubject);
+
+    @Update("UPDATE knowledge_category SET name = #{name}, description = #{description}, "
+            + "sort_order = #{sortOrder}, updated_at = #{updatedAt} "
+            + "WHERE id = #{categoryId} AND space_id = #{spaceId}")
+    int updateDetailsByIdAndSpace(@Param("categoryId") Long categoryId,
+                                  @Param("spaceId") Long spaceId,
+                                  @Param("name") String name,
+                                  @Param("description") String description,
+                                  @Param("sortOrder") Integer sortOrder,
+                                  @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Update("UPDATE knowledge_category SET parent_id = #{parentId}, updated_at = #{updatedAt} "
+            + "WHERE id = #{categoryId} AND space_id = #{spaceId}")
+    int reparentByIdAndSpace(@Param("categoryId") Long categoryId,
+                             @Param("spaceId") Long spaceId,
+                             @Param("parentId") Long parentId,
+                             @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Update("UPDATE knowledge_category SET sort_order = #{sortOrder}, updated_at = #{updatedAt} "
+            + "WHERE id = #{categoryId} AND space_id = #{spaceId}")
+    int updateSortOrderByIdAndSpace(@Param("categoryId") Long categoryId,
+                                    @Param("spaceId") Long spaceId,
+                                    @Param("sortOrder") Integer sortOrder,
+                                    @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Update("UPDATE knowledge_category SET deleted_at = #{deletedAt} "
+            + "WHERE id = #{categoryId} AND space_id = #{spaceId}")
+    int softDeleteByIdAndSpace(@Param("categoryId") Long categoryId,
+                               @Param("spaceId") Long spaceId,
+                               @Param("deletedAt") LocalDateTime deletedAt);
+
+    @Select("SELECT COUNT(*) FROM knowledge_category WHERE parent_id = #{parentId}")
+    long countByParentId(@Param("parentId") Long parentId);
+
+    @Select("SELECT c.* FROM knowledge_category WHERE id = #{categoryId} LIMIT 1")
+    KnowledgeCategory selectByIdAdmin(@Param("categoryId") Long categoryId);
+
+    @Select("SELECT c.* FROM knowledge_category "
+            + "WHERE (#{spaceId} IS NULL OR space_id = #{spaceId}) "
+            + "ORDER BY created_at DESC, id DESC")
+    List<KnowledgeCategory> selectBySpace(@Param("spaceId") Long spaceId);
+
+    @Update("UPDATE knowledge_category SET status = #{status}, published_at = #{publishedAt}, "
+            + "updated_at = #{updatedAt} "
+            + "WHERE id = #{categoryId}")
+    int publishById(@Param("categoryId") Long categoryId,
+                    @Param("status") String status,
+                    @Param("publishedAt") LocalDateTime publishedAt,
+                    @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Update("UPDATE knowledge_category SET status = #{status}, archived_at = #{archivedAt}, "
+            + "updated_at = #{updatedAt} "
+            + "WHERE id = #{categoryId}")
+    int archiveById(@Param("categoryId") Long categoryId,
+                    @Param("status") String status,
+                    @Param("archivedAt") LocalDateTime archivedAt,
+                    @Param("updatedAt") LocalDateTime updatedAt);
 }

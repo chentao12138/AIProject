@@ -169,6 +169,38 @@
           AND ls.owner_subject = #{ownerSubject}
           AND q.stem LIKE #{containsPattern} ESCAPE '\\'
       </if>
+
+      <if test="types == null || types.isEmpty() || types.contains('NOTE')">
+        UNION ALL
+        SELECT
+          'NOTE' AS entity_type,
+          n.id AS entity_id,
+          n.title AS title,
+          n.content AS search_text,
+          CASE
+            WHEN n.title = #{exactQuery} THEN 80
+            WHEN n.title LIKE #{prefixPattern} ESCAPE '\\' THEN 60
+            WHEN n.content LIKE #{containsPattern} ESCAPE '\\' THEN 30
+            ELSE 0
+          END AS score,
+          NULL AS source_id,
+          NULL AS source_asset_id,
+          NULL AS source_page_id,
+          NULL AS page_number,
+          NULL AS knowledge_point_id,
+          NULL AS question_id,
+          CONCAT('NOTE|', LPAD(n.id, 20, '0')) AS sort_key
+        FROM note n
+        JOIN learning_space ls ON ls.id = n.space_id
+        WHERE n.space_id = #{spaceId}
+          AND n.user_subject_id = #{userSubject}
+          AND ls.owner_subject = #{ownerSubject}
+          AND n.archived_at IS NULL
+          AND (
+            n.title LIKE #{containsPattern} ESCAPE '\\'
+            OR n.content LIKE #{containsPattern} ESCAPE '\\'
+          )
+      </if>
       </trim>
     ) AS results
     WHERE score > 0
@@ -269,6 +301,27 @@
             WHEN q.stem = #{exactQuery} THEN 60
             WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
             WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            ELSE 0
+          END > 0
+      </if>
+
+      <if test="types == null || types.isEmpty() || types.contains('NOTE')">
+        UNION ALL
+        SELECT 1 AS score_alias
+        FROM note n
+        JOIN learning_space ls ON ls.id = n.space_id
+        WHERE n.space_id = #{spaceId}
+          AND n.user_subject_id = #{userSubject}
+          AND ls.owner_subject = #{ownerSubject}
+          AND n.archived_at IS NULL
+          AND (
+            n.title LIKE #{containsPattern} ESCAPE '\\'
+            OR n.content LIKE #{containsPattern} ESCAPE '\\'
+          )
+          AND CASE
+            WHEN n.title = #{exactQuery} THEN 80
+            WHEN n.title LIKE #{prefixPattern} ESCAPE '\\' THEN 60
+            WHEN n.content LIKE #{containsPattern} ESCAPE '\\' THEN 30
             ELSE 0
           END > 0
       </if>

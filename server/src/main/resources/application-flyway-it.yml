@@ -38,3 +38,10 @@ app:
     jwt:
       secret: ${AUTH_JWT_SECRET:dGVzdF81MjNiYXJibGVyX3Rlc3Rfc2VjcmV0X2hlcmVfZm9yX2F1dGhcMTIzdA==}
       access-token-ttl-seconds: ${AUTH_JWT_ACCESS_TOKEN_TTL_SECONDS:900}
+
+# Periodic ingestion recovery must not fire while integration tests drive job
+# state by hand (a tick would dispatch or requeue rows mid-assertion).
+aistudy:
+  ingestion:
+    worker:
+      recovery-enabled: false

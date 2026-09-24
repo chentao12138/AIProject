@@ -9,6 +9,8 @@ import com.aistudy.server.auth.security.AuthProperties;
 import com.aistudy.server.auth.dto.AdminUserPageResponse;
 import com.aistudy.server.auth.dto.AdminUserSummary;
 import com.aistudy.server.auth.dto.AdminUserDetail;
+import com.aistudy.server.auth.dto.CreateUserRequest;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,12 +20,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * BUSINESS-019 — admin orchestration service.
- *
- * <p>Owns admin user management, status transitions, role mutation,
- * last-active-admin protection, and refresh-session revocation.
- */
 @Service
 public class AdminUserService {
 
@@ -37,6 +33,7 @@ public class AdminUserService {
     private final RefreshSessionMapper refreshSessionMapper;
     private final UserRoleService userRoleService;
     private final RefreshTokenService refreshTokenService;
+    private final PasswordEncoder passwordEncoder;
     private final AuthProperties authProperties;
 
     public AdminUserService(UserAccountMapper userAccountMapper,
@@ -44,12 +41,14 @@ public class AdminUserService {
                             RefreshSessionMapper refreshSessionMapper,
                             UserRoleService userRoleService,
                             RefreshTokenService refreshTokenService,
+                            PasswordEncoder passwordEncoder,
                             AuthProperties authProperties) {
         this.userAccountMapper = userAccountMapper;
         this.userAccountRoleMapper = userAccountRoleMapper;
         this.refreshSessionMapper = refreshSessionMapper;
         this.userRoleService = userRoleService;
         this.refreshTokenService = refreshTokenService;
+        this.passwordEncoder = passwordEncoder;
         this.authProperties = authProperties;
     }
 
@@ -92,6 +91,48 @@ public class AdminUserService {
     }
 
     @Transactional
+    public AdminUserSummary createUser(CreateUserRequest request) {
+        String subject = request.subject() != null && !request.subject().isBlank()
+                ? request.subject()
+                : java.util.UUID.randomUUID().toString().replace("-", "");
+        if (userAccountMapper.selectBySubject(subject) != null) {
+            throw new IllegalArgumentException("subject already exists: " + subject);
+        }
+        if (userAccountMapper.selectByUsername(request.username()) != null) {
+            throw new IllegalArgumentException("username already exists: " + request.username());
+        }
+        UserAccount account = new UserAccount();
+        account.setSubject(subject);
+        account.setUsername(request.username());
+        account.setPasswordHash(passwordEncoder.encode(request.password()));
+        account.setStatus(STATUS_ACTIVE);
+        account.setCreatedAt(LocalDateTime.now());
+        account.setUpdatedAt(account.getCreatedAt());
+        userAccountMapper.insert(account);
+        userRoleService.ensureUserRole(account.getId());
+        return new AdminUserSummary(
+                account.getId(),
+                account.getSubject(),
+                account.getUsername(),
+                account.getStatus(),
+                List.of(ROLE_USER),
+                account.getCreatedAt()
+        );
+    }
+
+    @Transactional
+    public void resetPassword(String subject, String newPassword) {
+        UserAccount account = userAccountMapper.selectBySubject(subject);
+        if (account == null) {
+            throw new UserNotFoundException("User not found: " + subject);
+        }
+        account.setPasswordHash(passwordEncoder.encode(newPassword));
+        account.setUpdatedAt(LocalDateTime.now());
+        userAccountMapper.updateById(account);
+        refreshTokenService.revokeAllForUser(account.getId(), "PASSWORD_RESET");
+    }
+
+    @Transactional
     public void updateStatus(String subject, String targetStatus) {
         UserAccount account = userAccountMapper.selectBySubject(subject);
         if (account == null) {
@@ -101,16 +142,13 @@ public class AdminUserService {
         if (currentStatus.equals(targetStatus)) {
             return;
         }
-
         userAccountRoleMapper.selectAllAdminRolesForUpdate();
         if (isLastActiveAdmin(account.getId())) {
             throw new LastAdminProtectionException("Cannot change status of the last active ADMIN");
         }
-
         account.setStatus(targetStatus);
         account.setUpdatedAt(LocalDateTime.now());
         userAccountMapper.updateById(account);
-
         if (STATUS_DISABLED.equals(targetStatus)) {
             refreshTokenService.revokeAllForUser(account.getId(), "ACCOUNT_DISABLED");
         }
@@ -139,7 +177,6 @@ public class AdminUserService {
         if (currentlyActiveAdmin && !willBeAdmin && isLastActiveAdmin(account.getId())) {
             throw new LastAdminProtectionException("Cannot remove ADMIN from the last active ADMIN");
         }
-
         userRoleService.replaceRoles(account.getId(), normalized);
         if (rolesChanged(locked, normalized)) {
             refreshTokenService.revokeAllForUser(account.getId(), "ROLE_CHANGED");
@@ -171,10 +208,10 @@ public class AdminUserService {
             if (!Set.of(ROLE_USER, ROLE_ADMIN).contains(trimmed)) {
                 throw new IllegalArgumentException("Unsupported role: " + role);
             }
-            if (!seen.contains(trimmed)) {
-                seen.add(trimmed);
-                normalized.add(trimmed);
+            if (!seen.add(trimmed)) {
+                continue;
             }
+            normalized.add(trimmed);
         }
         if (normalized.isEmpty()) {
             return List.of(ROLE_USER);

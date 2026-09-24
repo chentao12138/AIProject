@@ -7,6 +7,7 @@ import com.aistudy.server.ai.provider.AiErrorCode;
 import com.aistudy.server.ai.provider.AiProvider;
 import com.aistudy.server.ai.provider.AiProviderException;
 import com.aistudy.server.ai.settings.AiSettingsDto.TestConnectionResponse;
+import com.aistudy.server.ai.service.AiUsageRecordService;
 import com.aistudy.server.operations.AiMetrics;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -21,13 +22,16 @@ public class AiProviderConnectionTestService {
     private final AiProvider aiProvider;
     private final AiRuntimeConfigResolver configResolver;
     private final AiMetrics aiMetrics;
+    private final AiUsageRecordService aiUsageRecordService;
 
     public AiProviderConnectionTestService(AiProvider aiProvider,
                                            AiRuntimeConfigResolver configResolver,
-                                           AiMetrics aiMetrics) {
+                                           AiMetrics aiMetrics,
+                                           AiUsageRecordService aiUsageRecordService) {
         this.aiProvider = aiProvider;
         this.configResolver = configResolver;
         this.aiMetrics = aiMetrics;
+        this.aiUsageRecordService = aiUsageRecordService;
     }
 
     public TestConnectionResponse testConnection(String userSubject) {
@@ -49,6 +53,14 @@ public class AiProviderConnectionTestService {
                     64), userSubject);
             long latency = System.currentTimeMillis() - start;
             aiMetrics.recordRequest(config.provider(), "SUCCESS");
+            aiUsageRecordService.record(userSubject, null,
+                    response.provider(), response.model(),
+                    "CONNECTION_TEST", null,
+                    response.usage() != null ? response.usage().promptTokens() : null,
+                    response.usage() != null ? response.usage().completionTokens() : null,
+                    response.usage() != null ? response.usage().totalTokens() : null,
+                    (int) latency,
+                    "SUCCESS", null);
             String content = response == null || response.content() == null
                     ? "" : response.content().trim();
             if (content.isEmpty()) {
@@ -58,6 +70,10 @@ public class AiProviderConnectionTestService {
             return new TestConnectionResponse(true, config.provider(), config.model(), latency);
         } catch (AiProviderException e) {
             aiMetrics.recordFailure(config.provider(), e.errorCode().name());
+            aiUsageRecordService.record(userSubject, null,
+                    config.provider(), config.model(),
+                    "CONNECTION_TEST", null, null, null, null, null,
+                    "FAILED", e.errorCode().name());
             throw e;
         }
     }

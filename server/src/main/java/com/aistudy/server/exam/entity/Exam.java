@@ -43,6 +43,8 @@ public class Exam {
 
     private LocalDateTime publishedAt;
 
+    private LocalDateTime archivedAt;
+
     public Long getId() {
         return id;
     }
@@ -137,5 +139,13 @@ public class Exam {
 
     public void setPublishedAt(LocalDateTime publishedAt) {
         this.publishedAt = publishedAt;
+    }
+
+    public LocalDateTime getArchivedAt() {
+        return archivedAt;
+    }
+
+    public void setArchivedAt(LocalDateTime archivedAt) {
+        this.archivedAt = archivedAt;
     }
 }

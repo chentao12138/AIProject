@@ -7,12 +7,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * BUSINESS-017 — account lifecycle and login verification service.
- *
- * <p>Owns the account creation + login verification flow so the
- * controller does not repeat BCrypt / disabled checks.
- */
 @Service
 public class UserAccountService {
 
@@ -21,17 +15,20 @@ public class UserAccountService {
     private final PasswordEncoder passwordEncoder;
     private final AuthProperties authProperties;
     private final UserRoleService userRoleService;
+    private final RefreshTokenService refreshTokenService;
 
     public UserAccountService(UserAccountMapper userAccountMapper,
                               AuthenticationService authenticationService,
                               PasswordEncoder passwordEncoder,
                               AuthProperties authProperties,
-                              UserRoleService userRoleService) {
+                              UserRoleService userRoleService,
+                              RefreshTokenService refreshTokenService) {
         this.userAccountMapper = userAccountMapper;
         this.authenticationService = authenticationService;
         this.passwordEncoder = passwordEncoder;
         this.authProperties = authProperties;
         this.userRoleService = userRoleService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Transactional
@@ -57,6 +54,36 @@ public class UserAccountService {
 
     public UserAccount findAccountBySubject(String subject) {
         return userAccountMapper.selectBySubject(subject);
+    }
+
+    @Transactional
+    public void changePassword(String subject, String currentPassword, String newPassword) {
+        UserAccount account = userAccountMapper.selectBySubject(subject);
+        if (account == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.NOT_FOUND, "User not found");
+        }
+        if (!passwordEncoder.matches(currentPassword, account.getPasswordHash())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "Current password is incorrect");
+        }
+        account.setPasswordHash(passwordEncoder.encode(newPassword));
+        account.setUpdatedAt(java.time.LocalDateTime.now());
+        userAccountMapper.updateById(account);
+        refreshTokenService.revokeAllForUser(account.getId(), "PASSWORD_CHANGED");
+    }
+
+    @Transactional
+    public void resetPassword(String subject, String newPassword) {
+        UserAccount account = userAccountMapper.selectBySubject(subject);
+        if (account == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.NOT_FOUND, "User not found");
+        }
+        account.setPasswordHash(passwordEncoder.encode(newPassword));
+        account.setUpdatedAt(java.time.LocalDateTime.now());
+        userAccountMapper.updateById(account);
+        refreshTokenService.revokeAllForUser(account.getId(), "PASSWORD_RESET");
     }
 
     public long getAccessTokenTtlSeconds() {

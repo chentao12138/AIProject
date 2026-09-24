@@ -105,7 +105,8 @@ public class PracticeAnswerService {
 
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
         String answerPayloadJson = AnswerDataCodec.buildAnswerPayloadJson(
-                payload.selectedOptionKeys(), payload.booleanAnswer(), payload.textAnswer());
+                payload.selectedOptionKeys(), payload.booleanAnswer(), payload.textAnswer(),
+                payload.orderingAnswer(), payload.matchingAnswer());
 
         PracticeAnswer existing = practiceAnswerMapper.selectBySlotId(spaceId, slot.getId());
         PracticeAnswer saved;
@@ -121,6 +122,7 @@ public class PracticeAnswerService {
             answer.setSubmittedAt(now);
             answer.setDurationMs(request.durationMs());
             answer.setFeedbackJson(null);
+            answer.setCorrectAnswerSummary(grade.correctAnswerSummary());
             answer.setCreatedAt(now);
             answer.setUpdatedAt(now);
             practiceAnswerMapper.insert(answer);
@@ -129,7 +131,7 @@ public class PracticeAnswerService {
             int updated = practiceAnswerMapper.updateByIdAndSpace(
                     existing.getId(), spaceId, ownerSubject,
                     answerPayloadJson, grade.isCorrect(), grade.score(),
-                    now, request.durationMs(), null, now);
+                    now, request.durationMs(), null, grade.correctAnswerSummary(), now);
             if (updated == 0) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "answer row changed concurrently");
@@ -180,11 +182,11 @@ public class PracticeAnswerService {
         java.util.List<Long> wrongQuestionIds = new java.util.ArrayList<>();
         for (PracticeSessionQuestion slot : slots) {
             SnapshotView snapshot = AnswerDataCodec.parseSnapshot(slot.getQuestionSnapshotJson());
-            boolean objective = !"SHORT_ANSWER".equals(snapshot.questionType());
+            boolean objective = isObjective(snapshot.questionType());
             PracticeAnswer answer = answersBySlot.get(slot.getId());
             if (answer == null) {
                 if (objective) {
-                    maxScore += 1; // unanswered objective slot = 0/1
+                    maxScore += 1;
                 }
                 continue;
             }
@@ -202,7 +204,9 @@ public class PracticeAnswerService {
                     snapshot.answerData(),
                     new AnswerPayload(storedPayload.selectedOptionKeys(),
                             storedPayload.booleanAnswer(),
-                            storedPayload.textAnswer()));
+                            storedPayload.textAnswer(),
+                            storedPayload.orderingAnswer(),
+                            storedPayload.matchingAnswer()));
             if (!java.util.Objects.equals(grade.isCorrect(), answer.getIsCorrect())
                     || !java.util.Objects.equals(grade.score(), answer.getScore())) {
                 practiceAnswerMapper.updateGradeByIdAndSpace(
@@ -243,6 +247,13 @@ public class PracticeAnswerService {
                 correctCount, score, maxScore);
     }
 
+    /**
+     * Lists all answers of a practice session (space-scoped).
+     */
+    public List<PracticeAnswer> listAnswers(String ownerSubject, Long spaceId, Long sessionId) {
+        return practiceAnswerMapper.selectBySessionId(spaceId, sessionId);
+    }
+
     /** Shape validation per snapshot type (400 on violations). */
     private AnswerPayload validatePayloadShape(String questionType,
                                                PracticeAnswerRequest.AnswerPayloadView request) {
@@ -252,47 +263,95 @@ public class PracticeAnswerService {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "SINGLE_CHOICE requires exactly one selectedOptionKeys entry");
                 }
-                if (request.booleanAnswer() != null || request.textAnswer() != null) {
+                if (request.booleanAnswer() != null || request.textAnswer() != null
+                        || request.orderingAnswer() != null || request.matchingAnswer() != null) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "SINGLE_CHOICE answer must only carry selectedOptionKeys");
                 }
-                yield new AnswerPayload(request.selectedOptionKeys(), null, null);
+                yield AnswerPayload.of(request.selectedOptionKeys(), null, null);
             }
             case "MULTIPLE_CHOICE" -> {
                 if (request.selectedOptionKeys() == null || request.selectedOptionKeys().isEmpty()) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "MULTIPLE_CHOICE requires at least one selectedOptionKeys entry");
                 }
-                if (request.booleanAnswer() != null || request.textAnswer() != null) {
+                if (request.booleanAnswer() != null || request.textAnswer() != null
+                        || request.orderingAnswer() != null || request.matchingAnswer() != null) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "MULTIPLE_CHOICE answer must only carry selectedOptionKeys");
                 }
-                yield new AnswerPayload(request.selectedOptionKeys(), null, null);
+                yield AnswerPayload.of(request.selectedOptionKeys(), null, null);
             }
             case "TRUE_FALSE" -> {
                 if (request.booleanAnswer() == null) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "TRUE_FALSE requires booleanAnswer");
                 }
-                if (request.selectedOptionKeys() != null || request.textAnswer() != null) {
+                if (request.selectedOptionKeys() != null || request.textAnswer() != null
+                        || request.orderingAnswer() != null || request.matchingAnswer() != null) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "TRUE_FALSE answer must only carry booleanAnswer");
                 }
-                yield new AnswerPayload(null, request.booleanAnswer(), null);
+                yield AnswerPayload.of(null, request.booleanAnswer(), null);
             }
             case "SHORT_ANSWER" -> {
                 if (request.textAnswer() == null) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "SHORT_ANSWER requires textAnswer");
                 }
-                if (request.selectedOptionKeys() != null || request.booleanAnswer() != null) {
+                if (request.selectedOptionKeys() != null || request.booleanAnswer() != null
+                        || request.orderingAnswer() != null || request.matchingAnswer() != null) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "SHORT_ANSWER answer must only carry textAnswer");
                 }
-                yield new AnswerPayload(null, null, request.textAnswer());
+                yield AnswerPayload.of(null, null, request.textAnswer());
+            }
+            case "FILL_BLANK" -> {
+                if (request.textAnswer() == null || request.textAnswer().isBlank()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "FILL_BLANK requires textAnswer (JSON array string)");
+                }
+                if (request.selectedOptionKeys() != null || request.booleanAnswer() != null
+                        || request.orderingAnswer() != null || request.matchingAnswer() != null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "FILL_BLANK answer must only carry textAnswer");
+                }
+                yield AnswerPayload.of(null, null, request.textAnswer());
+            }
+            case "ORDERING" -> {
+                if (request.orderingAnswer() == null || request.orderingAnswer().isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "ORDERING requires orderingAnswer");
+                }
+                if (request.selectedOptionKeys() != null || request.booleanAnswer() != null
+                        || request.textAnswer() != null || request.matchingAnswer() != null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "ORDERING answer must only carry orderingAnswer");
+                }
+                yield AnswerPayload.of(null, null, null, request.orderingAnswer(), null);
+            }
+            case "MATCHING" -> {
+                if (request.matchingAnswer() == null || request.matchingAnswer().isBlank()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "MATCHING requires matchingAnswer (JSON array string)");
+                }
+                if (request.selectedOptionKeys() != null || request.booleanAnswer() != null
+                        || request.textAnswer() != null || request.orderingAnswer() != null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "MATCHING answer must only carry matchingAnswer");
+                }
+                yield AnswerPayload.of(null, null, null, null, request.matchingAnswer());
             }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "unsupported questionType: " + questionType);
+        };
+    }
+
+    private static boolean isObjective(String questionType) {
+        return switch (questionType) {
+            case "SINGLE_CHOICE", "MULTIPLE_CHOICE", "TRUE_FALSE",
+                 "FILL_BLANK", "ORDERING", "MATCHING" -> true;
+            default -> false;
         };
     }
 }

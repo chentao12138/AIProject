@@ -42,6 +42,11 @@ public interface ExamAnswerMapper extends BaseMapper<ExamAnswer> {
                                         @Param("userSubject") String userSubject,
                                         @Param("ownerSubject") String ownerSubject);
 
+    /** Single answer by id + space (grading endpoint). */
+    @Select("SELECT * FROM exam_answer WHERE id = #{id} AND space_id = #{spaceId} LIMIT 1")
+    ExamAnswer selectByIdAndSpace(@Param("id") Long id,
+                                  @Param("spaceId") Long spaceId);
+
     /** Scoped upsert update. */
     @Update("UPDATE exam_answer SET answer_data_json = #{answerDataJson}, "
             + "score = #{score}, is_correct = #{isCorrect}, answered_at = #{answeredAt}, "
@@ -55,4 +60,24 @@ public interface ExamAnswerMapper extends BaseMapper<ExamAnswer> {
                            @Param("answeredAt") LocalDateTime answeredAt,
                            @Param("gradingStatus") String gradingStatus,
                            @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** Manual grade update with audit trail (previous score/feedback snapshot). */
+    @Update("UPDATE exam_answer SET "
+            + "previous_score = COALESCE(previous_score, score), "
+            + "score = #{score}, "
+            + "grading_status = #{gradingStatus}, "
+            + "previous_feedback = COALESCE(previous_feedback, feedback), "
+            + "feedback = #{feedback}, "
+            + "graded_by = #{gradedBy}, "
+            + "graded_at = #{gradedAt}, "
+            + "updated_at = #{updatedAt} "
+            + "WHERE id = #{id} AND space_id = #{spaceId}")
+    int gradeUpdate(@Param("id") Long id,
+                    @Param("spaceId") Long spaceId,
+                    @Param("score") Integer score,
+                    @Param("gradingStatus") String gradingStatus,
+                    @Param("feedback") String feedback,
+                    @Param("gradedBy") String gradedBy,
+                    @Param("gradedAt") LocalDateTime gradedAt,
+                    @Param("updatedAt") LocalDateTime updatedAt);
 }

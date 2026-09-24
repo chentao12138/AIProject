@@ -3,6 +3,8 @@ package com.aistudy.server.auth.controller;
 import com.aistudy.server.auth.dto.AdminUserDetail;
 import com.aistudy.server.auth.dto.AdminUserPageResponse;
 import com.aistudy.server.auth.dto.AdminUserSummary;
+import com.aistudy.server.auth.dto.CreateUserRequest;
+import com.aistudy.server.auth.dto.ResetPasswordRequest;
 import com.aistudy.server.auth.dto.UpdateUserRolesRequest;
 import com.aistudy.server.auth.dto.UpdateUserStatusRequest;
 import com.aistudy.server.auth.service.AdminUserService;
@@ -10,20 +12,10 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * BUSINESS-019 — minimal platform admin API.
- */
 @RestController
 @RequestMapping("/api/v1/admin/users")
 public class AdminUserController {
@@ -36,15 +28,15 @@ public class AdminUserController {
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @SecurityRequirement(name = "bearerAuth")
-    public AdminUserPageResponse listUsers(@org.springframework.web.bind.annotation.RequestParam(defaultValue = "0") int page,
-                                           @org.springframework.web.bind.annotation.RequestParam(defaultValue = "20") int size) {
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    public AdminUserPageResponse listUsers(@RequestParam(defaultValue = "0") int page,
+                                           @RequestParam(defaultValue = "20") int size) {
         return adminUserService.listUsers(page, Math.min(size, 100));
     }
 
     @GetMapping("/{subject}")
     @PreAuthorize("hasRole('ADMIN')")
-    @SecurityRequirement(name = "bearerAuth")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<AdminUserDetail> getUser(@PathVariable String subject) {
         AdminUserDetail detail = adminUserService.getUserDetail(subject);
         if (detail == null) {
@@ -53,9 +45,17 @@ public class AdminUserController {
         return ResponseEntity.ok(detail);
     }
 
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @ResponseStatus(HttpStatus.CREATED)
+    public AdminUserSummary createUser(@Valid @RequestBody CreateUserRequest request) {
+        return adminUserService.createUser(request);
+    }
+
     @PatchMapping("/{subject}/status")
     @PreAuthorize("hasRole('ADMIN')")
-    @SecurityRequirement(name = "bearerAuth")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<Void> updateStatus(@PathVariable String subject,
                                              @Valid @RequestBody UpdateUserStatusRequest request) {
         adminUserService.updateStatus(subject, request.status().name());
@@ -64,10 +64,19 @@ public class AdminUserController {
 
     @PutMapping("/{subject}/roles")
     @PreAuthorize("hasRole('ADMIN')")
-    @SecurityRequirement(name = "bearerAuth")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<Void> updateRoles(@PathVariable String subject,
                                             @Valid @RequestBody UpdateUserRolesRequest request) {
         adminUserService.updateRoles(subject, request.roles());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{subject}/reset-password")
+    @PreAuthorize("hasRole('ADMIN')")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<Void> resetPassword(@PathVariable String subject,
+                                              @Valid @RequestBody ResetPasswordRequest request) {
+        adminUserService.resetPassword(subject, request.newPassword());
         return ResponseEntity.noContent().build();
     }
 }

@@ -71,6 +71,7 @@ public class AiConversationService {
     private final AiProperties aiProperties;
     private final AiRuntimeConfigResolver configResolver;
     private final AiMetrics aiMetrics;
+    private final AiUsageRecordService aiUsageRecordService;
 
     public AiConversationService(AiConversationMapper conversationMapper,
                                  AiMessageMapper messageMapper,
@@ -82,7 +83,8 @@ public class AiConversationService {
                                  AiProvider aiProvider,
                                  AiProperties aiProperties,
                                  AiRuntimeConfigResolver configResolver,
-                                 AiMetrics aiMetrics) {
+                                 AiMetrics aiMetrics,
+                                 AiUsageRecordService aiUsageRecordService) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.messageReferenceMapper = messageReferenceMapper;
@@ -94,6 +96,7 @@ public class AiConversationService {
         this.aiProperties = aiProperties;
         this.configResolver = configResolver;
         this.aiMetrics = aiMetrics;
+        this.aiUsageRecordService = aiUsageRecordService;
     }
 
     @Transactional
@@ -245,18 +248,33 @@ public class AiConversationService {
 
         AiChatResponse response;
         try {
+            long start = System.currentTimeMillis();
             response = aiProvider.chat(new AiChatRequest(
                     providerMessages,
                     aiProperties.getTemperature(),
                     aiProperties.getMaxOutputTokens()), ownerSubject);
+            long latency = System.currentTimeMillis() - start;
+            aiUsageRecordService.record(ownerSubject, spaceId,
+                    response.provider(), response.model(),
+                    "TUTOR", null,
+                    response.usage() != null ? response.usage().promptTokens() : null,
+                    response.usage() != null ? response.usage().completionTokens() : null,
+                    response.usage() != null ? response.usage().totalTokens() : null,
+                    (int) latency,
+                    "SUCCESS", null);
         } catch (AiProviderException e) {
             aiMetrics.recordFailure(aiProperties.getProvider(), e.errorCode().name());
+            aiUsageRecordService.record(ownerSubject, spaceId,
+                    aiProperties.getProvider(), aiProperties.getModel(),
+                    "TUTOR", null, null, null, null, null,
+                    "FAILED", e.errorCode().name());
             throw e;
         }
         aiMetrics.recordRequest(aiProperties.getProvider(), "SUCCESS");
 
+        String groundingMode = deriveGroundingMode(contextItems);
         AiMessage assistantMessage = messagePersistenceService.persistAssistantMessage(
-                ownerSubject, spaceId, conversation, response, contextItems);
+                ownerSubject, spaceId, conversation, response, contextItems, groundingMode);
 
         List<ContextReference> refs = contextItems.stream()
                 .map(item -> new ContextReference(
@@ -271,6 +289,18 @@ public class AiConversationService {
     }
 
     // ==================== internals ====================
+
+    private static String deriveGroundingMode(List<AiContextItem> contextItems) {
+        if (contextItems == null || contextItems.isEmpty()) {
+            return "GENERAL";
+        }
+        boolean hasStructuredReference = contextItems.stream()
+                .anyMatch(item -> item != null
+                        && item.entityId() != null
+                        && item.type() != null
+                        && !item.type().isBlank());
+        return hasStructuredReference ? "GROUNDED" : "MIXED";
+    }
 
     private void requireAiEnabled(String userSubject) {
         if (!configResolver.resolveForUser(userSubject).isConfigured()) {
@@ -359,6 +389,7 @@ public class AiConversationService {
                 message.getPromptTokens(),
                 message.getCompletionTokens(),
                 message.getTotalTokens(),
+                message.getGroundingMode(),
                 message.getCreatedAt(),
                 references == null ? List.of() : List.copyOf(references)
         );

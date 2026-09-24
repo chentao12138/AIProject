@@ -42,15 +42,19 @@ and override the Spring Boot defaults declared there.
 
 | Variable | Profiles | Required | Default | Format / Unit | Secret? |
 | --- | --- | --- | --- | --- | --- |
-| `AUTH_JWT_SECRET` | all | yes for prod | (none) | Base64-encoded HMAC secret (>= 32 bytes after decode for HS256) | yes |
+| `AUTH_JWT_SECRET` | all | yes for local / prod | (none) | Base64-encoded HMAC secret (>= 32 bytes after decode for HS256) | yes |
 | `AUTH_JWT_ACCESS_TOKEN_TTL_SECONDS` | all | no | `900` | seconds | no |
 | `AUTH_REFRESH_TOKEN_TTL_SECONDS` | all | no | `2592000` | seconds | no |
 
-Production startup fails if `AUTH_JWT_SECRET` is absent or decodes to fewer
-than 256 bits.
+Startup fails if `AUTH_JWT_SECRET` is absent or decodes to fewer than 256
+bits — in **any** profile, not only production. `AuthJwtEncoder` is an
+unconditional `@Component`, so a `local` boot with an empty secret dies with
+`AUTH_JWT_SECRET is required for production JWT signing`; the message names
+production but the check does not gate on the profile.
 
 `application-test.yml` and `application-flyway-it.yml` supply deterministic
-test-only defaults so the context can boot without secrets.
+test-only defaults so the context can boot without secrets. `local` has no
+default: export a throwaway Base64 value and never reuse a production secret.
 
 ## Storage
 
@@ -109,6 +113,25 @@ than `min-age` to avoid racing with in-flight uploads.
 | `AISTUDY_INGESTION_IMAGE_MAX_WIDTH` | all | no | `10000` | pixels | no |
 | `AISTUDY_INGESTION_IMAGE_MAX_HEIGHT` | all | no | `10000` | pixels | no |
 | `AISTUDY_INGESTION_IMAGE_MAX_PIXELS` | all | no | `100000000` | pixels | no |
+
+## Ingestion worker / job lease
+
+The in-process ingestion pool and its recovery lease (architecture.md §6.2).
+
+| Variable | Property | Profiles | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `AISTUDY_INGESTION_WORKER_CORE_SIZE` | `aistudy.ingestion.worker.core-size` | all | `2` | resident worker threads |
+| `AISTUDY_INGESTION_WORKER_MAX_SIZE` | `aistudy.ingestion.worker.max-size` | all | `4` | max worker threads |
+| `AISTUDY_INGESTION_WORKER_QUEUE_CAPACITY` | `aistudy.ingestion.worker.queue-capacity` | all | `64` | overflow beyond this stays QUEUED in the DB instead of piling up in heap |
+| `AISTUDY_INGESTION_WORKER_SHUTDOWN_GRACE` | `aistudy.ingestion.worker.shutdown-grace` | all | `PT20S` | time in-flight jobs get during graceful shutdown (must stay below `spring.lifecycle.timeout-per-shutdown-phase`) |
+| `AISTUDY_INGESTION_WORKER_STALE_LEASE` | `aistudy.ingestion.worker.stale-lease` | all | `PT30M` | claim age after which recovery may requeue the job |
+| `AISTUDY_INGESTION_WORKER_HEARTBEAT` | `aistudy.ingestion.worker.heartbeat` | all | `PT5M` | how often a running worker renews its claim |
+| `AISTUDY_INGESTION_WORKER_RECOVERY_INTERVAL_MS` | `aistudy.ingestion.worker.recovery-interval-ms` | all | `60000` | recovery tick interval |
+| `AISTUDY_INGESTION_WORKER_RECOVERY_ENABLED` | `aistudy.ingestion.worker.recovery-enabled` | all | `true` | disabled in the `test` / `flyway-it` profiles so tests drive job state by hand |
+
+Heartbeat must stay well below the stale lease: a job that outruns the lease
+without renewing can be requeued while still running, which puts two workers on
+the same source.
 
 ## Production required variables summary
 

@@ -469,6 +469,374 @@ export function createApiClient(baseUrl: string, tokenProvider: TokenProvider) {
         }
       );
     },
+
+    /** GET .../ai/conversations/{conversationId}/messages — list conversation messages */
+    async listConversationMessages(
+      spaceId: number,
+      conversationId: number,
+      query?: { page?: number; size?: number }
+    ) {
+      return (client as any).GET(
+        '/api/v1/spaces/{spaceId}/ai/conversations/{conversationId}/messages',
+        {
+          params: { path: { spaceId, conversationId }, query },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../ai/explanations/practice-answers/{answerId} */
+    async explainPracticeAnswer(spaceId: number, answerId: number) {
+      return (client as any).POST(
+        '/api/v1/spaces/{spaceId}/ai/explanations/practice-answers/{answerId}',
+        {
+          params: { path: { spaceId, answerId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../ai/explanations/exam-answers/{answerId} */
+    async explainExamAnswer(spaceId: number, answerId: number) {
+      return (client as any).POST(
+        '/api/v1/spaces/{spaceId}/ai/explanations/exam-answers/{answerId}',
+        {
+          params: { path: { spaceId, answerId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../ai/study-coach — read-only study coach */
+    async studyCoach(spaceId: number, body?: { question?: string }) {
+      return (client as any).POST('/api/v1/spaces/{spaceId}/ai/study-coach', {
+        params: { path: { spaceId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** POST .../ai/generation-jobs — create a space-scoped AI generation job */
+    async createAiGenerationJob(
+      spaceId: number,
+      body: {
+        jobType: string;
+        sourceId?: number;
+        revisionId?: number;
+        knowledgePointId?: number;
+        prompt?: string;
+      }
+    ) {
+      return (client as any).POST(
+        '/api/v1/spaces/{spaceId}/ai/generation-jobs',
+        {
+          params: { path: { spaceId } },
+          body,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../ai/generation-jobs — list my generation jobs */
+    async listAiGenerationJobs(spaceId: number, query?: { page?: number; size?: number }) {
+      return (client as any).GET('/api/v1/spaces/{spaceId}/ai/generation-jobs', {
+        params: { path: { spaceId }, query },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET .../ai/generation-jobs/{jobId} */
+    async getAiGenerationJob(spaceId: number, jobId: number) {
+      return (client as any).GET(
+        '/api/v1/spaces/{spaceId}/ai/generation-jobs/{jobId}',
+        {
+          params: { path: { spaceId, jobId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../ai/generation-jobs/{jobId}/retry */
+    async retryAiGenerationJob(spaceId: number, jobId: number) {
+      return (client as any).POST(
+        '/api/v1/spaces/{spaceId}/ai/generation-jobs/{jobId}/retry',
+        {
+          params: { path: { spaceId, jobId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../sources/{sourceId}/assets/{assetId}/content — authorized RAW download */
+    async downloadSourceAssetRaw(spaceId: number, sourceId: number, assetId: number) {
+      return (client as any).GET(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/{assetId}/content',
+        {
+          params: { path: { spaceId, sourceId, assetId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** DELETE .../sources/{sourceId}/folder-sync/snapshot/{snapshotId} */
+    async deleteFolderSyncSnapshot(spaceId: number, sourceId: number, snapshotId: number) {
+      return (client as any).DELETE(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}',
+        {
+          params: { path: { spaceId, sourceId, snapshotId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET /api/v1/admin/system-config/registry — ADMIN typed config registry */
+    async adminSystemConfigRegistry() {
+      return (client as any).GET('/api/v1/admin/system-config/registry', {
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** PUT /api/v1/admin/system-config/{key} — ADMIN set runtime config value only */
+    async adminUpsertSystemConfig(key: string, value: string) {
+      return (client as any).PUT('/api/v1/admin/system-config/{key}', {
+        params: { path: { key } },
+        body: { value },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET /api/v1/admin/sources — ADMIN source governance list */
+    async adminListSources(query?: { q?: string; spaceId?: number; page?: number; size?: number }) {
+      return (client as any).GET('/api/v1/admin/sources', {
+        query,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** POST /api/v1/admin/sources/jobs/{jobId}/retry */
+    async adminRetryIngestionJob(jobId: number) {
+      return (client as any).POST('/api/v1/admin/sources/jobs/{jobId}/retry', {
+        params: { path: { jobId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** POST .../notes/{noteId}/knowledge-points — link knowledge points to MY note */
+    async addNoteKnowledgePoints(spaceId: number, noteId: number, kpIds: number[]) {
+      return (client as any).POST(
+        '/api/v1/spaces/{spaceId}/notes/{noteId}/knowledge-points',
+        {
+          params: { path: { spaceId, noteId } },
+          body: kpIds,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../notes/{noteId}/knowledge-points — list knowledge points of MY note */
+    async listNoteKnowledgePoints(spaceId: number, noteId: number) {
+      return (client as any).GET(
+        '/api/v1/spaces/{spaceId}/notes/{noteId}/knowledge-points',
+        {
+          params: { path: { spaceId, noteId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** DELETE .../notes/{noteId}/knowledge-points/{kpId} — unlink a knowledge point from MY note */
+    async removeNoteKnowledgePoint(spaceId: number, noteId: number, kpId: number) {
+      return (client as any).DELETE(
+        '/api/v1/spaces/{spaceId}/notes/{noteId}/knowledge-points/{kpId}',
+        {
+          params: { path: { spaceId, noteId, kpId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../notes/{noteId}/source-blocks — link content blocks to MY note */
+    async addNoteSourceBlocks(spaceId: number, noteId: number, blockIds: number[]) {
+      return (client as any).POST(
+        '/api/v1/spaces/{spaceId}/notes/{noteId}/source-blocks',
+        {
+          params: { path: { spaceId, noteId } },
+          body: blockIds,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../notes/{noteId}/source-blocks — list content blocks of MY note */
+    async listNoteSourceBlocks(spaceId: number, noteId: number) {
+      return (client as any).GET(
+        '/api/v1/spaces/{spaceId}/notes/{noteId}/source-blocks',
+        {
+          params: { path: { spaceId, noteId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** DELETE .../notes/{noteId}/source-blocks/{blockId} — unlink a content block from MY note */
+    async removeNoteSourceBlock(spaceId: number, noteId: number, blockId: number) {
+      return (client as any).DELETE(
+        '/api/v1/spaces/{spaceId}/notes/{noteId}/source-blocks/{blockId}',
+        {
+          params: { path: { spaceId, noteId, blockId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../questions/{questionId}/source-blocks — link content blocks to MY question */
+    async addQuestionSourceBlocks(spaceId: number, questionId: number, blockIds: number[]) {
+      return (client as any).POST(
+        '/api/v1/spaces/{spaceId}/questions/{questionId}/source-blocks',
+        {
+          params: { path: { spaceId, questionId } },
+          body: blockIds,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../questions/{questionId}/source-blocks — list content blocks of MY question */
+    async listQuestionSourceBlocks(spaceId: number, questionId: number) {
+      return (client as any).GET(
+        '/api/v1/spaces/{spaceId}/questions/{questionId}/source-blocks',
+        {
+          params: { path: { spaceId, questionId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** DELETE .../questions/{questionId}/source-blocks/{blockId} — unlink a content block from MY question */
+    async removeQuestionSourceBlock(spaceId: number, questionId: number, blockId: number) {
+      return (client as any).DELETE(
+        '/api/v1/spaces/{spaceId}/questions/{questionId}/source-blocks/{blockId}',
+        {
+          params: { path: { spaceId, questionId, blockId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../knowledge-points/{kpId}/relations — add a relation from MY knowledge point */
+    async addKnowledgePointRelation(
+      spaceId: number,
+      kpId: number,
+      body: { relationType: string; targetKpId: number; weight?: number; notes?: string }
+    ) {
+      return (client as any).POST(
+        '/api/v1/spaces/{spaceId}/knowledge-points/{kpId}/relations',
+        {
+          params: { path: { spaceId, kpId } },
+          body,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../knowledge-points/{kpId}/relations — list relations of MY knowledge point */
+    async listKnowledgePointRelations(spaceId: number, kpId: number) {
+      return (client as any).GET(
+        '/api/v1/spaces/{spaceId}/knowledge-points/{kpId}/relations',
+        {
+          params: { path: { spaceId, kpId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** DELETE .../knowledge-points/{kpId}/relations/{relationId} — remove a relation */
+    async removeKnowledgePointRelation(spaceId: number, kpId: number, relationId: number) {
+      return (client as any).DELETE(
+        '/api/v1/spaces/{spaceId}/knowledge-points/{kpId}/relations/{relationId}',
+        {
+          params: { path: { spaceId, kpId, relationId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../sources/{sourceId}/folder-sync/snapshot — create a folder import snapshot */
+    async createFolderSyncSnapshot(spaceId: number, sourceId: number) {
+      return (client as any).POST(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot',
+        {
+          params: { path: { spaceId, sourceId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../sources/{sourceId}/folder-sync/snapshot/{snapshotId}/entries — submit folder entries */
+    async submitFolderSyncEntries(
+      spaceId: number,
+      sourceId: number,
+      snapshotId: number,
+      entries: { relativePath: string; sha256?: string }[]
+    ) {
+      return (client as any).POST(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/entries',
+        {
+          params: { path: { spaceId, sourceId, snapshotId } },
+          body: entries,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../sources/{sourceId}/folder-sync/snapshot — list folder sync snapshots */
+    async listFolderSyncSnapshots(spaceId: number, sourceId: number) {
+      return (client as any).GET(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot',
+        {
+          params: { path: { spaceId, sourceId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../sources/{sourceId}/folder-sync/snapshot/{snapshotId} — get one snapshot */
+    async getFolderSyncSnapshot(spaceId: number, sourceId: number, snapshotId: number) {
+      return (client as any).GET(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}',
+        {
+          params: { path: { spaceId, sourceId, snapshotId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** GET .../sources/{sourceId}/folder-sync/snapshot/{snapshotId}/entries — list entries of a snapshot */
+    async listFolderSyncEntries(spaceId: number, sourceId: number, snapshotId: number) {
+      return (client as any).GET(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/entries',
+        {
+          params: { path: { spaceId, sourceId, snapshotId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../sources/{sourceId}/versions/compare — compare two extraction revisions */
+    async compareSourceVersions(
+      spaceId: number,
+      sourceId: number,
+      body: { fromRevisionId: number; toRevisionId: number }
+    ) {
+      return (client as any).POST(
+        '/api/v1/spaces/{spaceId}/sources/{sourceId}/versions/compare',
+        {
+          params: { path: { spaceId, sourceId } },
+          body,
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
   };
 }
 

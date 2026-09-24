@@ -1,5 +1,6 @@
 package com.aistudy.server.question.eval;
 
+import com.aistudy.server.question.eval.QuestionAnswerEvaluator.AnswerPayload;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -21,27 +22,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class QuestionAnswerEvaluatorTest {
 
     private static AnswerDataCodec.AnswerData single(String key) {
-        return new AnswerDataCodec.AnswerData(key, null, null, null);
+        return new AnswerDataCodec.AnswerData(key, null, null, null, null, null);
     }
 
     private static AnswerDataCodec.AnswerData multiple(String... keys) {
-        return new AnswerDataCodec.AnswerData(null, List.of(keys), null, null);
+        return new AnswerDataCodec.AnswerData(null, List.of(keys), null, null, null, null);
     }
 
     private static AnswerDataCodec.AnswerData bool(Boolean value) {
-        return new AnswerDataCodec.AnswerData(null, null, value, null);
+        return new AnswerDataCodec.AnswerData(null, null, value, null, null, null);
     }
 
     @Test
     void singleChoiceCorrectAndWrong() {
         var correct = QuestionAnswerEvaluator.grade("SINGLE_CHOICE", single("B"),
-                new QuestionAnswerEvaluator.AnswerPayload(List.of("B"), null, null));
+                AnswerPayload.of(List.of("B"), null, null));
         assertTrue(correct.isCorrect());
         assertEquals(1, correct.score());
         assertEquals("B", correct.correctAnswerSummary());
 
         var wrong = QuestionAnswerEvaluator.grade("SINGLE_CHOICE", single("B"),
-                new QuestionAnswerEvaluator.AnswerPayload(List.of("A"), null, null));
+                AnswerPayload.of(List.of("A"), null, null));
         assertFalse(wrong.isCorrect());
         assertEquals(0, wrong.score());
     }
@@ -50,49 +51,45 @@ class QuestionAnswerEvaluatorTest {
     void singleChoiceRequiresExactlyOneKey() {
         assertThrows(IllegalArgumentException.class, () ->
                 QuestionAnswerEvaluator.grade("SINGLE_CHOICE", single("B"),
-                        new QuestionAnswerEvaluator.AnswerPayload(List.of(), null, null)));
+                        AnswerPayload.of(List.of(), null, null)));
         assertThrows(IllegalArgumentException.class, () ->
                 QuestionAnswerEvaluator.grade("SINGLE_CHOICE", single("B"),
-                        new QuestionAnswerEvaluator.AnswerPayload(List.of("A", "B"), null, null)));
+                        AnswerPayload.of(List.of("A", "B"), null, null)));
     }
 
     @Test
     void multipleChoiceIsExactSetMatch() {
-        var answer = new QuestionAnswerEvaluator.AnswerPayload(List.of("A", "C"), null, null);
+        var answer = AnswerPayload.of(List.of("A", "C"), null, null);
         assertTrue(QuestionAnswerEvaluator.grade("MULTIPLE_CHOICE", multiple("A", "C"), answer)
                 .isCorrect());
-        // same set, different order → still exact-set correct
         assertTrue(QuestionAnswerEvaluator.grade("MULTIPLE_CHOICE", multiple("C", "A"),
-                new QuestionAnswerEvaluator.AnswerPayload(List.of("C", "A"), null, null))
+                AnswerPayload.of(List.of("C", "A"), null, null))
                 .isCorrect());
-        // subset → wrong
         assertFalse(QuestionAnswerEvaluator.grade("MULTIPLE_CHOICE", multiple("A", "C"),
-                new QuestionAnswerEvaluator.AnswerPayload(List.of("A"), null, null)).isCorrect());
-        // superset → wrong
+                AnswerPayload.of(List.of("A"), null, null)).isCorrect());
         assertFalse(QuestionAnswerEvaluator.grade("MULTIPLE_CHOICE", multiple("A", "C"),
-                new QuestionAnswerEvaluator.AnswerPayload(List.of("A", "B", "C"), null, null))
+                AnswerPayload.of(List.of("A", "B", "C"), null, null))
                 .isCorrect());
-        // empty → rejected by shape validation
         assertThrows(IllegalArgumentException.class, () ->
                 QuestionAnswerEvaluator.grade("MULTIPLE_CHOICE", multiple("A", "C"),
-                        new QuestionAnswerEvaluator.AnswerPayload(List.of(), null, null)));
+                        AnswerPayload.of(List.of(), null, null)));
     }
 
     @Test
     void trueFalseMatchesBooleanExactly() {
         assertTrue(QuestionAnswerEvaluator.grade("TRUE_FALSE", bool(true),
-                new QuestionAnswerEvaluator.AnswerPayload(null, true, null)).isCorrect());
+                AnswerPayload.of(null, true, null)).isCorrect());
         assertFalse(QuestionAnswerEvaluator.grade("TRUE_FALSE", bool(true),
-                new QuestionAnswerEvaluator.AnswerPayload(null, false, null)).isCorrect());
+                AnswerPayload.of(null, false, null)).isCorrect());
         assertThrows(IllegalArgumentException.class, () ->
                 QuestionAnswerEvaluator.grade("TRUE_FALSE", bool(true),
-                        new QuestionAnswerEvaluator.AnswerPayload(null, null, null)));
+                        AnswerPayload.of(null, null, null)));
     }
 
     @Test
     void shortAnswerIsUngraded() {
         var result = QuestionAnswerEvaluator.grade("SHORT_ANSWER", null,
-                new QuestionAnswerEvaluator.AnswerPayload(null, null, "ACID"));
+                AnswerPayload.of(null, null, "ACID"));
         assertNull(result.isCorrect());
         assertNull(result.score());
         assertNull(result.correctAnswerSummary());
@@ -102,6 +99,6 @@ class QuestionAnswerEvaluatorTest {
     void unknownTypeRejected() {
         assertThrows(IllegalArgumentException.class, () ->
                 QuestionAnswerEvaluator.grade("ESSAY", single("A"),
-                        new QuestionAnswerEvaluator.AnswerPayload(List.of("A"), null, null)));
+                        AnswerPayload.of(List.of("A"), null, null)));
     }
 }

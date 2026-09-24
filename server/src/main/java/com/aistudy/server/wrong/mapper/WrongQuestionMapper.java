@@ -26,6 +26,12 @@ public interface WrongQuestionMapper extends BaseMapper<WrongQuestion> {
                                             @Param("spaceId") Long spaceId,
                                             @Param("questionId") Long questionId);
 
+    /** Single row by id + space (for dismiss/restore ownership checks). */
+    @Select("SELECT * FROM wrong_question "
+            + "WHERE id = #{wrongQuestionId} AND space_id = #{spaceId} LIMIT 1")
+    WrongQuestion selectByIdAndSpace(@Param("wrongQuestionId") Long wrongQuestionId,
+                                     @Param("spaceId") Long spaceId);
+
     /** Wrong answers of one space (JOIN owner), newest wrong first. */
     @Select("SELECT wq.* FROM wrong_question wq "
             + "JOIN learning_space ls ON ls.id = wq.space_id "
@@ -77,4 +83,27 @@ public interface WrongQuestionMapper extends BaseMapper<WrongQuestion> {
                                            @Param("userSubject") String userSubject,
                                            @Param("questionId") Long questionId,
                                            @Param("limit") int limit);
+
+    /** Dismiss a wrong question (soft flag via dismissed_at timestamp). */
+    @Update("UPDATE wrong_question "
+            + "SET dismissed_at = #{dismissedAt}, status = #{status}, "
+            + "    updated_at = #{updatedAt} "
+            + "WHERE id = #{id} AND space_id = #{spaceId} AND user_subject = #{userSubject}")
+    int dismissByIdAndSpace(@Param("id") Long id,
+                            @Param("spaceId") Long spaceId,
+                            @Param("userSubject") String userSubject,
+                            @Param("dismissedAt") LocalDateTime dismissedAt,
+                            @Param("status") String status,
+                            @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** Restore a dismissed wrong question (clear dismissed_at). */
+    @Update("UPDATE wrong_question "
+            + "SET dismissed_at = NULL, status = #{status}, "
+            + "    updated_at = #{updatedAt} "
+            + "WHERE id = #{id} AND space_id = #{spaceId} AND user_subject = #{userSubject}")
+    int restoreByIdAndSpace(@Param("id") Long id,
+                            @Param("spaceId") Long spaceId,
+                            @Param("userSubject") String userSubject,
+                            @Param("status") String status,
+                            @Param("updatedAt") LocalDateTime updatedAt);
 }

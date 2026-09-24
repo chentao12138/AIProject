@@ -21,8 +21,10 @@ public class AiMessage {
     private Integer promptTokens;
     private Integer completionTokens;
     private Integer totalTokens;
-    private LocalDateTime createdAt;
 
+    private String groundingMode;
+
+    private LocalDateTime createdAt;
     public Long getId() {
         return id;
     }
@@ -93,6 +95,14 @@ public class AiMessage {
 
     public void setTotalTokens(Integer totalTokens) {
         this.totalTokens = totalTokens;
+    }
+
+    public String getGroundingMode() {
+        return groundingMode;
+    }
+
+    public void setGroundingMode(String groundingMode) {
+        this.groundingMode = groundingMode;
     }
 
     public LocalDateTime getCreatedAt() {

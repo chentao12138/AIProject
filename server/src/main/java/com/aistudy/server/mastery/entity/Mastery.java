@@ -29,6 +29,8 @@ public class Mastery {
 
     private Double confidence;
 
+    private String algorithmVersion;
+
     private Integer practiceEvidenceCount;
 
     private Integer examEvidenceCount;
@@ -87,6 +89,14 @@ public class Mastery {
 
     public void setConfidence(Double confidence) {
         this.confidence = confidence;
+    }
+
+    public String getAlgorithmVersion() {
+        return algorithmVersion;
+    }
+
+    public void setAlgorithmVersion(String algorithmVersion) {
+        this.algorithmVersion = algorithmVersion;
     }
 
     public Integer getPracticeEvidenceCount() {

@@ -17,7 +17,7 @@ import java.util.List;
  * 任意直接调用以绕过应用服务"). Controllers call this service; the
  * mapper is never touched from the controller layer.
  *
- * <h3>Owner isolation rule (restated from the mapper Javadoc)</h3>
+ * <h3>Owner isolation rule</h3>
  *
  * <p>The inherited unscoped {@code BaseMapper} methods
  * ({@code selectById(id)}, {@code selectList(...)},
@@ -30,7 +30,7 @@ import java.util.List;
  *    WHERE id = ? AND owner_subject = ?     (getMine)
  *
  *   SELECT * FROM learning_space
- *    WHERE owner_subject = ?                (listMine)
+ *    WHERE owner_subject = ?                (listMine / listMineIncludingArchived)
  * </pre>
  *
  * <p>An id that exists but belongs to another subject simply does not
@@ -38,6 +38,12 @@ import java.util.List;
  * controller maps that to HTTP 404 (api-guidelines.md §13: 404 =
  * "不存在/按安全策略不可见"). No Java-side post-filtering is needed
  * and none exists.
+ *
+ * <h3>Lifecycle</h3>
+ *
+ * <p>Spaces can be renamed, archived, and restored. Archived spaces
+ * are excluded from normal list operations unless explicitly
+ * requested. All writes to an archived space are rejected.
  *
  * <h3>Owner source</h3>
  *
@@ -50,19 +56,14 @@ import java.util.List;
  *
  * <p>{@link #create} is {@code @Transactional}: insert + any future
  * follow-up work commit atomically. Reads are single-statement and
- * need no transaction.
- *
- * <h3>Out of scope for this vertical slice</h3>
- *
- * <p>rename / delete / archive / share / member management are NOT
- * implemented — each is a separate future task (TASK-001 scope,
- * docs/current-task.md).
+ * need no transaction. Lifecycle mutations (rename/archive/restore)
+ * are each single-row UPDATEs under their own transaction.
  */
 @Service
 public class LearningSpaceService {
 
-    /** v1 create always writes ACTIVE; ARCHIVED is reserved for the future archive feature. */
     public static final String STATUS_ACTIVE = "ACTIVE";
+    public static final String STATUS_ARCHIVED = "ARCHIVED";
 
     private final LearningSpaceMapper learningSpaceMapper;
 
@@ -70,21 +71,6 @@ public class LearningSpaceService {
         this.learningSpaceMapper = learningSpaceMapper;
     }
 
-    /**
-     * Creates a LearningSpace owned by the given subject.
-     *
-     * <p>The owner subject comes from the caller (the controller
-     * resolves it from the authenticated {@code Authentication}).
-     * The entity's {@code status} is fixed to ACTIVE and both
-     * timestamps are set to the same {@code now} value — the DB
-     * defaults exist as a backstop, the application always sets them
-     * explicitly so {@code updated_at == created_at} holds by
-     * construction on create.
-     *
-     * @param ownerSubject authenticated JWT subject; never from client input
-     * @param request      validated create request (name required)
-     * @return the persisted entity with its generated id
-     */
     @Transactional
     public LearningSpace create(String ownerSubject, CreateLearningSpaceRequest request) {
         LocalDateTime now = LocalDateTime.now();
@@ -101,30 +87,67 @@ public class LearningSpaceService {
         return space;
     }
 
-    /**
-     * Lists all LearningSpaces owned by the given subject, newest
-     * first. Bounded by {@code owner_subject = ?} in SQL — a caller
-     * can never enumerate another subject's spaces through this
-     * method.
-     *
-     * @param ownerSubject authenticated JWT subject
-     * @return owned spaces, newest first; empty list when none
-     */
     public List<LearningSpace> listMine(String ownerSubject) {
         return learningSpaceMapper.selectByOwner(ownerSubject);
     }
 
-    /**
-     * Returns the space with the given id IF AND ONLY IF it belongs
-     * to the given subject. {@code null} means either "no such space"
-     * or "exists but not yours" — deliberately indistinguishable, so
-     * callers cannot probe for the existence of other users' spaces.
-     *
-     * @param ownerSubject authenticated JWT subject
-     * @param spaceId      space id from the request path
-     * @return the owned space, or {@code null} if absent / not owned
-     */
+    public List<LearningSpace> listMineIncludingArchived(String ownerSubject) {
+        return learningSpaceMapper.selectByOwnerIncludingArchived(ownerSubject);
+    }
+
     public LearningSpace getMine(String ownerSubject, Long spaceId) {
         return learningSpaceMapper.selectByIdAndOwner(spaceId, ownerSubject);
+    }
+
+    @Transactional
+    public LearningSpace rename(String ownerSubject, Long spaceId, String newName, String newDescription) {
+        LearningSpace space = getMine(ownerSubject, spaceId);
+        if (space == null || STATUS_ARCHIVED.equals(space.getStatus())) {
+            return null;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int updated = learningSpaceMapper.updateNameDescriptionByIdAndOwner(
+                spaceId, ownerSubject, newName, newDescription, now);
+        if (updated == 0) {
+            return null;
+        }
+        space.setName(newName);
+        space.setDescription(newDescription);
+        space.setUpdatedAt(now);
+        return space;
+    }
+
+    @Transactional
+    public LearningSpace archive(String ownerSubject, Long spaceId) {
+        LearningSpace space = getMine(ownerSubject, spaceId);
+        if (space == null || STATUS_ARCHIVED.equals(space.getStatus())) {
+            return null;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int updated = learningSpaceMapper.archiveByIdAndOwner(spaceId, ownerSubject, STATUS_ARCHIVED, now, now);
+        if (updated == 0) {
+            return null;
+        }
+        space.setStatus(STATUS_ARCHIVED);
+        space.setArchivedAt(now);
+        space.setUpdatedAt(now);
+        return space;
+    }
+
+    @Transactional
+    public LearningSpace restore(String ownerSubject, Long spaceId) {
+        LearningSpace space = getMine(ownerSubject, spaceId);
+        if (space == null || !STATUS_ARCHIVED.equals(space.getStatus())) {
+            return null;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int updated = learningSpaceMapper.restoreByIdAndOwner(spaceId, ownerSubject, STATUS_ACTIVE, now);
+        if (updated == 0) {
+            return null;
+        }
+        space.setStatus(STATUS_ACTIVE);
+        space.setArchivedAt(null);
+        space.setUpdatedAt(now);
+        return space;
     }
 }

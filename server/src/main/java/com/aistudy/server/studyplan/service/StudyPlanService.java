@@ -69,9 +69,11 @@ public class StudyPlanService {
     public static final String TASK_TYPE_LEARN = "LEARN";
     public static final String TASK_TYPE_PRACTICE = "PRACTICE";
     public static final String TASK_TYPE_REVIEW = "REVIEW";
+    public static final String TASK_TYPE_EXAM = "EXAM";
 
     public static final String TARGET_QUESTION = "QUESTION";
     public static final String TARGET_KNOWLEDGE_POINT = "KNOWLEDGE_POINT";
+    public static final String TARGET_EXAM = "EXAM";
 
     public static final int DEFAULT_DAILY_LIMIT = 10;
     public static final int MAX_DAILY_LIMIT = 50;
@@ -246,6 +248,8 @@ public class StudyPlanService {
      * id ASC) first, then weakest mastery points (mastery_score ASC,
      * confidence ASC, id ASC). Dedupes by logical target — a review
      * task for a knowledge point suppresses a mastery task for it.
+     * EXAM tasks are added from latest diagnosis weak points (accuracy
+     * < 0.6) targeting the originating exam.
      */
     private List<Candidate> collectCandidates(String ownerSubject, Long spaceId) {
         List<Candidate> candidates = new ArrayList<>();
@@ -281,6 +285,27 @@ public class StudyPlanService {
                     m.getKnowledgePointId(), kpTitle(ownerSubject, spaceId, m.getKnowledgePointId()),
                     reasonFor(m, latestKpDiagnosis.get(m.getKnowledgePointId())),
                     null, priorityOf(m)));
+        }
+
+        for (Map.Entry<Long, ExamDiagnosisItem> e : latestKpDiagnosis.entrySet()) {
+            ExamDiagnosisItem item = e.getValue();
+            if (item.getAccuracy() == null || item.getAccuracy() >= 0.6) {
+                continue;
+            }
+            Long examId = examIdOfDiagnosisItem(ownerSubject, spaceId, item.getExamDiagnosisId());
+            if (examId == null) {
+                continue;
+            }
+            String key = TARGET_EXAM + ":" + examId;
+            if (!seen.add(key)) {
+                continue;
+            }
+            String title = "Exam " + examId + " retry (weak: " + item.getLabel() + ")";
+            String reason = String.format(java.util.Locale.ROOT,
+                    "Diagnosis accuracy %.2f for %s",
+                    item.getAccuracy(), item.getLabel());
+            candidates.add(new Candidate(TASK_TYPE_EXAM, TARGET_EXAM,
+                    examId, title, reason, null, "HIGH"));
         }
         return candidates;
     }
@@ -330,6 +355,11 @@ public class StudyPlanService {
         return kp == null ? "KnowledgePoint " + kpId : kp.getTitle();
     }
 
+    private Long examIdOfDiagnosisItem(String ownerSubject, Long spaceId, Long examDiagnosisId) {
+        return examDiagnosisItemMapper.selectExamIdByDiagnosisId(
+                examDiagnosisId, spaceId, ownerSubject);
+    }
+
     private static String truncate(String s, int max) {
         return s.length() <= max ? s : s.substring(0, max);
     }
@@ -339,5 +369,253 @@ public class StudyPlanService {
         if (studyTaskMapper.countOpenByPlanId(planId) == 0) {
             studyPlanMapper.updateStatusById(planId, STATUS_ACTIVE, STATUS_COMPLETED, now);
         }
+    }
+
+    /** §7.6 bump priority of open study tasks whose target KP just got a mastery recompute. */
+    @Transactional
+    public void bumpRelatedStudyTaskPriorities(String ownerSubject, Long spaceId, Long kpId) {
+        StudyPlanView current = getCurrent(ownerSubject, spaceId);
+        if (current == null || !STATUS_ACTIVE.equals(current.status())) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        for (StudyTaskView task : current.tasks()) {
+            if (TARGET_KNOWLEDGE_POINT.equals(task.targetType())
+                    && kpId.equals(task.targetId())
+                    && (TASK_STATUS_TODO.equals(task.status())
+                        || TASK_STATUS_IN_PROGRESS.equals(task.status()))) {
+                Mastery mastery = masteryMapper.selectByUserSpaceKp(ownerSubject, spaceId, kpId);
+                if (mastery != null && mastery.getMasteryScore() != null
+                        && mastery.getMasteryScore() < PRIORITY_HIGH_BELOW) {
+                    if (!"HIGH".equals(task.priority())) {
+                        studyTaskMapper.updatePriorityByIdAndSpace(
+                                task.id(), spaceId, ownerSubject, "HIGH", now);
+                    }
+                }
+            }
+        }
+    }
+
+    // ==================== §7.4 user control ====================
+
+    @Transactional
+    public StudyTaskView skip(String ownerSubject, Long spaceId, Long taskId) {
+        StudyTask task = requireOpenTask(ownerSubject, spaceId, taskId);
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        int updated = studyTaskMapper.skipByIdAndSpace(
+                taskId, spaceId, ownerSubject, now, now);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "study task state changed concurrently");
+        }
+        task.setStatus(TASK_STATUS_SKIPPED);
+        task.setCompletedAt(now);
+        task.setUpdatedAt(now);
+        maybeCompletePlan(ownerSubject, spaceId, task.getStudyPlanId(), now);
+        return StudyTaskView.from(task);
+    }
+
+    @Transactional
+    public StudyTaskView unskip(String ownerSubject, Long spaceId, Long taskId) {
+        StudyTask task = studyTaskMapper.selectByIdSpaceOwnerUser(
+                taskId, spaceId, ownerSubject, ownerSubject);
+        if (task == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "StudyTask not found");
+        }
+        if (!TASK_STATUS_SKIPPED.equals(task.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "only SKIPPED tasks can be unskipped: " + task.getStatus());
+        }
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        int updated = studyTaskMapper.unskipByIdAndSpace(
+                taskId, spaceId, ownerSubject, now);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "study task state changed concurrently");
+        }
+        task.setStatus(TASK_STATUS_TODO);
+        task.setCompletedAt(null);
+        task.setUpdatedAt(now);
+        studyPlanMapper.updateStatusById(task.getStudyPlanId(), STATUS_COMPLETED, STATUS_ACTIVE, now);
+        return StudyTaskView.from(task);
+    }
+
+    @Transactional
+    public StudyTaskView markInProgress(String ownerSubject, Long spaceId, Long taskId) {
+        StudyTask task = requireOpenTask(ownerSubject, spaceId, taskId);
+        if (TASK_STATUS_IN_PROGRESS.equals(task.getStatus())) {
+            return StudyTaskView.from(task);
+        }
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        int updated = studyTaskMapper.markInProgressByIdAndSpace(
+                taskId, spaceId, ownerSubject, now);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "study task state changed concurrently");
+        }
+        task.setStatus(TASK_STATUS_IN_PROGRESS);
+        task.setUpdatedAt(now);
+        return StudyTaskView.from(task);
+    }
+
+    @Transactional
+    public StudyTaskView adjustDueAt(String ownerSubject, Long spaceId, Long taskId,
+                                     java.time.LocalDateTime dueAt) {
+        StudyTask task = requireOpenTask(ownerSubject, spaceId, taskId);
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        int updated = studyTaskMapper.updateDueAtByIdAndSpace(
+                taskId, spaceId, ownerSubject, dueAt, now);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "study task state changed concurrently");
+        }
+        task.setDueAt(dueAt);
+        task.setUpdatedAt(now);
+        return StudyTaskView.from(task);
+    }
+
+    @Transactional
+    public StudyTaskView adjustPriority(String ownerSubject, Long spaceId, Long taskId,
+                                        String priority) {
+        StudyTask task = requireTask(ownerSubject, spaceId, taskId);
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        int updated = studyTaskMapper.updatePriorityByIdAndSpace(
+                taskId, spaceId, ownerSubject, priority, now);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "study task state changed concurrently");
+        }
+        task.setPriority(priority);
+        task.setUpdatedAt(now);
+        return StudyTaskView.from(task);
+    }
+
+    @Transactional
+    public StudyPlanView reorder(String ownerSubject, Long spaceId, Long planId,
+                                 List<Long> orderedTaskIds) {
+        StudyPlan plan = studyPlanMapper.selectLatestByUserSpace(
+                ownerSubject, spaceId, ownerSubject);
+        if (plan == null || !planId.equals(plan.getId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "StudyPlan not found");
+        }
+        List<StudyTask> existing = studyTaskMapper.selectByPlanId(planId);
+        if (existing.size() != orderedTaskIds.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "orderedTaskIds must contain all task ids of the plan");
+        }
+        java.util.Set<Long> expected = new java.util.HashSet<>();
+        for (StudyTask t : existing) {
+            expected.add(t.getId());
+        }
+        for (Long id : orderedTaskIds) {
+            if (!expected.contains(id)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "task id does not belong to this plan: " + id);
+            }
+        }
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        int order = 0;
+        for (Long taskId : orderedTaskIds) {
+            int u = studyTaskMapper.reorderTask(taskId, planId, order++, now);
+            if (u == 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "reorder failed for task: " + taskId);
+            }
+        }
+        return StudyPlanView.from(plan, studyTaskMapper.selectByPlanId(planId));
+    }
+
+    @Transactional
+    public StudyTaskView editTitleReason(String ownerSubject, Long spaceId, Long taskId,
+                                         String title, String reason) {
+        StudyTask task = requireTask(ownerSubject, spaceId, taskId);
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        int updated = studyTaskMapper.updateTitleReasonByIdAndSpace(
+                taskId, spaceId, ownerSubject,
+                title != null ? title : task.getTitle(),
+                reason != null ? reason : task.getReason(),
+                now);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "study task state changed concurrently");
+        }
+        task.setTitle(title != null ? title : task.getTitle());
+        task.setReason(reason != null ? reason : task.getReason());
+        task.setUpdatedAt(now);
+        return StudyTaskView.from(task);
+    }
+
+    @Transactional
+    public StudyPlanView regenerate(String ownerSubject, Long spaceId, Long planId) {
+        StudyPlan plan = studyPlanMapper.selectLatestByUserSpace(
+                ownerSubject, spaceId, ownerSubject);
+        if (plan == null || !planId.equals(plan.getId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "StudyPlan not found");
+        }
+        if (STATUS_COMPLETED.equals(plan.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "cannot regenerate a COMPLETED plan");
+        }
+        List<StudyTask> existing = studyTaskMapper.selectByPlanId(planId);
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        for (StudyTask task : existing) {
+            if (TASK_STATUS_DONE.equals(task.getStatus())
+                    || TASK_STATUS_SKIPPED.equals(task.getStatus())) {
+                continue;
+            }
+            studyTaskMapper.updateTitleReasonByIdAndSpace(
+                    task.getId(), spaceId, ownerSubject,
+                    task.getTitle() + " (replaced)",
+                    task.getReason(),
+                    now);
+            studyTaskMapper.skipByIdAndSpace(
+                    task.getId(), spaceId, ownerSubject, now, now);
+        }
+        List<Candidate> candidates = collectCandidates(ownerSubject, spaceId);
+        if (candidates.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "no plan candidates for regeneration");
+        }
+        int maxNew = Math.min(DEFAULT_DAILY_LIMIT, candidates.size());
+        for (int i = 0; i < maxNew; i++) {
+            Candidate c = candidates.get(i);
+            StudyTask task = new StudyTask();
+            task.setStudyPlanId(planId);
+            task.setUserSubject(ownerSubject);
+            task.setSpaceId(spaceId);
+            task.setTaskType(c.taskType);
+            task.setTargetType(c.targetType);
+            task.setTargetId(c.targetId);
+            task.setTitle(c.title);
+            task.setReason(c.reason);
+            task.setDueAt(c.dueAt);
+            task.setPriority(c.priority);
+            task.setStatus(TASK_STATUS_TODO);
+            task.setCreatedAt(now);
+            task.setUpdatedAt(now);
+            studyTaskMapper.insert(task);
+        }
+        studyPlanMapper.updateStatusById(planId, STATUS_COMPLETED, STATUS_ACTIVE, now);
+        return StudyPlanView.from(plan, studyTaskMapper.selectByPlanId(planId));
+    }
+
+    // ==================== task helpers ====================
+
+    private StudyTask requireTask(String ownerSubject, Long spaceId, Long taskId) {
+        StudyTask task = studyTaskMapper.selectByIdSpaceOwnerUser(
+                taskId, spaceId, ownerSubject, ownerSubject);
+        if (task == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "StudyTask not found");
+        }
+        return task;
+    }
+
+    private StudyTask requireOpenTask(String ownerSubject, Long spaceId, Long taskId) {
+        StudyTask task = requireTask(ownerSubject, spaceId, taskId);
+        if (TASK_STATUS_DONE.equals(task.getStatus()) || TASK_STATUS_SKIPPED.equals(task.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "task is already closed: " + task.getStatus());
+        }
+        return task;
     }
 }

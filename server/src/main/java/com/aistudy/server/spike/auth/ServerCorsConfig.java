@@ -33,10 +33,9 @@ import java.util.List;
  *   <li>Policy is registered ONLY for {@code /api/**} business APIs.
  *       {@code /health} and {@code /v3/api-docs} keep their existing
  *       policies untouched.</li>
- *   <li>Methods: GET / POST / OPTIONS — the only methods that exist on
- *       the current real controllers (verified by scanning every
- *       {@code @RequestMapping} in the codebase; no PUT/PATCH/DELETE
- *       exists yet).</li>
+ *   <li>Methods: GET / POST / PUT / DELETE / OPTIONS — covers existing
+ *       business APIs including AI-009 settings (PUT update, DELETE
+ *       API key).</li>
  *   <li>Allowed request headers: Authorization / Content-Type / Accept.
  *       Spring matches {@code Access-Control-Request-Headers}
  *       case-insensitively, so browser preflights carrying
@@ -70,7 +69,8 @@ public class ServerCorsConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(allowedOrigins);
-        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+        // AI-009 settings API uses PUT (update) and DELETE (drop API key).
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(
                 List.of("Authorization", "Content-Type", "Accept"));
         config.setAllowCredentials(false);

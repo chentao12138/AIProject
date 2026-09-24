@@ -5,6 +5,7 @@ import com.aistudy.server.ai.dto.AiDto.ConversationView;
 import com.aistudy.server.ai.dto.AiDto.MessagePageResponse;
 import com.aistudy.server.ai.service.AiConversationService;
 import com.aistudy.server.ai.service.AiMessagePersistenceService;
+import com.aistudy.server.ai.context.AiContextItem;
 import com.aistudy.server.ai.entity.AiConversation;
 import com.aistudy.server.ai.mapper.AiConversationMapper;
 import com.aistudy.server.ai.mapper.AiMessageMapper;
@@ -174,7 +175,8 @@ class AiConversationIntegrationTest {
                 USER_A, spaceA, conversation,
                 new AiChatResponse("answer", "openai-compatible", "m1",
                         new AiUsage(1, 2, 3)),
-                java.util.List.of());
+                java.util.Collections.<AiContextItem>emptyList(),
+                "GENERAL");
         assertEquals("ASSISTANT", assistant.getRole());
         assertEquals("m1", assistant.getModel());
         assertEquals(1, assistant.getPromptTokens());

@@ -1,7 +1,6 @@
 package com.aistudy.server.ingestion.pdf;
 
 import com.aistudy.server.ingestion.extract.ContentExtractionService;
-import com.aistudy.server.ingestion.extract.TxtMarkdownContentParser.ParsedBlock;
 import com.aistudy.server.ingestion.job.service.IngestionErrorCode;
 import com.aistudy.server.source.asset.entity.SourceAsset;
 import com.aistudy.server.source.content.entity.ContentBlock;
@@ -46,6 +45,7 @@ public class PdfContentExtractionService {
     private final StorageService storageService;
     private final SourcePageMapper sourcePageMapper;
     private final ContentBlockMapper contentBlockMapper;
+    private final com.aistudy.server.ingestion.ocr.OcrEngine ocrEngine;
     private final long maxBytes;
     private final int maxPages;
     private final int maxExtractedChars;
@@ -53,25 +53,25 @@ public class PdfContentExtractionService {
     public PdfContentExtractionService(StorageService storageService,
                                        SourcePageMapper sourcePageMapper,
                                        ContentBlockMapper contentBlockMapper,
+                                       com.aistudy.server.ingestion.ocr.OcrEngine ocrEngine,
                                        @Value("${aistudy.ingestion.pdf.max-bytes:100MB}") DataSize maxBytes,
                                        @Value("${aistudy.ingestion.pdf.max-pages:200}") int maxPages,
                                        @Value("${aistudy.ingestion.pdf.max-extracted-chars:2000000}") int maxExtractedChars) {
         this.storageService = storageService;
         this.sourcePageMapper = sourcePageMapper;
         this.contentBlockMapper = contentBlockMapper;
+        this.ocrEngine = ocrEngine;
         this.maxBytes = maxBytes.toBytes();
         this.maxPages = Math.max(1, maxPages);
         this.maxExtractedChars = Math.max(0, maxExtractedChars);
     }
 
     /**
-     * Extracts text from a PDF asset and persists one {@link SourcePage}
-     * per PDF page plus ordered {@link ContentBlock} rows.
+     * Text-first PDF extraction with OCR fallback for image-only pages.
      *
-     * <p>Caller owns the surrounding transaction when this is invoked
-     * from the ingestion pipeline.
+     * @return true when any page OCR ran with low confidence
      */
-    public void extractAndPersist(SourceAsset asset) {
+    public boolean extractAndPersist(SourceAsset asset) {
         if (asset.getSizeBytes() > maxBytes) {
             throw new PdfExtractionException(IngestionErrorCode.PDF_TEXT_LIMIT_EXCEEDED,
                     "PDF exceeds the configured byte limit of " + maxBytes);
@@ -126,7 +126,10 @@ public class PdfContentExtractionService {
 
             PDFTextStripper stripper = new PDFTextStripper();
             int totalChars = 0;
+            boolean anyLowOcr = false;
             LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+            org.apache.pdfbox.rendering.PDFRenderer renderer =
+                    new org.apache.pdfbox.rendering.PDFRenderer(document);
             for (int i = 1; i <= pageCount; i++) {
                 stripper.setStartPage(i);
                 stripper.setEndPage(i);
@@ -134,7 +137,39 @@ public class PdfContentExtractionService {
                 if (pageText == null) {
                     pageText = "";
                 }
-                String normalized = pageText.replace("\r\n", "\n").replace('\r', '\n');
+                String normalized = pageText.replace("\r\n", "\n").replace('\r', '\n').trim();
+                String method = "PDF_TEXT";
+                Double confidence = null;
+                if (normalized.length() < 20 && ocrEngine != null) {
+                    // Image-only / sparse text page → render + OCR fallback.
+                    try {
+                        java.awt.image.BufferedImage image = renderer.renderImageWithDPI(i - 1, 150);
+                        File ocrTemp = new File(System.getProperty("java.io.tmpdir"),
+                                "aistudy-pdf-ocr-" + System.nanoTime() + ".png");
+                        try {
+                            javax.imageio.ImageIO.write(image, "png", ocrTemp);
+                            com.aistudy.server.ingestion.ocr.OcrEngine.OcrResult ocr =
+                                    ocrEngine.ocr(ocrTemp);
+                            if (ocr != null && ocr.text() != null && !ocr.text().isBlank()) {
+                                normalized = ocr.text().trim();
+                                method = "OCR";
+                                confidence = ocr.confidence();
+                                if (confidence != null && confidence < 0.7) {
+                                    anyLowOcr = true;
+                                }
+                            } else {
+                                anyLowOcr = true;
+                            }
+                        } finally {
+                            if (!ocrTemp.delete()) {
+                                ocrTemp.deleteOnExit();
+                            }
+                        }
+                    } catch (Exception ocrEx) {
+                        log.warn("PDF page {} OCR fallback failed: {}", i, ocrEx.getMessage());
+                        anyLowOcr = true;
+                    }
+                }
                 if (totalChars + normalized.length() > maxExtractedChars) {
                     throw new PdfExtractionException(IngestionErrorCode.PDF_TEXT_LIMIT_EXCEEDED,
                             "PDF exceeds the configured extracted character limit of " + maxExtractedChars);
@@ -148,19 +183,21 @@ public class PdfContentExtractionService {
                 sourcePage.setSourcePageNumber(i);
                 sourcePage.setPageOrder(i);
                 sourcePage.setPrintedPageNumber(i);
-                sourcePage.setPageType(ContentExtractionService.PAGE_TYPE_BODY);
+                sourcePage.setPageType("OCR".equals(method)
+                        ? ContentExtractionService.PAGE_TYPE_IMAGE
+                        : ContentExtractionService.PAGE_TYPE_BODY);
                 sourcePage.setOrderConfidence(null);
                 sourcePage.setOrderStatus(ContentExtractionService.ORDER_STATUS_AUTO);
                 sourcePage.setExtractedText(normalized);
-                sourcePage.setExtractionConfidence(null);
+                sourcePage.setExtractionConfidence(confidence);
                 sourcePage.setCreatedAt(now);
                 sourcePage.setUpdatedAt(now);
                 sourcePageMapper.insert(sourcePage);
 
-                List<ParsedBlock> blocks =
+                List<ContentExtractionService.ParsedBlock> blocks =
                         ContentExtractionService.parsePageText(normalized).blocks();
                 for (int j = 0; j < blocks.size(); j++) {
-                    ParsedBlock block = blocks.get(j);
+                    ContentExtractionService.ParsedBlock block = blocks.get(j);
                     ContentBlock cb = new ContentBlock();
                     cb.setSpaceId(asset.getSpaceId());
                     cb.setSourceId(asset.getSourceId());
@@ -169,7 +206,7 @@ public class PdfContentExtractionService {
                     cb.setBlockType(block.type());
                     cb.setSortOrder(j);
                     cb.setNormalizedText(block.text());
-                    cb.setStructuredDataJson(null);
+                    cb.setStructuredDataJson("{\"method\":\"" + method + "\"}");
                     cb.setLocatorJson("{\"page\":" + i
                             + ",\"lineStart\":" + block.lineStart()
                             + ",\"lineEnd\":" + block.lineEnd() + "}");
@@ -181,6 +218,7 @@ public class PdfContentExtractionService {
 
             log.info("extracted PDF asset {} into {} pages, {} chars",
                     asset.getId(), pageCount, totalChars);
+            return anyLowOcr;
         } catch (PdfExtractionException e) {
             throw e;
         } catch (Exception e) {

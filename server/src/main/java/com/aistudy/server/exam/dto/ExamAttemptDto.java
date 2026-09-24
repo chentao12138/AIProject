@@ -95,7 +95,13 @@ public final class ExamAttemptDto {
                 Boolean booleanAnswer,
 
                 @Size(max = 4000, message = "textAnswer must be at most 4000 characters")
-                String textAnswer
+                String textAnswer,
+
+                @Size(max = 100, message = "orderingAnswer must be at most 100 items")
+                List<Integer> orderingAnswer,
+
+                @Size(max = 10000, message = "matchingAnswer JSON must be at most 10000 characters")
+                String matchingAnswer
         ) {
         }
     }
@@ -151,5 +157,36 @@ public final class ExamAttemptDto {
             String explanation,
             Boolean answered
     ) {
+    }
+
+    /** Request for manual grading of a subjective answer. */
+    public record GradeAnswerRequest(
+            @jakarta.validation.constraints.Min(value = 0, message = "score must be >= 0")
+            Integer score,
+
+            @Size(max = 2000, message = "feedback must be at most 2000 characters")
+            String feedback
+    ) {
+    }
+
+    /** Response after manual grading (includes score + audit trail). */
+    public record ExamAnswerGradingView(
+            Long id,
+            Long examAttemptId,
+            Long examQuestionId,
+            String gradingStatus,
+            LocalDateTime answeredAt,
+            Integer score,
+            String feedback,
+            String gradedBy,
+            LocalDateTime gradedAt
+    ) {
+        public static ExamAnswerGradingView from(ExamAnswer answer) {
+            return new ExamAnswerGradingView(
+                    answer.getId(), answer.getExamAttemptId(), answer.getExamQuestionId(),
+                    answer.getGradingStatus(), answer.getAnsweredAt(),
+                    answer.getScore(), answer.getFeedback(),
+                    answer.getGradedBy(), answer.getGradedAt());
+        }
     }
 }

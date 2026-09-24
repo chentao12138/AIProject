@@ -5,98 +5,66 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
-/**
- * BUSINESS-004 — production MyBatis-Plus mapper for {@link SourceAsset}.
- *
- * <p>Extends {@link BaseMapper} for insert only. All READS are
- * explicit owner-scoped {@code @Select} queries that JOIN through
- * {@code source} AND {@code learning_space} so the owner subject and
- * the source↔space consistency are enforced in SQL:
- *
- * <ul>
- *   <li>{@link #selectByIdSpaceSourceOwner} — detail read:
- *       {@code WHERE sa.id = ? AND sa.space_id = ? AND sa.source_id = ?
- *       AND ls.owner_subject = ?}. The JOIN also requires
- *       {@code source.space_id == source_asset.space_id}, so an asset
- *       whose source lives in ANOTHER space cannot be reached even
- *       with correct owner + space path — one row or null (404).</li>
- *   <li>{@link #selectBySpaceSourceOwner} — list read with the same
- *       owner + same-space predicates, newest first. The owner
- *       predicate stays in SQL even though the service validates the
- *       parent source first (defense in depth).</li>
- * </ul>
- *
- * <p>Inherited unscoped BaseMapper reads ({@code selectById},
- * {@code selectList}, {@code selectOne}) are NEVER used by the
- * service layer — they carry no space/source/owner predicate.
- */
 @Mapper
 public interface SourceAssetMapper extends BaseMapper<SourceAsset> {
 
-    /** Returns the asset iff ALL of: it exists, belongs to
-     * {@code spaceId}, belongs to {@code sourceId}, that source
-     * really belongs to that space (JOIN), and the space is owned by
-     * {@code ownerSubject}. Any mismatch returns {@code null} (404,
-     * anti-probing — absent vs not-owned vs cross-space are
-     * indistinguishable).
-     */
-    @Select("SELECT sa.* "
-            + "FROM source_asset sa "
-            + "JOIN source s "
-            + "  ON s.id = sa.source_id "
-            + " AND s.space_id = sa.space_id "
-            + "JOIN learning_space ls ON ls.id = sa.space_id "
-            + "WHERE sa.id = #{assetId} "
-            + "  AND sa.space_id = #{spaceId} "
-            + "  AND sa.source_id = #{sourceId} "
+    @Select("SELECT sa.* FROM source_asset sa "
+            + "JOIN source s ON s.id = sa.source_id "
+            + "JOIN learning_space ls ON ls.id = s.space_id "
+            + "WHERE sa.id = #{assetId} AND sa.space_id = #{spaceId} AND sa.source_id = #{sourceId} "
             + "  AND ls.owner_subject = #{ownerSubject}")
     SourceAsset selectByIdSpaceSourceOwner(@Param("assetId") Long assetId,
                                            @Param("spaceId") Long spaceId,
                                            @Param("sourceId") Long sourceId,
                                            @Param("ownerSubject") String ownerSubject);
 
-    /**
-     * Returns distinct non-null storage keys referenced by source_asset.
-     * Used by storage reconciliation to bound filesystem scan targets.
-     */
-    @Select("SELECT sa.storage_key FROM source_asset sa WHERE sa.storage_key IS NOT NULL GROUP BY sa.storage_key")
-    List<String> selectDistinctStorageKeys();
-
-    /**
-     * Returns storage keys from the given bounded set that are actually
-     * referenced by source_asset. Used by bounded reconciliation to avoid
-     * scanning the entire table.
-     */
-    @Select({"<script>",
-            "SELECT sa.storage_key",
-            "FROM source_asset sa",
-            "WHERE sa.storage_key IN",
-            "<foreach item='key' collection='keys' open='(' separator=',' close=')'>",
-            "#{key}",
-            "</foreach>",
-            "GROUP BY sa.storage_key",
-            "</script>"})
-    List<String> selectExistingStorageKeys(@Param("keys") List<String> keys);
-
-    /** Lists assets of one owned source, newest first. The owner
-     * predicate and the source↔space consistency are enforced IN SQL
-     * via the JOINs — this method can never list assets of a source
-     * the caller does not own, even if the service layer were bypassed.
-     */
-    @Select("SELECT sa.* "
-            + "FROM source_asset sa "
-            + "JOIN source s "
-            + "  ON s.id = sa.source_id "
-            + " AND s.space_id = sa.space_id "
-            + "JOIN learning_space ls ON ls.id = sa.space_id "
-            + "WHERE sa.space_id = #{spaceId} "
-            + "  AND sa.source_id = #{sourceId} "
-            + "  AND ls.owner_subject = #{ownerSubject} "
+    @Select("SELECT sa.* FROM source_asset sa "
+            + "JOIN source s ON s.id = sa.source_id "
+            + "JOIN learning_space ls ON ls.id = s.space_id "
+            + "WHERE sa.space_id = #{spaceId} AND sa.source_id = #{sourceId} AND ls.owner_subject = #{ownerSubject} "
             + "ORDER BY sa.created_at DESC, sa.id DESC")
     List<SourceAsset> selectBySpaceSourceOwner(@Param("spaceId") Long spaceId,
-                                               @Param("sourceId") Long sourceId,
-                                               @Param("ownerSubject") String ownerSubject);
+                                                @Param("sourceId") Long sourceId,
+                                                @Param("ownerSubject") String ownerSubject);
+
+    @Select("SELECT sa.* FROM source_asset sa "
+            + "JOIN source s ON s.id = sa.source_id "
+            + "JOIN learning_space ls ON ls.id = s.space_id "
+            + "WHERE sa.space_id = #{spaceId} AND sa.source_id = #{sourceId} AND sa.sha256 = #{sha256} AND ls.owner_subject = #{ownerSubject}")
+    SourceAsset selectBySpaceSourceAndSha256(@Param("spaceId") Long spaceId,
+                                             @Param("sourceId") Long sourceId,
+                                             @Param("sha256") String sha256,
+                                             @Param("ownerSubject") String ownerSubject);
+
+    @Select("SELECT sa.* FROM source_asset sa "
+            + "JOIN source s ON s.id = sa.source_id "
+            + "JOIN learning_space ls ON ls.id = s.space_id "
+            + "WHERE sa.space_id = #{spaceId} AND sa.sha256 = #{sha256} AND ls.owner_subject = #{ownerSubject} "
+            + "ORDER BY sa.created_at ASC, sa.id ASC LIMIT 1")
+    SourceAsset selectBySpaceAndSha256(@Param("spaceId") Long spaceId,
+                                       @Param("sha256") String sha256,
+                                       @Param("ownerSubject") String ownerSubject);
+
+    @Select("SELECT storage_key FROM source_asset WHERE storage_key IN (#{storageKeys})")
+    List<String> selectExistingStorageKeys(@Param("storageKeys") List<String> storageKeys);
+
+    @Select("SELECT sa.* FROM source_asset sa "
+            + "WHERE sa.space_id = #{spaceId} AND sa.source_id = #{sourceId} "
+            + "ORDER BY sa.created_at ASC, sa.id ASC")
+    List<SourceAsset> selectBySpaceSource(@Param("spaceId") Long spaceId,
+                                          @Param("sourceId") Long sourceId);
+
+    /**
+     * One asset pinned to both its source and space (ADMIN raw-bytes read;
+     * no owner predicate because governance crosses owners by design).
+     */
+    @Select("SELECT sa.* FROM source_asset sa "
+            + "WHERE sa.id = #{assetId} AND sa.source_id = #{sourceId} AND sa.space_id = #{spaceId}")
+    SourceAsset selectByIdSpaceSource(@Param("assetId") Long assetId,
+                                      @Param("sourceId") Long sourceId,
+                                      @Param("spaceId") Long spaceId);
 }

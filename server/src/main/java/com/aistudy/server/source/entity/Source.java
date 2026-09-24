@@ -58,6 +58,22 @@ public class Source {
 
     private LocalDateTime updatedAt;
 
+    private LocalDateTime archivedAt;
+    private String reviewStatus;
+    private LocalDateTime reviewedAt;
+    private String reviewedBy;
+    private String rejectedReason;
+    /** Pointer to the current/published extraction revision (V053). */
+    private Long currentExtractionRevisionId;
+
+    public Long getCurrentExtractionRevisionId() {
+        return currentExtractionRevisionId;
+    }
+
+    public void setCurrentExtractionRevisionId(Long currentExtractionRevisionId) {
+        this.currentExtractionRevisionId = currentExtractionRevisionId;
+    }
+
     public Long getId() {
         return id;
     }
@@ -120,6 +136,46 @@ public class Source {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public LocalDateTime getArchivedAt() {
+        return archivedAt;
+    }
+
+    public void setArchivedAt(LocalDateTime archivedAt) {
+        this.archivedAt = archivedAt;
+    }
+
+    public String getReviewStatus() {
+        return reviewStatus;
+    }
+
+    public void setReviewStatus(String reviewStatus) {
+        this.reviewStatus = reviewStatus;
+    }
+
+    public LocalDateTime getReviewedAt() {
+        return reviewedAt;
+    }
+
+    public void setReviewedAt(LocalDateTime reviewedAt) {
+        this.reviewedAt = reviewedAt;
+    }
+
+    public String getReviewedBy() {
+        return reviewedBy;
+    }
+
+    public void setReviewedBy(String reviewedBy) {
+        this.reviewedBy = reviewedBy;
+    }
+
+    public String getRejectedReason() {
+        return rejectedReason;
+    }
+
+    public void setRejectedReason(String rejectedReason) {
+        this.rejectedReason = rejectedReason;
     }
 
     @Override

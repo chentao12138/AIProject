@@ -45,6 +45,9 @@ app:
 
 # CORS contract tests exercise the same Desktop origins as local/dev.
 aistudy:
+  ingestion:
+    worker:
+      recovery-enabled: false
   cors:
     allowed-origins:
       - http://localhost:5173

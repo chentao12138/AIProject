@@ -16,21 +16,25 @@ import java.time.LocalDateTime;
  * records status/stage/progress and a SAFE error diagnostic, and may
  * be cleaned up historically later.
  *
- * <h3>Lifecycle (service-enforced, BACKEND_AUTORUN_4H.md §5.3)</h3>
+ * <h3>Lifecycle (service-enforced)</h3>
+ *
+ * <p>The only written vocabulary is {@code IngestionJobService.IngestionStatus};
+ * recovery, claiming and retry SQL all match on these literals, so any new
+ * value must be added to all of them at once.
  *
  * <pre>
- * PENDING --start--> RUNNING --finish--> SUCCEEDED
- *    |                   |
- *    +--fail--> FAILED --+--fail--> FAILED
- *                  |
- *                  +--retry--> PENDING (retryCount++)
+ * QUEUED --claimQueued (atomic, one worker)--> IMPORTING --&gt; EXTRACTING --&gt; STRUCTURING
+ *   ^                                              |
+ *   |                                              +--&gt; NEEDS_REVIEW      (all assets ok)
+ *   |                                              +--&gt; PARTIAL_FAILED     (some assets failed)
+ *   +--requeueForStageRetry / requeueForAdminRetry-+--&gt; FAILED             (job-level error)
  * </pre>
  *
- * {@code stage} tracks the pipeline position
- * (QUEUED/IMPORTING/EXTRACTING/STRUCTURING/AI_PROCESSING/
- * NEEDS_REVIEW/PUBLISHED, content-ingestion.md §6); {@code status}
- * is the coarse lifecycle state. PARTIAL_FAILED is deferred — V1
- * ingestion is all-or-nothing per asset.
+ * {@code stage} tracks the pipeline position (IMPORT/EXTRACT/STRUCTURE/REVIEW,
+ * content-ingestion.md §6) and {@code last_stage_status} records the last stage
+ * that finished so a retry can resume instead of redoing IMPORT. AI_PROCESSING
+ * and PUBLISHED are reserved for the AI batch stage and are not written by
+ * ingestion today.
  *
  * <h3>Ownership model</h3>
  *
@@ -77,6 +81,14 @@ public class IngestionJob {
     private String errorMessage;
 
     private String createdByUserId;
+
+    /** Worker lease identity for atomic claim; NULL when unclaimed. */
+    private String claimedBy;
+
+    private LocalDateTime claimedAt;
+
+    /** Last successful stage marker for stage-resume retries. */
+    private String lastStageStatus;
 
     private LocalDateTime createdAt;
 
@@ -184,6 +196,30 @@ public class IngestionJob {
 
     public void setCreatedByUserId(String createdByUserId) {
         this.createdByUserId = createdByUserId;
+    }
+
+    public String getClaimedBy() {
+        return claimedBy;
+    }
+
+    public void setClaimedBy(String claimedBy) {
+        this.claimedBy = claimedBy;
+    }
+
+    public LocalDateTime getClaimedAt() {
+        return claimedAt;
+    }
+
+    public void setClaimedAt(LocalDateTime claimedAt) {
+        this.claimedAt = claimedAt;
+    }
+
+    public String getLastStageStatus() {
+        return lastStageStatus;
+    }
+
+    public void setLastStageStatus(String lastStageStatus) {
+        this.lastStageStatus = lastStageStatus;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -24,12 +24,13 @@ import java.io.InputStream;
  *       leaves a partial object behind.</li>
  *   <li>{@link #load} — opens the object for reading; throws
  *       {@link StorageInvalidKeyException} for keys escaping the root
- *       and {@link StorageNotFoundException} when the target is absent
- *       or not a regular file.</li>
- *   <li>{@link #delete} — removes the object; a missing object is a
- *       no-op. Throws {@link StorageInvalidKeyException} for keys
- *       escaping the root and {@link StorageWriteException} on IO
- *       failure.</li>
+ *       (including a target that is a symbolic link) and
+ *       {@link StorageNotFoundException} when the target is absent
+ *       or otherwise not a regular file.</li>
+ *   <li>{@link #delete} — removes the object; throws
+ *       {@link StorageNotFoundException} when the target is absent,
+ *       {@link StorageInvalidKeyException} for keys escaping the root
+ *       and {@link StorageWriteException} on IO failure.</li>
  * </ul>
  */
 public interface StorageService {
@@ -56,7 +57,7 @@ public interface StorageService {
      * @param storageKey logical key stored in the database
      * @return stream positioned at the first byte
      * @throws StorageInvalidKeyException if the key escapes the storage root
-     * @throws StorageNotFoundException   when the target object is absent or not a regular file
+     * @throws StorageNotFoundException   when the target object is absent or otherwise not a regular file
      */
     InputStream load(String storageKey);
 
@@ -65,6 +66,7 @@ public interface StorageService {
      *
      * @param storageKey logical key stored in the database
      * @throws StorageInvalidKeyException if the key escapes the storage root
+     * @throws StorageNotFoundException   when the target object is absent or otherwise not a regular file
      */
     void delete(String storageKey);
 }

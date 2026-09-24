@@ -1,6 +1,8 @@
 package com.aistudy.server.practice.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -43,7 +45,13 @@ public record PracticeAnswerRequest(
             Boolean booleanAnswer,
 
             @Size(max = 4000, message = "textAnswer must be at most 4000 characters")
-            String textAnswer
+            String textAnswer,
+
+            @Size(max = 100, message = "orderingAnswer must be at most 100 items")
+            List<@Min(value = 1, message = "ordering item must be >= 1") Integer> orderingAnswer,
+
+            @Size(max = 10000, message = "matchingAnswer must be at most 10000 characters")
+            String matchingAnswer
     ) {
     }
 }

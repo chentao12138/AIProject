@@ -238,6 +238,20 @@ VALIDATION_ERROR
 AI_PROVIDER_UNAVAILABLE
 ```
 
+### 12.1 实现现状
+
+- 全局唯一出口：`common/problem/ApiExceptionHandler`（`@RestControllerAdvice`），
+  输出 `application/problem+json`，固定带 `code` 与 `requestId`（取自 MDC），
+  校验类错误带 `errors[]`。
+- 新代码抛 `common/problem/ApiException(status, code, detail)` 来钉住 `code`；
+  `ApiErrorCodes` 是常量的唯一来源。
+- 历史遗留的 `ResponseStatusException(status, reason)` 仍然工作：状态码与
+  `detail` 原样保留，`code` 由状态码推导（404→`NOT_FOUND` 等）。逐步替换，
+  不要求一次性改写。
+- `IllegalArgumentException` → 400；`IllegalStateException` → 500 且**不回显**
+  异常消息（消息只进日志，用同一 `requestId` 关联）。
+- 客户端必须以 `code` 分支，不得解析 `detail` 文案。
+
 ## 13. HTTP 状态
 
 - 200：读取/更新成功

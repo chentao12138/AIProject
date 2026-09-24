@@ -55,4 +55,81 @@ public interface StudyTaskMapper extends BaseMapper<StudyTask> {
     @Select("SELECT COUNT(*) FROM study_task "
             + "WHERE study_plan_id = #{planId} AND status NOT IN ('DONE', 'SKIPPED')")
     int countOpenByPlanId(@Param("planId") Long planId);
+
+    /** TODO/IN_PROGRESS → SKIPPED guarded transition. */
+    @Update("UPDATE study_task "
+            + "SET status = 'SKIPPED', completed_at = #{completedAt}, updated_at = #{updatedAt} "
+            + "WHERE id = #{taskId} AND space_id = #{spaceId} "
+            + "  AND user_subject = #{userSubject} "
+            + "  AND status IN ('TODO', 'IN_PROGRESS')")
+    int skipByIdAndSpace(@Param("taskId") Long taskId,
+                         @Param("spaceId") Long spaceId,
+                         @Param("userSubject") String userSubject,
+                         @Param("completedAt") LocalDateTime completedAt,
+                         @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** SKIPPED → TODO guarded transition (unskip). */
+    @Update("UPDATE study_task "
+            + "SET status = 'TODO', completed_at = NULL, updated_at = #{updatedAt} "
+            + "WHERE id = #{taskId} AND space_id = #{spaceId} "
+            + "  AND user_subject = #{userSubject} "
+            + "  AND status = 'SKIPPED'")
+    int unskipByIdAndSpace(@Param("taskId") Long taskId,
+                           @Param("spaceId") Long spaceId,
+                           @Param("userSubject") String userSubject,
+                           @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** Adjust dueAt for any open task of the caller. */
+    @Update("UPDATE study_task "
+            + "SET due_at = #{dueAt}, updated_at = #{updatedAt} "
+            + "WHERE id = #{taskId} AND space_id = #{spaceId} "
+            + "  AND user_subject = #{userSubject} "
+            + "  AND status IN ('TODO', 'IN_PROGRESS')")
+    int updateDueAtByIdAndSpace(@Param("taskId") Long taskId,
+                                @Param("spaceId") Long spaceId,
+                                @Param("userSubject") String userSubject,
+                                @Param("dueAt") LocalDateTime dueAt,
+                                @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** Adjust priority for any task of the caller. */
+    @Update("UPDATE study_task "
+            + "SET priority = #{priority}, updated_at = #{updatedAt} "
+            + "WHERE id = #{taskId} AND space_id = #{spaceId} "
+            + "  AND user_subject = #{userSubject}")
+    int updatePriorityByIdAndSpace(@Param("taskId") Long taskId,
+                                   @Param("spaceId") Long spaceId,
+                                   @Param("userSubject") String userSubject,
+                                   @Param("priority") String priority,
+                                   @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** Edit title/reason for any task of the caller (title is controlled). */
+    @Update("UPDATE study_task "
+            + "SET title = #{title}, reason = #{reason}, updated_at = #{updatedAt} "
+            + "WHERE id = #{taskId} AND space_id = #{spaceId} "
+            + "  AND user_subject = #{userSubject}")
+    int updateTitleReasonByIdAndSpace(@Param("taskId") Long taskId,
+                                      @Param("spaceId") Long spaceId,
+                                      @Param("userSubject") String userSubject,
+                                      @Param("title") String title,
+                                      @Param("reason") String reason,
+                                      @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** Reorder tasks within a plan by setting sort_order from the given id list order. */
+    @Update("UPDATE study_task SET sort_order = #{order}, updated_at = #{updatedAt} "
+            + "WHERE id = #{taskId} AND study_plan_id = #{planId}")
+    int reorderTask(@Param("taskId") Long taskId,
+                    @Param("planId") Long planId,
+                    @Param("order") Integer order,
+                    @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** TODO → IN_PROGRESS guarded transition. */
+    @Update("UPDATE study_task "
+            + "SET status = 'IN_PROGRESS', updated_at = #{updatedAt} "
+            + "WHERE id = #{taskId} AND space_id = #{spaceId} "
+            + "  AND user_subject = #{userSubject} "
+            + "  AND status = 'TODO'")
+    int markInProgressByIdAndSpace(@Param("taskId") Long taskId,
+                                   @Param("spaceId") Long spaceId,
+                                   @Param("userSubject") String userSubject,
+                                   @Param("updatedAt") LocalDateTime updatedAt);
 }
