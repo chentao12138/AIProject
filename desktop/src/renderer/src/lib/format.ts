@@ -75,6 +75,35 @@ export function questionTypeLabel(type?: string | null): string {
   return QUESTION_TYPE_LABELS[normalized as QuestionType] ?? type;
 }
 
+/**
+ * Exam attempt statuses the backend can report (`ExamAttemptService.STATUS_*`).
+ * Pinned to that Java file by `backend-vocabulary-contract.test.ts`; the
+ * attempt page once matched CREATED/PENDING, which never occur, so a fresh
+ * attempt skipped its start screen and every answer was rejected with 409.
+ */
+export const EXAM_ATTEMPT_STATUSES = {
+  NOT_STARTED: 'NOT_STARTED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUBMITTED: 'SUBMITTED',
+} as const;
+
+export type ExamAttemptStatus =
+  (typeof EXAM_ATTEMPT_STATUSES)[keyof typeof EXAM_ATTEMPT_STATUSES];
+
+/**
+ * Practice session statuses (`PracticeSessionService.STATUS_*`). The answer
+ * page once matched FINISHED/COMPLETED — neither exists — so a submitted
+ * session reopened as a blank answer form.
+ */
+export const PRACTICE_SESSION_STATUSES = {
+  CREATED: 'CREATED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUBMITTED: 'SUBMITTED',
+} as const;
+
+export type PracticeSessionStatus =
+  (typeof PRACTICE_SESSION_STATUSES)[keyof typeof PRACTICE_SESSION_STATUSES];
+
 /** Backend difficulty levels -> display copy. */
 const DIFFICULTY_LABELS: Record<string, string> = {
   EASY: '简单',
