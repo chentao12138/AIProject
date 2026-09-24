@@ -9,8 +9,34 @@ import {
   deriveContentState,
   filterPagesForAsset,
   selectLatestAsset,
+  selectLatestJob,
   selectLatestJobForAsset,
 } from './latest-selection';
+
+describe('selectLatestJob', () => {
+  // The backend can return a job whose assetId is null. Dropping it made the
+  // workbench keep a terminal failure on screen as "queued", because the poll
+  // gate reads this job.
+  it('still reports a job that never got linked to its asset', () => {
+    const orphan = { id: 193, assetId: null, status: 'PARTIAL_FAILED', createdAt: '2026-09-03T10:00:00Z' };
+    expect(selectLatestJobForAsset([orphan], 238)).toBeNull();
+    expect(selectLatestJob([orphan])?.status).toBe('PARTIAL_FAILED');
+  });
+
+  it('picks newest by createdAt, tiebreaking on id', () => {
+    const picked = selectLatestJob([
+      { id: 1, createdAt: '2026-09-01T10:00:00Z' },
+      { id: 7, createdAt: '2026-09-05T10:00:00Z' },
+      { id: 4, createdAt: '2026-09-05T10:00:00Z' },
+    ]);
+    expect(picked?.id).toBe(7);
+  });
+
+  it('returns null for an empty or id-less list', () => {
+    expect(selectLatestJob([])).toBeNull();
+    expect(selectLatestJob([{ createdAt: '2026-09-01T10:00:00Z' }])).toBeNull();
+  });
+});
 
 describe('selectLatestAsset', () => {
   it('picks newest by createdAt', () => {

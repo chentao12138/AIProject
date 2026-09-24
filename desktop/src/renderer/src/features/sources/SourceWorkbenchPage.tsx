@@ -51,6 +51,7 @@ import {
   deriveContentState,
   filterPagesForAsset,
   selectLatestAsset,
+  selectLatestJob,
   selectLatestJobForAsset,
 } from '../../lib/latest-selection';
 import { useFormError } from '../../lib/use-form-error';
@@ -135,7 +136,8 @@ export function SourceWorkbenchPage() {
   const allPages = pagesQuery.data ?? [];
 
   const latestAsset = selectLatestAsset(assets);
-  const latestJob = selectLatestJobForAsset(jobs, latestAsset?.id);
+  const latestJob =
+    selectLatestJobForAsset(jobs, latestAsset?.id) ?? selectLatestJob(jobs);
   const latestPages = filterPagesForAsset(allPages, latestAsset?.id);
 
   return (

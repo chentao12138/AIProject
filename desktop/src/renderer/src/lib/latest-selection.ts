@@ -26,7 +26,8 @@ export interface AssetLike {
 
 export interface JobLike {
   id?: number;
-  assetId?: number;
+  /** The API sends `null`, not a missing key, for an unlinked job. */
+  assetId?: number | null;
   createdAt?: string;
   status?: string;
 }
@@ -83,6 +84,33 @@ export function selectLatestJobForAsset(
     if (j.assetId !== assetId) {
       continue;
     }
+    if (typeof j.id !== 'number') {
+      continue;
+    }
+    if (best === null) {
+      best = j;
+      continue;
+    }
+    const cmp = ts(j.createdAt) - ts(best.createdAt);
+    if (cmp > 0 || (cmp === 0 && (j.id ?? 0) > (best.id ?? 0))) {
+      best = j;
+    }
+  }
+  return best;
+}
+
+/**
+ * Newest job of a source, ignoring the asset link.
+ *
+ * `selectLatestJobForAsset` is the right question, but it can only be asked
+ * when the backend fills `IngestionJobResponse.assetId`. A job created without
+ * one is still the source's most recent activity, and dropping it left the
+ * workbench showing a terminal failure as "queued" forever — the poll gate
+ * reads this job's status.
+ */
+export function selectLatestJob(jobs: JobLike[]): JobLike | null {
+  let best: JobLike | null = null;
+  for (const j of jobs) {
     if (typeof j.id !== 'number') {
       continue;
     }
