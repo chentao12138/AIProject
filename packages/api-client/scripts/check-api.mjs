@@ -11,6 +11,8 @@
  * Usage:
  *   node scripts/check-api.mjs            verify the committed pair
  *   node scripts/check-api.mjs --record   (re)baseline after an api:generate
+ *   node scripts/check-api.mjs --live     also prove the snapshot equals a
+ *                                         running server's /v3/api-docs
  *
  * The manifest records the SHA-256 of both committed files plus where and
  * when the spec came from. When openapi-typescript is installed locally the
@@ -53,6 +55,82 @@ const sha256 = (bytes) =>
 function fail(message) {
   console.error(`[api:check] FAILED: ${message}`);
   process.exit(1);
+}
+
+/**
+ * Canonical form of a spec document: keys sorted, whitespace removed.
+ *
+ * `--live` compares the committed snapshot against a running server. Byte
+ * equality would be a lie — the generator pretty-prints, springdoc's key order
+ * can shift between builds — so the comparison runs on the document's meaning.
+ */
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * `--live`: the committed snapshot must still equal what the server publishes.
+ *
+ * `api:check` proves openapi.json and api.d.ts agree with EACH OTHER, which is
+ * no help when both are a faithful copy of an outdated server. The exam form
+ * shipped a `durationMinutes` field the server never bound — the snapshot said
+ * it existed, the types said it existed, tsc was happy, and every exam was
+ * silently created with no time limit. Only a comparison against the live
+ * server can see that, so this mode exists and `docs/SMOKE-INSTRUCTIONS.md`
+ * tells you to run it whenever the backend is reachable.
+ */
+async function checkAgainstLiveServer(spec) {
+  const url =
+    process.env.OPENAPI_URL ??
+    'http://localhost:8080/v3/api-docs';
+  let live;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      fail(`--live: GET ${url} returned HTTP ${response.status}`);
+    }
+    live = await response.json();
+  } catch (error) {
+    fail(`--live: cannot read ${url} — ${error.message}`);
+  }
+
+  // Refuse to compare against a foreign server (the same anchor the generator
+  // checks): matching some other project's doc would report a 100% drift and
+  // invite a wholesale clobber.
+  const paths = Object.keys(live.paths ?? {});
+  for (const anchor of ['/api/v1/spaces', '/api/v1/auth/login']) {
+    if (!paths.includes(anchor)) {
+      fail(
+        `--live: ${url} has no ${anchor} — that is not the AIStudy server, ` +
+          'so its document says nothing about this snapshot.'
+      );
+    }
+  }
+
+  const liveHash = sha256(canonical(live));
+  const committedHash = sha256(canonical(spec));
+  if (liveHash !== committedHash) {
+    const livePaths = new Set(paths);
+    const committedPaths = new Set(Object.keys(spec.paths ?? {}));
+    const added = [...livePaths].filter((p) => !committedPaths.has(p));
+    const removed = [...committedPaths].filter((p) => !livePaths.has(p));
+    fail(
+      `the committed snapshot is not what ${url} publishes (canonical spec ` +
+        `differs). Paths added by the server: ${added.length ? added.join(', ') : 'none'}. ` +
+        `Paths removed: ${removed.length ? removed.join(', ') : 'none'}. ` +
+        'Field-level changes are not listed here — run `npm run api:generate` ' +
+        'against this server, then `npm run typecheck`: the derived request ' +
+        'and response types are what report renamed or added fields.'
+    );
+  }
+  console.log(`[api:check] committed snapshot equals ${url}`);
 }
 
 for (const file of [SPEC_FILE, TYPES_FILE]) {
@@ -119,6 +197,7 @@ if (!existsSync(GENERATOR)) {
     '[api:check] hashes match; type regeneration not re-checked ' +
       '(openapi-typescript is not installed — run `npm install` in packages/api-client)'
   );
+  if (process.argv.includes('--live')) await checkAgainstLiveServer(spec);
   process.exit(0);
 }
 
@@ -137,6 +216,7 @@ try {
     );
   }
   console.log('[api:check] openapi.json and api.d.ts are in sync');
+  if (process.argv.includes('--live')) await checkAgainstLiveServer(spec);
 } finally {
   rmSync(tempDir, { recursive: true, force: true });
 }

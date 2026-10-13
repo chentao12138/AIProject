@@ -4,6 +4,182 @@
  */
 
 export interface paths {
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get"];
+        put: operations["update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/outline/{nodeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_1"];
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["rename"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/questions/{questionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_1"];
+        put: operations["update_2"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/notes/{noteId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_2"];
+        put: operations["update_3"];
+        post?: never;
+        delete: operations["delete_1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_3"];
+        put: operations["update_4"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-categories/{categoryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_4"];
+        put: operations["update_5"];
+        post?: never;
+        delete: operations["delete_2"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exams/{examId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_5"];
+        put: operations["update_6"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exams/{examId}/paper/questions/{examQuestionId}/score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateScore"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exams/{examId}/paper/questions/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["reorder"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}/answers/{answerId}/grade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["grade"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/ai": {
         parameters: {
             query?: never;
@@ -15,6 +191,22 @@ export interface paths {
         get: operations["getSettings"];
         /** Update my AI provider settings; omit apiKey to keep the stored secret */
         put: operations["updateSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["changePassword"];
         post?: never;
         delete?: never;
         options?: never;
@@ -38,6 +230,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/system-config/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_6"];
+        put: operations["upsert"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces": {
         parameters: {
             query?: never;
@@ -48,6 +256,118 @@ export interface paths {
         get: operations["list"];
         put?: never;
         post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/wrong-questions/{wrongQuestionId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/wrong-questions/{wrongQuestionId}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["dismiss"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/study-plan/{planId}/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reorder_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/study-plan/{planId}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["regenerate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/study-plan/tasks/{taskId}/unskip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["unskip"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/study-plan/tasks/{taskId}/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["skip"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/study-plan/tasks/{taskId}/in-progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["markInProgress"];
         delete?: never;
         options?: never;
         head?: never;
@@ -102,7 +422,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs": {
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/versions/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["compare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/revisions": {
         parameters: {
             query?: never;
             header?: never;
@@ -118,7 +454,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets": {
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["review"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restore_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/pages/batch-reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["batchReorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/outline": {
         parameters: {
             query?: never;
             header?: never;
@@ -127,7 +511,135 @@ export interface paths {
         };
         get: operations["list_3"];
         put?: never;
+        post: operations["create_3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_4"];
+        put?: never;
+        post: operations["create_4"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSnapshots"];
+        put?: never;
+        post: operations["createSnapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listEntries"];
+        put?: never;
+        post: operations["submitEntries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bindEntries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_5"];
+        put?: never;
         post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/review-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_6"];
+        put?: never;
+        post: operations["create_5"];
         delete?: never;
         options?: never;
         head?: never;
@@ -150,6 +662,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restore_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces/{spaceId}/questions": {
         parameters: {
             query?: never;
@@ -157,9 +685,41 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_4"];
+        get: operations["list_7"];
         put?: never;
-        post: operations["create_3"];
+        post: operations["create_6"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/questions/{questionId}/source-blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSourceBlocks"];
+        put?: never;
+        post: operations["linkSourceBlocks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/questions/{questionId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restore_3"];
         delete?: never;
         options?: never;
         head?: never;
@@ -182,6 +742,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/questions/{questionId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archive_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces/{spaceId}/practice-sessions": {
         parameters: {
             query?: never;
@@ -189,9 +765,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_5"];
+        get: operations["list_8"];
         put?: never;
-        post: operations["create_4"];
+        post: operations["create_7"];
         delete?: never;
         options?: never;
         head?: never;
@@ -237,9 +813,73 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["listAnswers"];
         put?: never;
         post: operations["answer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_9"];
+        put?: never;
+        post: operations["create_8"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/notes/{noteId}/source-blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_10"];
+        put?: never;
+        post: operations["link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/notes/{noteId}/knowledge-points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_11"];
+        put?: never;
+        post: operations["link_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/notes/{noteId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archive_2"];
         delete?: never;
         options?: never;
         head?: never;
@@ -253,9 +893,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_6"];
+        get: operations["list_12"];
         put?: never;
-        post: operations["create_5"];
+        post: operations["create_9"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points/{kpId}/relations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_13"];
+        put?: never;
+        post: operations["add"];
         delete?: never;
         options?: never;
         head?: never;
@@ -269,9 +925,41 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_7"];
+        get: operations["list_14"];
         put?: never;
-        post: operations["link"];
+        post: operations["link_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restore_4"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reject"];
         delete?: never;
         options?: never;
         head?: never;
@@ -294,6 +982,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archive_3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces/{spaceId}/knowledge-categories": {
         parameters: {
             query?: never;
@@ -301,9 +1005,41 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_8"];
+        get: operations["list_15"];
         put?: never;
-        post: operations["create_6"];
+        post: operations["create_10"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-categories/{categoryId}/reparent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reparent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-categories/{categoryId}/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reorder_2"];
         delete?: never;
         options?: never;
         head?: never;
@@ -326,6 +1062,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/ingestion-issues/{issueId}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resolve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ingestion-issues/{issueId}/ignore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ignore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces/{spaceId}/exams": {
         parameters: {
             query?: never;
@@ -333,9 +1101,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_9"];
+        get: operations["list_16"];
         put?: never;
-        post: operations["create_7"];
+        post: operations["create_11"];
         delete?: never;
         options?: never;
         head?: never;
@@ -351,7 +1119,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["create_8"];
+        post: operations["create_12"];
         delete?: never;
         options?: never;
         head?: never;
@@ -368,6 +1136,70 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["publish_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exams/{examId}/paper/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addQuestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exams/{examId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archive_4"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exam-blueprints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_17"];
+        put?: never;
+        post: operations["create_13"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exam-blueprints/{blueprintId}/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["generate_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -422,6 +1254,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archive_5"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces/{spaceId}/ai/study-coach": {
         parameters: {
             query?: never;
@@ -433,6 +1281,38 @@ export interface paths {
         put?: never;
         /** Read-only study coach: recommend next study steps */
         post: operations["studyCoach"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ai/generation-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_18"];
+        put?: never;
+        post: operations["create_14"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ai/generation-jobs/{jobId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["retry_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -543,6 +1423,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/practice-sessions/{sessionId}/questions/{questionId}/variant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["variantFromPractice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/refresh": {
         parameters: {
             query?: never;
@@ -591,6 +1487,198 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listUsers"];
+        put?: never;
+        post: operations["createUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{subject}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/spaces/{spaceId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restore_5"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/spaces/{spaceId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archive_6"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sources/pages/{pageId}/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reorderPage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sources/manual": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createManual"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sources/jobs/{jobId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["retryJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sources/blocks/{blockId}/edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["editBlock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/questions/{questionId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publish_3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/questions/{questionId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archive_7"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/questions/bulk-publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkPublish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/questions/bulk-archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/operations/storage/reconcile": {
         parameters: {
             query?: never;
@@ -605,6 +1693,390 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mastery/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_19"];
+        put?: never;
+        post: operations["create_15"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mastery/calibration/{version}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["activate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mastery/calibration/recompute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["recompute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/points/{kpId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publishPoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/points/{kpId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archivePoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/points/bulk-publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkPublishPoints"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/points/bulk-archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkArchivePoints"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/categories/{categoryId}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["deleteCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/exams/{examId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publish_4"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/exams/{examId}/attempts/{attemptId}/grade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["grade_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/exams/{examId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archive_8"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bulk/sources/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkReviewSources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bulk/sources/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkArchiveSources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bulk/questions/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkPublishQuestions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bulk/questions/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkArchiveQuestions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bulk/knowledge-points/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkPublishKnowledgePoints"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bulk/knowledge-points/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkArchiveKnowledgePoints"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bulk/jobs/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkRetryJobs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bulk/issues/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkResolveIssues"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bulk/issues/ignore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulkIgnoreIssues"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ai/jobs/{jobId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["retry_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/study-plan/tasks/{taskId}/title-reason": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["editTitleReason"];
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/study-plan/tasks/{taskId}/priority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["adjustPriority"];
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/study-plan/tasks/{taskId}/due-at": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["adjustDueAt"];
         trace?: never;
     };
     "/api/v1/admin/users/{subject}/status": {
@@ -694,7 +2166,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get"];
+        get: operations["get_7"];
         put?: never;
         post?: never;
         delete?: never;
@@ -710,7 +2182,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_10"];
+        get: operations["list_20"];
         put?: never;
         post?: never;
         delete?: never;
@@ -726,7 +2198,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_1"];
+        get: operations["get_8"];
         put?: never;
         post?: never;
         delete?: never;
@@ -735,14 +2207,142 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/sources/{sourceId}": {
+    "/api/v1/spaces/{spaceId}/statistics/time-series": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["get_2"];
+        get: operations["timeSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/statistics/study-task-completion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["studyTaskCompletion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/statistics/review-backlog-trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["reviewBacklogTrend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/statistics/question-type-performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["questionTypePerformance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/statistics/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/statistics/mastery-movement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["masteryMovement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/statistics/kp-practice-trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["kpPracticeTrend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/statistics/global-overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["globalOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/statistics/exam-trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["examTrend"];
         put?: never;
         post?: never;
         delete?: never;
@@ -758,10 +2358,26 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_11"];
+        get: operations["list_21"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSnapshot"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteSnapshot"];
         options?: never;
         head?: never;
         patch?: never;
@@ -774,7 +2390,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_12"];
+        get: operations["list_22"];
         put?: never;
         post?: never;
         delete?: never;
@@ -790,7 +2406,39 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_3"];
+        get: operations["get_9"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/{assetId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["downloadRaw"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/duplicate-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["duplicateCheck"];
         put?: never;
         post?: never;
         delete?: never;
@@ -808,41 +2456,9 @@ export interface paths {
         };
         /**
          * Unified workspace keyword search
-         * @description Keyword search scoped to ONE LearningSpace. Search indexes safe user-visible text such as source title, content block text, knowledge point title/summary/content, question stem and wrong-question stems. Results are ranked by deterministic application score and space isolation is enforced at the SQL level.
+         * @description Keyword search scoped to ONE LearningSpace. Search indexes safe user-visible text such as source title, content block text, knowledge point title/summary/content, question stem and wrong-question stems, plus the caller's own note titles and bodies. Only user-visible content is returned: SOURCE, CONTENT_BLOCK, KNOWLEDGE_POINT and QUESTION rows must be PUBLISHED, page and block rows must additionally belong to the source's current extraction revision (rows predating revision ownership stay visible), and NOTE / WRONG_QUESTION are scoped to the caller. Ranking combines the deterministic LIKE tiers with the MySQL ngram FULLTEXT relevance score, falling back to LIKE alone for queries FULLTEXT cannot tokenize. A NOTE hit carries noteId so the client can open it directly. Space isolation is enforced at the SQL level.
          */
         get: operations["search"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/spaces/{spaceId}/review-tasks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list_13"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/spaces/{spaceId}/questions/{questionId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_4"];
         put?: never;
         post?: never;
         delete?: never;
@@ -858,7 +2474,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_5"];
+        get: operations["get_10"];
         put?: never;
         post?: never;
         delete?: never;
@@ -874,7 +2490,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_14"];
+        get: operations["list_23"];
         put?: never;
         post?: never;
         delete?: never;
@@ -890,39 +2506,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_6"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_7"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/spaces/{spaceId}/knowledge-categories/{categoryId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_8"];
+        get: operations["get_11"];
         put?: never;
         post?: never;
         delete?: never;
@@ -938,7 +2522,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_9"];
+        get: operations["get_12"];
         put?: never;
         post?: never;
         delete?: never;
@@ -947,14 +2531,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/spaces/{spaceId}/exams/{examId}": {
+    "/api/v1/spaces/{spaceId}/ingestion-issues": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["get_10"];
+        get: operations["list_24"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exam-blueprints/{blueprintId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_13"];
         put?: never;
         post?: never;
         delete?: never;
@@ -970,7 +2570,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_11"];
+        get: operations["get_14"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1002,7 +2602,23 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_12"];
+        get: operations["get_15"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/ai/generation-jobs/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_16"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1044,14 +2660,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/users": {
+    "/api/v1/ai/usage": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["listUsers"];
+        get: operations["list_25"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1071,6 +2687,438 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/system-config/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["registry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/spaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_26"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/spaces/{spaceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_17"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sources/{sourceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["sourceDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sources/{sourceId}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["revisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sources/{sourceId}/raw/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["raw"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sources/{sourceId}/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["pages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sources/{sourceId}/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["jobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sources/{sourceId}/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["issues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_27"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/questions/{questionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_18"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mastery/calibration/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getActive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPoints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/points/{kpId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPoint"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCategories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/categories/{categoryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCategory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/exams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_28"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/exams/{examId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_19"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/exams/{examId}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAttempts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ai/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_29"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ai/jobs/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_20"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/questions/{questionId}/source-blocks/{blockId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["unlinkSourceBlock"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/notes/{noteId}/source-blocks/{blockId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["unlink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/notes/{noteId}/knowledge-points/{kpId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["unlink_1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/knowledge-points/{kpId}/relations/{relationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/exams/{examId}/paper/questions/{examQuestionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["removeQuestion"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1097,28 +3145,71 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Write-only update. Omit apiKey to keep the stored secret. */
-        UpdateAiProviderSettingsRequest: {
-            enabled?: boolean;
-            provider?: string;
-            preset?: string;
-            baseUrl?: string;
-            model?: string;
-            apiKey?: string;
+        UpdateSourceRequest: {
+            title?: string;
+            description?: string;
         };
-        AiProviderSettingsView: {
-            enabled?: boolean;
-            provider?: string;
-            preset?: string;
-            baseUrl?: string;
-            model?: string;
-            apiKeyConfigured?: boolean;
+        SourceResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            title?: string;
+            sourceType?: string;
+            status?: string;
+            reviewStatus?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: date-time */
+            archivedAt?: string;
         };
-        UpdateUserRolesRequest: {
-            roles: string[];
+        UpdateOutlineNodeRequest: {
+            /** Format: int64 */
+            parentId?: number;
+            title?: string;
+            numberLabel?: string;
+            /** Format: int32 */
+            sortOrder?: number;
+            /** Format: int32 */
+            startPage?: number;
+            /** Format: int32 */
+            endPage?: number;
+            status?: string;
+            /** Format: double */
+            confidence?: number;
         };
-        CreateLearningSpaceRequest: {
-            name: string;
+        SourceOutlineNode: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            parentId?: number;
+            /** Format: int64 */
+            extractionRevisionId?: number;
+            nodeType?: string;
+            title?: string;
+            numberLabel?: string;
+            /** Format: int32 */
+            sortOrder?: number;
+            /** Format: int32 */
+            startPage?: number;
+            /** Format: int32 */
+            endPage?: number;
+            status?: string;
+            /** Format: double */
+            confidence?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        RenameLearningSpaceRequest: {
+            name?: string;
             description?: string;
         };
         LearningSpaceResponse: {
@@ -1131,146 +3222,13 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+            /** Format: date-time */
+            archivedAt?: string;
         };
-        StudyTaskView: {
-            /** Format: int64 */
-            id?: number;
-            taskType?: string;
-            targetType?: string;
-            /** Format: int64 */
-            targetId?: number;
-            title?: string;
-            reason?: string;
-            /** Format: date-time */
-            dueAt?: string;
-            priority?: string;
-            status?: string;
-            /** Format: date-time */
-            completedAt?: string;
-            /** Format: date-time */
-            createdAt?: string;
-        };
-        GenerateStudyPlanRequest: {
-            name: string;
-            /** Format: date-time */
-            startDate?: string;
-            /** Format: date-time */
-            endDate?: string;
-            /** Format: int32 */
-            dailyItemLimit?: number;
-        };
-        StudyPlanView: {
-            /** Format: int64 */
-            id?: number;
-            name?: string;
-            /** Format: date-time */
-            startDate?: string;
-            /** Format: date-time */
-            endDate?: string;
-            status?: string;
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            updatedAt?: string;
-            tasks?: components["schemas"]["StudyTaskView"][];
-        };
-        CreateSourceRequest: {
-            title: string;
-            sourceType: string;
-        };
-        SourceResponse: {
-            /** Format: int64 */
-            id?: number;
-            /** Format: int64 */
-            spaceId?: number;
-            title?: string;
-            sourceType?: string;
-            status?: string;
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            updatedAt?: string;
-        };
-        CreateIngestionJobRequest: {
-            /** Format: int64 */
-            assetId: number;
-        };
-        IngestionJobResponse: {
-            /** Format: int64 */
-            id?: number;
-            /** Format: int64 */
-            spaceId?: number;
-            /** Format: int64 */
-            sourceId?: number;
-            /** Format: int64 */
-            assetId?: number;
-            status?: string;
-            stage?: string;
-            /** Format: int32 */
-            progressPercent?: number;
-            /** Format: date-time */
-            startedAt?: string;
-            /** Format: date-time */
-            finishedAt?: string;
-            /** Format: int32 */
-            retryCount?: number;
-            errorCode?: string;
-            errorMessage?: string;
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            updatedAt?: string;
-        };
-        SourceAssetResponse: {
-            /** Format: int64 */
-            id?: number;
-            /** Format: int64 */
-            spaceId?: number;
-            /** Format: int64 */
-            sourceId?: number;
-            assetRole?: string;
-            originalName?: string;
-            mimeType?: string;
-            /** Format: int64 */
-            sizeBytes?: number;
-            sha256?: string;
-            /** Format: date-time */
-            createdAt?: string;
-        };
-        CompleteReviewTaskRequest: {
-            result: string;
-            /** Format: int32 */
-            durationMs?: number;
-            notes?: string;
-        };
-        CompleteReviewTaskView: {
-            /** Format: int64 */
-            taskId?: number;
-            status?: string;
-            result?: string;
-            wrongQuestionStatus?: string;
-            /** Format: date-time */
-            nextDueAt?: string;
-            /** Format: date-time */
-            completedAt?: string;
-        };
-        CreateQuestionRequest: {
-            questionType: string;
-            stem: string;
+        UpdateQuestionRequest: {
+            stem?: string;
             explanation?: string;
             difficulty?: string;
-            options?: components["schemas"]["QuestionOptionInput"][];
-            correctOptionKey?: string;
-            correctOptionKeys?: string[];
-            correctBoolean?: boolean;
-            referenceAnswer?: string;
-            knowledgePointIds?: number[];
-        };
-        QuestionOptionInput: {
-            optionKey: string;
-            content: string;
-            /** Format: int32 */
-            sortOrder?: number;
         };
         QuestionAnswerView: {
             correctOptionKey?: string;
@@ -1308,79 +3266,51 @@ export interface components {
             sortOrder?: number;
             isCorrect?: boolean;
         };
-        CreatePracticeSessionRequest: {
-            questionIds?: number[];
+        NoteUpdateRequest: {
+            title?: string;
+            content: string;
+            contentFormat?: string;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            sourcePageId?: number;
+            /** Format: int64 */
+            contentBlockId?: number;
             /** Format: int64 */
             knowledgePointId?: number;
-            /** Format: int32 */
-            count?: number;
+            /** Format: int64 */
+            questionId?: number;
         };
-        PracticeSessionSummary: {
+        NoteView: {
             /** Format: int64 */
             id?: number;
             /** Format: int64 */
             spaceId?: number;
-            status?: string;
-            /** Format: int32 */
-            questionCount?: number;
-            /** Format: date-time */
-            startedAt?: string;
-            /** Format: date-time */
-            finishedAt?: string;
+            title?: string;
+            content?: string;
+            contentFormat?: string;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            sourcePageId?: number;
+            /** Format: int64 */
+            contentBlockId?: number;
+            /** Format: int64 */
+            knowledgePointId?: number;
+            /** Format: int64 */
+            questionId?: number;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
         };
-        PracticeSubmitView: {
-            /** Format: int64 */
-            sessionId?: number;
-            status?: string;
-            /** Format: int32 */
-            questionCount?: number;
-            /** Format: int32 */
-            answeredCount?: number;
-            /** Format: int32 */
-            correctCount?: number;
-            /** Format: int32 */
-            score?: number;
-            /** Format: int32 */
-            maxScore?: number;
-        };
-        AnswerPayloadView: {
-            selectedOptionKeys?: string[];
-            booleanAnswer?: boolean;
-            textAnswer?: string;
-        };
-        PracticeAnswerRequest: {
-            /** Format: int64 */
-            practiceSessionQuestionId: number;
-            answer: components["schemas"]["AnswerPayloadView"];
-            /** Format: int32 */
-            durationMs?: number;
-        };
-        PracticeAnswerView: {
-            /** Format: int64 */
-            id?: number;
-            /** Format: int64 */
-            practiceSessionQuestionId?: number;
-            /** Format: int64 */
-            questionId?: number;
-            isCorrect?: boolean;
-            correctAnswer?: string;
-            explanation?: string;
-            /** Format: int32 */
-            score?: number;
-            /** Format: date-time */
-            answeredAt?: string;
-        };
-        CreateKnowledgePointRequest: {
-            title: string;
+        UpdateKnowledgePointRequest: {
+            title?: string;
             summary?: string;
-            content: string;
+            content?: string;
+            difficulty?: string;
             /** Format: int64 */
             categoryId?: number;
-            difficulty?: string;
         };
         KnowledgePointResponse: {
             /** Format: int64 */
@@ -1401,30 +3331,12 @@ export interface components {
             updatedAt?: string;
             /** Format: date-time */
             publishedAt?: string;
-        };
-        LinkKnowledgePointSourcesRequest: {
-            contentBlockIds: number[];
-        };
-        KnowledgePointSourceResponse: {
-            /** Format: int64 */
-            id?: number;
-            /** Format: int64 */
-            spaceId?: number;
-            /** Format: int64 */
-            knowledgePointId?: number;
-            /** Format: int64 */
-            contentBlockId?: number;
-            relationType?: string;
-            /** Format: double */
-            relevanceScore?: number;
             /** Format: date-time */
-            createdAt?: string;
+            archivedAt?: string;
         };
-        CreateKnowledgeCategoryRequest: {
-            name: string;
+        UpdateKnowledgeCategoryRequest: {
+            name?: string;
             description?: string;
-            /** Format: int64 */
-            parentId?: number;
             /** Format: int32 */
             sortOrder?: number;
         };
@@ -1443,19 +3355,14 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+            /** Format: date-time */
+            deletedAt?: string;
         };
-        CreateExamRequest: {
-            title: string;
+        UpdateExamRequest: {
+            title?: string;
             description?: string;
             /** Format: int32 */
-            durationMinutes?: number;
-            questions: components["schemas"]["ExamQuestionInput"][];
-        };
-        ExamQuestionInput: {
-            /** Format: int64 */
-            questionId: number;
-            /** Format: int32 */
-            score?: number;
+            timeLimitMinutes?: number;
         };
         ExamQuestionView: {
             /** Format: int64 */
@@ -1499,6 +3406,606 @@ export interface components {
             /** Format: int32 */
             sortOrder?: number;
         };
+        ExamQuestion: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            examPaperId?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            questionId?: number;
+            /** Format: int32 */
+            sortOrder?: number;
+            /** Format: int32 */
+            score?: number;
+            questionSnapshotJson?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        SortSlot: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int32 */
+            sortOrder?: number;
+        };
+        GradeAnswerRequest: {
+            /** Format: int32 */
+            score?: number;
+            feedback?: string;
+        };
+        ExamAnswerGradingView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            examAttemptId?: number;
+            /** Format: int64 */
+            examQuestionId?: number;
+            gradingStatus?: string;
+            /** Format: date-time */
+            answeredAt?: string;
+            /** Format: int32 */
+            score?: number;
+            feedback?: string;
+            gradedBy?: string;
+            /** Format: date-time */
+            gradedAt?: string;
+        };
+        /** @description Write-only update. Omit apiKey to keep the stored secret. */
+        UpdateAiProviderSettingsRequest: {
+            enabled?: boolean;
+            provider?: string;
+            preset?: string;
+            baseUrl?: string;
+            model?: string;
+            apiKey?: string;
+        };
+        AiProviderSettingsView: {
+            enabled?: boolean;
+            provider?: string;
+            preset?: string;
+            baseUrl?: string;
+            model?: string;
+            apiKeyConfigured?: boolean;
+        };
+        ChangePasswordRequest: {
+            currentPassword: string;
+            newPassword: string;
+        };
+        UpdateUserRolesRequest: {
+            roles: string[];
+        };
+        UpsertValueRequest: {
+            value: string;
+        };
+        DescriptorView: {
+            key?: string;
+            type?: string;
+            valueType?: string;
+            /** Format: double */
+            min?: number;
+            /** Format: double */
+            max?: number;
+            restartRequired?: boolean;
+            description?: string;
+            currentValue?: string;
+            /** Format: int32 */
+            version?: number;
+        };
+        CreateLearningSpaceRequest: {
+            name: string;
+            description?: string;
+        };
+        WrongQuestionView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            questionId?: number;
+            /** Format: date-time */
+            firstWrongAt?: string;
+            /** Format: date-time */
+            lastWrongAt?: string;
+            /** Format: int32 */
+            wrongCount?: number;
+            /** Format: date-time */
+            lastCorrectAt?: string;
+            status?: string;
+            /** Format: date-time */
+            dismissedAt?: string;
+        };
+        ReorderRequest: {
+            taskIds: number[];
+        };
+        StudyPlanView: {
+            /** Format: int64 */
+            id?: number;
+            name?: string;
+            /** Format: date-time */
+            startDate?: string;
+            /** Format: date-time */
+            endDate?: string;
+            status?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            tasks?: components["schemas"]["StudyTaskView"][];
+        };
+        StudyTaskView: {
+            /** Format: int64 */
+            id?: number;
+            taskType?: string;
+            targetType?: string;
+            /** Format: int64 */
+            targetId?: number;
+            title?: string;
+            reason?: string;
+            /** Format: date-time */
+            dueAt?: string;
+            priority?: string;
+            status?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        GenerateStudyPlanRequest: {
+            name: string;
+            /** Format: date-time */
+            startDate?: string;
+            /** Format: date-time */
+            endDate?: string;
+            /** Format: int32 */
+            dailyItemLimit?: number;
+        };
+        CreateSourceRequest: {
+            title: string;
+            sourceType: string;
+        };
+        CompareRequest: {
+            /** Format: int64 */
+            fromRevisionId?: number;
+            /** Format: int64 */
+            toRevisionId?: number;
+        };
+        CompareResult: {
+            /** Format: int64 */
+            pagesAdded?: number;
+            /** Format: int64 */
+            pagesRemoved?: number;
+            /** Format: int64 */
+            pagesChanged?: number;
+            /** Format: int64 */
+            outlineAdded?: number;
+            /** Format: int64 */
+            outlineRemoved?: number;
+            /** Format: int64 */
+            outlineChanged?: number;
+            /** Format: int64 */
+            blocksAdded?: number;
+            /** Format: int64 */
+            blocksRemoved?: number;
+            /** Format: int64 */
+            blocksChanged?: number;
+            pagesAddedIds?: number[];
+            pagesRemovedIds?: number[];
+            pagesReorderedIds?: number[];
+            /** Format: int64 */
+            totalPagesBefore?: number;
+            /** Format: int64 */
+            totalPagesAfter?: number;
+            updatedContentBlocks?: {
+                [key: string]: string;
+            };
+        };
+        ExtractionRevision: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int32 */
+            version?: number;
+            status?: string;
+            extractorVersion?: string;
+            ocrEngine?: string;
+            ocrModel?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            publishedAt?: string;
+        };
+        ReviewSourceRequest: {
+            reviewStatus: string;
+            rejectedReason?: string;
+        };
+        ReorderPageItem: {
+            /** Format: int64 */
+            pageId?: number;
+            /** Format: int32 */
+            pageOrder?: number;
+            pageType?: string;
+            /** Format: int32 */
+            printedPageNumber?: number;
+        };
+        ReorderPagesRequest: {
+            pages?: components["schemas"]["ReorderPageItem"][];
+        };
+        CreateOutlineNodeRequest: {
+            /** Format: int64 */
+            parentId?: number;
+            nodeType?: string;
+            title?: string;
+            numberLabel?: string;
+            /** Format: int32 */
+            sortOrder?: number;
+            /** Format: int32 */
+            startPage?: number;
+            /** Format: int32 */
+            endPage?: number;
+            status?: string;
+            /** Format: double */
+            confidence?: number;
+        };
+        CreateIngestionJobRequest: {
+            /** Format: int64 */
+            assetId: number;
+        };
+        IngestionJobResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            assetId?: number;
+            status?: string;
+            stage?: string;
+            /** Format: int32 */
+            progressPercent?: number;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: int32 */
+            retryCount?: number;
+            errorCode?: string;
+            errorMessage?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        FolderImportSnapshot: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int32 */
+            totalFiles?: number;
+            /** Format: int32 */
+            unchangedFiles?: number;
+            /** Format: int32 */
+            addedFiles?: number;
+            /** Format: int32 */
+            changedFiles?: number;
+            /** Format: int32 */
+            removedFiles?: number;
+            /** Format: int32 */
+            pendingFiles?: number;
+            status?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        FolderImportEntryRequest: {
+            relativePath?: string;
+            sha256?: string;
+        };
+        FolderImportEntry: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            snapshotId?: number;
+            relativePath?: string;
+            sha256?: string;
+            status?: string;
+            /** Format: int64 */
+            sourceAssetId?: number;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        FolderSyncCompletion: {
+            completed?: boolean;
+            status?: string;
+            /** Format: int32 */
+            pendingCount?: number;
+            pendingEntries?: components["schemas"]["FolderImportEntry"][];
+            snapshot?: components["schemas"]["FolderImportSnapshot"];
+        };
+        FolderEntryBinding: {
+            relativePath?: string;
+            /** Format: int64 */
+            assetId?: number;
+        };
+        SourceAssetResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            assetRole?: string;
+            originalName?: string;
+            mimeType?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            sha256?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            isDuplicate?: boolean;
+            uploadDecision?: string;
+            /** Format: int64 */
+            duplicateOfId?: number;
+        };
+        CreateReviewTaskRequest: {
+            targetType: string;
+            /** Format: int64 */
+            targetId: number;
+            /** Format: date-time */
+            dueAt?: string;
+            priority?: string;
+            notes?: string;
+        };
+        CreateReviewTaskView: {
+            /** Format: int64 */
+            id?: number;
+            targetType?: string;
+            /** Format: int64 */
+            targetId?: number;
+            reason?: string;
+            /** Format: date-time */
+            dueAt?: string;
+            priority?: string;
+            status?: string;
+        };
+        CompleteReviewTaskRequest: {
+            result: string;
+            /** Format: int32 */
+            durationMs?: number;
+            notes?: string;
+        };
+        CompleteReviewTaskView: {
+            /** Format: int64 */
+            taskId?: number;
+            status?: string;
+            result?: string;
+            wrongQuestionStatus?: string;
+            /** Format: date-time */
+            nextDueAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+        };
+        CreateQuestionRequest: {
+            questionType: string;
+            stem: string;
+            explanation?: string;
+            difficulty?: string;
+            options?: components["schemas"]["QuestionOptionInput"][];
+            correctOptionKey?: string;
+            correctOptionKeys?: string[];
+            correctBoolean?: boolean;
+            referenceAnswer?: string;
+            correctOrder?: number[];
+            matches?: string;
+            knowledgePointIds?: number[];
+        };
+        QuestionOptionInput: {
+            optionKey: string;
+            content: string;
+            /** Format: int32 */
+            sortOrder?: number;
+        };
+        CreatePracticeSessionRequest: {
+            questionIds?: number[];
+            /** Format: int64 */
+            knowledgePointId?: number;
+            /** Format: int32 */
+            count?: number;
+            /** Format: int64 */
+            knowledgeCategoryId?: number;
+            difficulty?: string;
+            questionType?: string;
+            /** Format: int64 */
+            seed?: number;
+        };
+        PracticeSessionSummary: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            status?: string;
+            /** Format: int32 */
+            questionCount?: number;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        PracticeSubmitView: {
+            /** Format: int64 */
+            sessionId?: number;
+            status?: string;
+            /** Format: int32 */
+            questionCount?: number;
+            /** Format: int32 */
+            answeredCount?: number;
+            /** Format: int32 */
+            correctCount?: number;
+            /** Format: int32 */
+            score?: number;
+            /** Format: int32 */
+            maxScore?: number;
+        };
+        AnswerPayloadView: {
+            selectedOptionKeys?: string[];
+            booleanAnswer?: boolean;
+            textAnswer?: string;
+            orderingAnswer?: number[];
+            matchingAnswer?: string;
+        };
+        PracticeAnswerRequest: {
+            /** Format: int64 */
+            practiceSessionQuestionId: number;
+            answer: components["schemas"]["AnswerPayloadView"];
+            /** Format: int32 */
+            durationMs?: number;
+        };
+        PracticeAnswerView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            practiceSessionQuestionId?: number;
+            /** Format: int64 */
+            questionId?: number;
+            isCorrect?: boolean;
+            correctAnswer?: string;
+            explanation?: string;
+            /** Format: int32 */
+            score?: number;
+            /** Format: date-time */
+            answeredAt?: string;
+        };
+        NoteCreateRequest: {
+            title?: string;
+            content: string;
+            contentFormat?: string;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            sourcePageId?: number;
+            /** Format: int64 */
+            contentBlockId?: number;
+            /** Format: int64 */
+            knowledgePointId?: number;
+            /** Format: int64 */
+            questionId?: number;
+        };
+        CreateKnowledgePointRequest: {
+            title: string;
+            summary?: string;
+            content: string;
+            /** Format: int64 */
+            categoryId?: number;
+            difficulty?: string;
+        };
+        AddRelationRequest: {
+            relationType?: string;
+            /** Format: int64 */
+            targetKpId?: number;
+            /** Format: int32 */
+            weight?: number;
+            notes?: string;
+        };
+        KnowledgePointRelation: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceKnowledgePointId?: number;
+            /** Format: int64 */
+            targetKnowledgePointId?: number;
+            relationType?: string;
+            /** Format: int32 */
+            weight?: number;
+            notes?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        LinkKnowledgePointSourcesRequest: {
+            contentBlockIds: number[];
+        };
+        KnowledgePointSourceResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            knowledgePointId?: number;
+            /** Format: int64 */
+            contentBlockId?: number;
+            relationType?: string;
+            /** Format: double */
+            relevanceScore?: number;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        RejectKnowledgePointRequest: {
+            reason: string;
+        };
+        CreateKnowledgeCategoryRequest: {
+            name: string;
+            description?: string;
+            /** Format: int64 */
+            parentId?: number;
+            /** Format: int32 */
+            sortOrder?: number;
+        };
+        ReparentCategoryRequest: {
+            /** Format: int64 */
+            newParentId?: number;
+        };
+        ReorderCategoryRequest: {
+            /** Format: int32 */
+            sortOrder?: number;
+        };
+        IngestionIssue: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            ingestionJobId?: number;
+            /** Format: int64 */
+            sourcePageId?: number;
+            /** Format: int64 */
+            extractionRevisionId?: number;
+            issueType?: string;
+            severity?: string;
+            message?: string;
+            safeMessage?: string;
+            status?: string;
+            /** Format: int64 */
+            resolvedBy?: number;
+            /** Format: date-time */
+            resolvedAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        CreateExamRequest: {
+            title: string;
+            description?: string;
+            examType?: string;
+            /** Format: int32 */
+            timeLimitMinutes?: number;
+            questions: components["schemas"]["ExamQuestionInput"][];
+        };
+        ExamQuestionInput: {
+            /** Format: int64 */
+            questionId: number;
+            /** Format: int32 */
+            score: number;
+        };
         AttemptQuestionView: {
             /** Format: int64 */
             examQuestionId?: number;
@@ -1527,6 +4034,57 @@ export interface components {
             /** Format: date-time */
             submittedAt?: string;
             questions?: components["schemas"]["AttemptQuestionView"][];
+        };
+        AddQuestionRequest: {
+            /** Format: int64 */
+            questionId: number;
+            /** Format: int32 */
+            score?: number;
+        };
+        BlueprintRules: {
+            questionTypeDistribution?: {
+                [key: string]: number;
+            };
+            difficultyDistribution?: {
+                [key: string]: number;
+            };
+            categoryScope?: number[];
+            kpScope?: number[];
+            excludeQuestionIds?: number[];
+            includeQuestionIds?: number[];
+            /** Format: int32 */
+            totalQuestionCount?: number;
+            /** Format: int32 */
+            timeLimitMinutes?: number;
+        };
+        CreateExamBlueprintRequest: {
+            title: string;
+            rules: components["schemas"]["BlueprintRules"];
+        };
+        ExamBlueprintResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            title?: string;
+            rulesJson?: string;
+            status?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ExamBlueprintGenerateResponse: {
+            /** Format: int64 */
+            blueprintId?: number;
+            /** Format: int64 */
+            examId?: number;
+            /** Format: int64 */
+            examPaperId?: number;
+            /** Format: int32 */
+            paperVersion?: number;
+            /** Format: int32 */
+            totalQuestions?: number;
         };
         ExamResultItemView: {
             /** Format: int64 */
@@ -1594,6 +4152,53 @@ export interface components {
             rationale?: string;
             contextReferences?: components["schemas"]["ContextReference"][];
         };
+        CreateGenerationJobRequest: {
+            jobType: string;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            revisionId?: number;
+            /** Format: int64 */
+            knowledgePointId?: number;
+            prompt?: string;
+        };
+        AIGenerationJob: {
+            /** Format: int64 */
+            id?: number;
+            jobType?: string;
+            status?: string;
+            /** Format: int32 */
+            progress?: number;
+            requester?: string;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            revisionId?: number;
+            /** Format: int64 */
+            knowledgePointId?: number;
+            claimedBy?: string;
+            /** Format: date-time */
+            claimedAt?: string;
+            claimToken?: string;
+            /** Format: int32 */
+            successCount?: number;
+            /** Format: int32 */
+            failureCount?: number;
+            errorCode?: string;
+            safeMessage?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: int32 */
+            retryCount?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
         ExplanationResponse: {
             explanation?: string;
             keyConcepts?: string[];
@@ -1636,6 +4241,7 @@ export interface components {
             completionTokens?: number;
             /** Format: int32 */
             totalTokens?: number;
+            groundingMode?: string;
             /** Format: date-time */
             createdAt?: string;
             references?: components["schemas"]["ContextReference"][];
@@ -1653,6 +4259,10 @@ export interface components {
             model?: string;
             /** Format: int64 */
             latencyMs?: number;
+        };
+        VariantRequest: {
+            instructions?: string;
+            knowledgePointIds?: number[];
         };
         RefreshTokenRequest: {
             refreshToken?: string;
@@ -1672,6 +4282,73 @@ export interface components {
         LoginRequest: {
             username: string;
             password: string;
+        };
+        CreateUserRequest: {
+            username: string;
+            password: string;
+            subject?: string;
+        };
+        AdminUserSummary: {
+            /** Format: int64 */
+            id?: number;
+            subject?: string;
+            username?: string;
+            status?: string;
+            roles?: string[];
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ResetPasswordRequest: {
+            newPassword: string;
+        };
+        AdminSpaceView: {
+            /** Format: int64 */
+            id?: number;
+            name?: string;
+            description?: string;
+            ownerSubject?: string;
+            status?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int64 */
+            memberCount?: number;
+        };
+        CreateManualSourceRequest: {
+            title: string;
+            content: string;
+            format?: string;
+        };
+        AdminQuestionView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            questionType?: string;
+            stem?: string;
+            explanation?: string;
+            difficulty?: string;
+            originType?: string;
+            status?: string;
+            createdByUserId?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: date-time */
+            publishedAt?: string;
+            /** Format: date-time */
+            archivedAt?: string;
+        };
+        BulkResult: {
+            /** Format: int32 */
+            total?: number;
+            /** Format: int32 */
+            success?: number;
+            /** Format: int32 */
+            failed?: number;
+            errors?: string[];
         };
         ReconcileRequest: {
             /** @enum {string} */
@@ -1693,6 +4370,134 @@ export interface components {
             truncated?: boolean;
             mode?: string;
         };
+        CreateCalibrationRequest: {
+            version: string;
+            /** Format: int32 */
+            confidenceFullSamples?: number;
+            /** Format: int32 */
+            recencyDaysCap?: number;
+            /** Format: int32 */
+            volumeCap?: number;
+        };
+        CalibrationView: {
+            /** Format: int64 */
+            id?: number;
+            version?: string;
+            /** Format: int32 */
+            confidenceFullSamples?: number;
+            /** Format: int32 */
+            recencyDaysCap?: number;
+            /** Format: int32 */
+            volumeCap?: number;
+            active?: boolean;
+        };
+        RecomputeResultView: {
+            /** Format: int32 */
+            processed?: number;
+            /** Format: int32 */
+            failed?: number;
+            errors?: string[];
+        };
+        AdminKnowledgePointView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            categoryId?: number;
+            title?: string;
+            summary?: string;
+            originType?: string;
+            status?: string;
+            difficulty?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        AdminCategoryView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            parentId?: number;
+            name?: string;
+            description?: string;
+            /** Format: int32 */
+            sortOrder?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: date-time */
+            deletedAt?: string;
+        };
+        AdminExamView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            spaceId?: number;
+            title?: string;
+            description?: string;
+            examType?: string;
+            /** Format: int32 */
+            timeLimitMinutes?: number;
+            /** Format: int32 */
+            totalScore?: number;
+            status?: string;
+            createdByUserId?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: date-time */
+            publishedAt?: string;
+            /** Format: date-time */
+            archivedAt?: string;
+        };
+        AdminAiJobView: {
+            /** Format: int64 */
+            id?: number;
+            jobType?: string;
+            status?: string;
+            /** Format: int32 */
+            progress?: number;
+            requester?: string;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            revisionId?: number;
+            /** Format: int32 */
+            successCount?: number;
+            /** Format: int32 */
+            failureCount?: number;
+            errorCode?: string;
+            safeMessage?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: int32 */
+            retryCount?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        EditTitleReasonRequest: {
+            title?: string;
+            reason?: string;
+        };
+        AdjustPriorityRequest: {
+            priority: string;
+        };
+        AdjustDueAtRequest: {
+            /** Format: date-time */
+            dueAt?: string;
+        };
         UpdateUserStatusRequest: {
             /** @enum {string} */
             status: "ACTIVE" | "DISABLED";
@@ -1709,20 +4514,105 @@ export interface components {
         SpikeStatusResponse: {
             status?: string;
         };
-        WrongQuestionView: {
+        TimeSeriesPoint: {
+            /** Format: date */
+            bucket?: string;
             /** Format: int64 */
-            id?: number;
+            durationMs?: number;
             /** Format: int64 */
-            questionId?: number;
-            /** Format: date-time */
-            firstWrongAt?: string;
-            /** Format: date-time */
-            lastWrongAt?: string;
-            /** Format: int32 */
+            practiceCount?: number;
+            /** Format: int64 */
+            correctCount?: number;
+            /** Format: int64 */
             wrongCount?: number;
-            /** Format: date-time */
-            lastCorrectAt?: string;
-            status?: string;
+            /** Format: int64 */
+            examCount?: number;
+            /** Format: int64 */
+            reviewCompleted?: number;
+            /** Format: int64 */
+            studyTaskCompleted?: number;
+        };
+        StudyTaskCompletion: {
+            bucket?: string;
+            /** Format: int64 */
+            completedCount?: number;
+            /** Format: int64 */
+            totalCount?: number;
+        };
+        ReviewBacklogTrend: {
+            /** Format: date */
+            bucket?: string;
+            /** Format: int64 */
+            pendingCount?: number;
+            /** Format: int64 */
+            completedCount?: number;
+        };
+        QuestionTypePerformance: {
+            questionType?: string;
+            /** Format: int64 */
+            totalAnswers?: number;
+            /** Format: int64 */
+            correctCount?: number;
+            /** Format: double */
+            accuracy?: number;
+        };
+        SpaceOverview: {
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            learningDurationMs?: number;
+            /** Format: double */
+            practiceAccuracy?: number;
+            /** Format: int64 */
+            wrongQuestionCount?: number;
+            /** Format: int64 */
+            reviewCompletionRate?: number;
+            /** Format: int64 */
+            examHistoryCount?: number;
+            /** Format: double */
+            avgExamScoreRatio?: number;
+            masteryDistribution?: {
+                [key: string]: number;
+            };
+        };
+        MasteryMovement: {
+            bucket?: string;
+            /** Format: int64 */
+            count?: number;
+        };
+        KpPracticeTrend: {
+            /** Format: int64 */
+            knowledgePointId?: number;
+            kpTitle?: string;
+            /** Format: int64 */
+            totalAttempts?: number;
+            /** Format: int64 */
+            correctCount?: number;
+            /** Format: double */
+            accuracy?: number;
+        };
+        GlobalSpaceOverview: {
+            /** Format: int64 */
+            spaceId?: number;
+            spaceName?: string;
+            /** Format: int64 */
+            memberCount?: number;
+            /** Format: int64 */
+            examCount?: number;
+            /** Format: int64 */
+            masteryCount?: number;
+            /** Format: double */
+            avgMasteryScore?: number;
+        };
+        ExamTrend: {
+            /** Format: date */
+            bucket?: string;
+            /** Format: int64 */
+            attemptCount?: number;
+            /** Format: double */
+            avgScore?: number;
+            /** Format: double */
+            avgMaxScore?: number;
         };
         SourcePageResponse: {
             /** Format: int64 */
@@ -1771,6 +4661,17 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        DuplicateCheckResponse: {
+            scenario?: string;
+            duplicate?: boolean;
+            /** Format: int64 */
+            matchedAssetId?: number;
+            matchedName?: string;
+            /** Format: int64 */
+            matchedSizeBytes?: number;
+            /** Format: int64 */
+            nameConflictId?: number;
+        };
         SearchPageResponse: {
             content?: components["schemas"]["SearchResult"][];
             /** Format: int32 */
@@ -1784,7 +4685,7 @@ export interface components {
         };
         SearchResult: {
             /** @enum {string} */
-            type?: "SOURCE" | "CONTENT_BLOCK" | "KNOWLEDGE_POINT" | "QUESTION" | "WRONG_QUESTION";
+            type?: "SOURCE" | "CONTENT_BLOCK" | "KNOWLEDGE_POINT" | "QUESTION" | "WRONG_QUESTION" | "NOTE";
             /** Format: int64 */
             id?: number;
             title?: string;
@@ -1803,6 +4704,8 @@ export interface components {
             knowledgePointId?: number;
             /** Format: int64 */
             questionId?: number;
+            /** Format: int64 */
+            noteId?: number;
         };
         ReviewTaskView: {
             /** Format: int64 */
@@ -1817,6 +4720,29 @@ export interface components {
             status?: string;
             /** Format: date-time */
             createdAt?: string;
+        };
+        SourceReference: {
+            /** Format: int64 */
+            sourceId?: number;
+            sourceTitle?: string;
+            /** Format: int64 */
+            sourceAssetId?: number;
+            /** Format: int64 */
+            sourcePageId?: number;
+            /** Format: int32 */
+            pageOrder?: number;
+            /** Format: int32 */
+            sourcePageNumber?: number;
+            /** Format: int32 */
+            printedPageNumber?: number;
+            /** Format: int64 */
+            contentBlockId?: number;
+            blockType?: string;
+            locator?: string;
+            /** Format: int64 */
+            extractionRevisionId?: number;
+            /** Format: int32 */
+            revisionVersion?: number;
         };
         PracticeQuestionView: {
             /** Format: int64 */
@@ -1847,6 +4773,17 @@ export interface components {
             updatedAt?: string;
             questions?: components["schemas"]["PracticeQuestionView"][];
         };
+        NotePageResponse: {
+            items?: components["schemas"]["NoteView"][];
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            /** Format: int64 */
+            totalItems?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
         MasteryResponse: {
             /** Format: int64 */
             id?: number;
@@ -1856,6 +4793,7 @@ export interface components {
             masteryScore?: number;
             /** Format: double */
             confidence?: number;
+            algorithmVersion?: string;
             /** Format: int32 */
             practiceEvidenceCount?: number;
             /** Format: int32 */
@@ -1895,6 +4833,17 @@ export interface components {
             severity?: string;
             recommendation?: string;
         };
+        GenerationJobPageResponse: {
+            content?: components["schemas"]["AIGenerationJob"][];
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+            /** Format: int64 */
+            totalElements?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
         ConversationPageResponse: {
             content?: components["schemas"]["ConversationView"][];
             /** Format: int32 */
@@ -1922,6 +4871,29 @@ export interface components {
             username?: string;
             roles?: string[];
         };
+        AiUsageRecord: {
+            /** Format: int64 */
+            id?: number;
+            userSubject?: string;
+            /** Format: int64 */
+            spaceId?: number;
+            provider?: string;
+            model?: string;
+            purpose?: string;
+            requestId?: string;
+            /** Format: int32 */
+            promptTokens?: number;
+            /** Format: int32 */
+            completionTokens?: number;
+            /** Format: int32 */
+            totalTokens?: number;
+            /** Format: int32 */
+            latencyMs?: number;
+            status?: string;
+            errorCode?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
         AdminUserPageResponse: {
             items?: components["schemas"]["AdminUserSummary"][];
             /** Format: int32 */
@@ -1933,7 +4905,7 @@ export interface components {
             /** Format: int32 */
             totalPages?: number;
         };
-        AdminUserSummary: {
+        AdminUserDetail: {
             /** Format: int64 */
             id?: number;
             subject?: string;
@@ -1942,14 +4914,56 @@ export interface components {
             roles?: string[];
             /** Format: date-time */
             createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
         };
-        AdminUserDetail: {
+        SourcePage: {
             /** Format: int64 */
             id?: number;
-            subject?: string;
-            username?: string;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            sourceId?: number;
+            /** Format: int64 */
+            sourceAssetId?: number;
+            /** Format: int64 */
+            extractionRevisionId?: number;
+            /** Format: int32 */
+            sourcePageNumber?: number;
+            /** Format: int32 */
+            pageOrder?: number;
+            /** Format: int32 */
+            printedPageNumber?: number;
+            pageType?: string;
+            /** Format: double */
+            orderConfidence?: number;
+            orderStatus?: string;
+            extractedText?: string;
+            /** Format: double */
+            extractionConfidence?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ExamAttempt: {
+            /** Format: int64 */
+            id?: number;
+            userSubject?: string;
+            /** Format: int64 */
+            spaceId?: number;
+            /** Format: int64 */
+            examId?: number;
+            /** Format: int64 */
+            examPaperId?: number;
             status?: string;
-            roles?: string[];
+            gradingStatus?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            deadlineAt?: string;
+            /** Format: date-time */
+            submittedAt?: string;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -1964,6 +4978,505 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+        };
+    };
+    update_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+                nodeId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOutlineNodeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceOutlineNode"];
+                };
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+                nodeId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    rename: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameLearningSpaceRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSpaceResponse"];
+                };
+            };
+        };
+    };
+    get_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionAuthoringResponse"];
+                };
+            };
+        };
+    };
+    update_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateQuestionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionAuthoringResponse"];
+                };
+            };
+        };
+    };
+    get_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                noteId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteView"];
+                };
+            };
+        };
+    };
+    update_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                noteId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteView"];
+                };
+            };
+        };
+    };
+    delete_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                noteId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                knowledgePointId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgePointResponse"];
+                };
+            };
+        };
+    };
+    update_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                knowledgePointId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateKnowledgePointRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgePointResponse"];
+                };
+            };
+        };
+    };
+    get_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                categoryId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeCategoryResponse"];
+                };
+            };
+        };
+    };
+    update_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                categoryId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateKnowledgeCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeCategoryResponse"];
+                };
+            };
+        };
+    };
+    delete_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                categoryId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamResponse"];
+                };
+            };
+        };
+    };
+    update_6: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateExamRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamResponse"];
+                };
+            };
+        };
+    };
+    updateScore: {
+        parameters: {
+            query: {
+                score: number;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+                examId: number;
+                examQuestionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamQuestion"];
+                };
+            };
+        };
+    };
+    reorder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SortSlot"][];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamQuestion"][];
+                };
+            };
+        };
+    };
+    grade: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                attemptId: number;
+                answerId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GradeAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAnswerGradingView"];
+                };
+            };
+        };
+    };
     getSettings: {
         parameters: {
             query?: never;
@@ -2008,6 +5521,28 @@ export interface operations {
             };
         };
     };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     updateRoles: {
         parameters: {
             query?: never;
@@ -2029,6 +5564,54 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    get_6: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DescriptorView"];
+                };
+            };
+        };
+    };
+    upsert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertValueRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DescriptorView"];
+                };
             };
         };
     };
@@ -2072,6 +5655,171 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LearningSpaceResponse"];
+                };
+            };
+        };
+    };
+    restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                wrongQuestionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WrongQuestionView"];
+                };
+            };
+        };
+    };
+    dismiss: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                wrongQuestionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WrongQuestionView"];
+                };
+            };
+        };
+    };
+    reorder_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                planId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyPlanView"];
+                };
+            };
+        };
+    };
+    regenerate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                planId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyPlanView"];
+                };
+            };
+        };
+    };
+    unskip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyTaskView"];
+                };
+            };
+        };
+    };
+    skip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyTaskView"];
+                };
+            };
+        };
+    };
+    markInProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyTaskView"];
                 };
             };
         };
@@ -2173,7 +5921,209 @@ export interface operations {
             };
         };
     };
+    compare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompareRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CompareResult"];
+                };
+            };
+        };
+    };
     list_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtractionRevision"][];
+                };
+            };
+        };
+    };
+    create_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtractionRevision"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtractionRevision"];
+                };
+            };
+        };
+    };
+    review: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+        };
+    };
+    restore_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+        };
+    };
+    batchReorder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderPagesRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceOutlineNode"][];
+                };
+            };
+        };
+    };
+    create_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOutlineNodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceOutlineNode"];
+                };
+            };
+        };
+    };
+    list_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -2196,7 +6146,7 @@ export interface operations {
             };
         };
     };
-    create_2: {
+    create_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -2223,7 +6173,157 @@ export interface operations {
             };
         };
     };
-    list_3: {
+    listSnapshots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FolderImportSnapshot"][];
+                };
+            };
+        };
+    };
+    createSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FolderImportSnapshot"];
+                };
+            };
+        };
+    };
+    listEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+                snapshotId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FolderImportEntry"][];
+                };
+            };
+        };
+    };
+    submitEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+                snapshotId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderImportEntryRequest"][];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FolderImportSnapshot"];
+                };
+            };
+        };
+    };
+    completeSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+                snapshotId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FolderSyncCompletion"];
+                };
+            };
+        };
+    };
+    bindEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+                snapshotId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderEntryBinding"][];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FolderImportSnapshot"];
+                };
+            };
+        };
+    };
+    list_5: {
         parameters: {
             query?: never;
             header?: never;
@@ -2248,7 +6348,9 @@ export interface operations {
     };
     upload: {
         parameters: {
-            query?: never;
+            query?: {
+                duplicatePolicy?: string;
+            };
             header?: never;
             path: {
                 spaceId: number;
@@ -2272,6 +6374,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceAssetResponse"];
+                };
+            };
+        };
+    };
+    archive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+        };
+    };
+    list_6: {
+        parameters: {
+            query?: {
+                dueBefore?: string;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewTaskView"][];
+                };
+            };
+        };
+    };
+    create_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReviewTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateReviewTaskView"];
                 };
             };
         };
@@ -2303,7 +6478,29 @@ export interface operations {
             };
         };
     };
-    list_4: {
+    restore_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSpaceResponse"];
+                };
+            };
+        };
+    };
+    list_7: {
         parameters: {
             query?: {
                 status?: string;
@@ -2329,7 +6526,7 @@ export interface operations {
             };
         };
     };
-    create_3: {
+    create_6: {
         parameters: {
             query?: never;
             header?: never;
@@ -2346,6 +6543,77 @@ export interface operations {
         responses: {
             /** @description Created */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionAuthoringResponse"];
+                };
+            };
+        };
+    };
+    listSourceBlocks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SourceReference"][];
+                };
+            };
+        };
+    };
+    linkSourceBlocks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    restore_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2378,9 +6646,37 @@ export interface operations {
             };
         };
     };
-    list_5: {
+    archive_1: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionAuthoringResponse"];
+                };
+            };
+        };
+    };
+    list_8: {
+        parameters: {
+            query?: {
+                fromTime?: string;
+                toTime?: string;
+                knowledgePointId?: number;
+                knowledgeCategoryId?: number;
+            };
             header?: never;
             path: {
                 spaceId: number;
@@ -2400,7 +6696,7 @@ export interface operations {
             };
         };
     };
-    create_4: {
+    create_7: {
         parameters: {
             query?: never;
             header?: never;
@@ -2472,6 +6768,29 @@ export interface operations {
             };
         };
     };
+    listAnswers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeAnswerView"][];
+                };
+            };
+        };
+    };
     answer: {
         parameters: {
             query?: never;
@@ -2499,7 +6818,176 @@ export interface operations {
             };
         };
     };
-    list_6: {
+    list_9: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+                keyword?: string;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotePageResponse"];
+                };
+            };
+        };
+    };
+    create_8: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteView"];
+                };
+            };
+        };
+    };
+    list_10: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                noteId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceReference"][];
+                };
+            };
+        };
+    };
+    link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                noteId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_11: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                noteId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": number[];
+                };
+            };
+        };
+    };
+    link_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                noteId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    archive_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                noteId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_12: {
         parameters: {
             query?: never;
             header?: never;
@@ -2521,7 +7009,7 @@ export interface operations {
             };
         };
     };
-    create_5: {
+    create_9: {
         parameters: {
             query?: never;
             header?: never;
@@ -2547,7 +7035,57 @@ export interface operations {
             };
         };
     };
-    list_7: {
+    list_13: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                kpId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["KnowledgePointRelation"][];
+                };
+            };
+        };
+    };
+    add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                kpId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddRelationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["KnowledgePointRelation"];
+                };
+            };
+        };
+    };
+    list_14: {
         parameters: {
             query?: never;
             header?: never;
@@ -2570,7 +7108,7 @@ export interface operations {
             };
         };
     };
-    link: {
+    link_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -2593,6 +7131,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgePointSourceResponse"][];
+                };
+            };
+        };
+    };
+    restore_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                knowledgePointId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgePointResponse"];
+                };
+            };
+        };
+    };
+    reject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                knowledgePointId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectKnowledgePointRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgePointResponse"];
                 };
             };
         };
@@ -2620,7 +7208,30 @@ export interface operations {
             };
         };
     };
-    list_8: {
+    archive_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                knowledgePointId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgePointResponse"];
+                };
+            };
+        };
+    };
+    list_15: {
         parameters: {
             query?: never;
             header?: never;
@@ -2642,7 +7253,7 @@ export interface operations {
             };
         };
     };
-    create_6: {
+    create_10: {
         parameters: {
             query?: never;
             header?: never;
@@ -2659,6 +7270,60 @@ export interface operations {
         responses: {
             /** @description Created */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeCategoryResponse"];
+                };
+            };
+        };
+    };
+    reparent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                categoryId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReparentCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeCategoryResponse"];
+                };
+            };
+        };
+    };
+    reorder_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                categoryId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2691,7 +7356,53 @@ export interface operations {
             };
         };
     };
-    list_9: {
+    resolve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                issueId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionIssue"];
+                };
+            };
+        };
+    };
+    ignore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                issueId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionIssue"];
+                };
+            };
+        };
+    };
+    list_16: {
         parameters: {
             query?: never;
             header?: never;
@@ -2713,7 +7424,7 @@ export interface operations {
             };
         };
     };
-    create_7: {
+    create_11: {
         parameters: {
             query?: never;
             header?: never;
@@ -2739,7 +7450,7 @@ export interface operations {
             };
         };
     };
-    create_8: {
+    create_12: {
         parameters: {
             query?: never;
             header?: never;
@@ -2781,6 +7492,127 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExamResponse"];
+                };
+            };
+        };
+    };
+    addQuestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddQuestionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamQuestion"];
+                };
+            };
+        };
+    };
+    archive_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamResponse"];
+                };
+            };
+        };
+    };
+    list_17: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamBlueprintResponse"][];
+                };
+            };
+        };
+    };
+    create_13: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateExamBlueprintRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamBlueprintResponse"];
+                };
+            };
+        };
+    };
+    generate_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                blueprintId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamBlueprintGenerateResponse"];
                 };
             };
         };
@@ -2858,6 +7690,28 @@ export interface operations {
             };
         };
     };
+    archive_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSpaceResponse"];
+                };
+            };
+        };
+    };
     studyCoach: {
         parameters: {
             query?: never;
@@ -2880,6 +7734,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudyCoachResponse"];
+                };
+            };
+        };
+    };
+    list_18: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJobPageResponse"];
+                };
+            };
+        };
+    };
+    create_14: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGenerationJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIGenerationJob"];
+                };
+            };
+        };
+    };
+    retry_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                jobId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AIGenerationJob"];
                 };
             };
         };
@@ -3077,6 +8005,35 @@ export interface operations {
             };
         };
     };
+    variantFromPractice: {
+        parameters: {
+            query?: {
+                save?: boolean;
+            };
+            header?: never;
+            path: {
+                sessionId: number;
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VariantRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
     refresh: {
         parameters: {
             query?: never;
@@ -3147,6 +8104,322 @@ export interface operations {
             };
         };
     };
+    listUsers: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminUserPageResponse"];
+                };
+            };
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminUserSummary"];
+                };
+            };
+        };
+    };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    restore_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminSpaceView"];
+                };
+            };
+        };
+    };
+    archive_6: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminSpaceView"];
+                };
+            };
+        };
+    };
+    reorderPage: {
+        parameters: {
+            query: {
+                spaceId: number;
+                pageOrder: number;
+            };
+            header?: never;
+            path: {
+                pageId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    createManual: {
+        parameters: {
+            query: {
+                spaceId: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateManualSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+        };
+    };
+    retryJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    editBlock: {
+        parameters: {
+            query: {
+                spaceId: number;
+            };
+            header?: never;
+            path: {
+                blockId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    publish_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminQuestionView"];
+                };
+            };
+        };
+    };
+    archive_7: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminQuestionView"];
+                };
+            };
+        };
+    };
+    bulkPublish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    bulkArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
     reconcileStorage: {
         parameters: {
             query?: never;
@@ -3167,6 +8440,595 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["StorageReconciliationResult"];
+                };
+            };
+        };
+    };
+    list_19: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CalibrationView"][];
+                };
+            };
+        };
+    };
+    create_15: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCalibrationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CalibrationView"];
+                };
+            };
+        };
+    };
+    activate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CalibrationView"];
+                };
+            };
+        };
+    };
+    recompute: {
+        parameters: {
+            query: {
+                userSubject: string;
+                spaceId: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RecomputeResultView"];
+                };
+            };
+        };
+    };
+    publishPoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kpId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminKnowledgePointView"];
+                };
+            };
+        };
+    };
+    archivePoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kpId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminKnowledgePointView"];
+                };
+            };
+        };
+    };
+    bulkPublishPoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    bulkArchivePoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    deleteCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                categoryId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminCategoryView"];
+                };
+            };
+        };
+    };
+    publish_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminExamView"];
+                };
+            };
+        };
+    };
+    grade_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                examId: number;
+                attemptId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    archive_8: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminExamView"];
+                };
+            };
+        };
+    };
+    bulkReviewSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    bulkArchiveSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    bulkPublishQuestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    bulkArchiveQuestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    bulkPublishKnowledgePoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    bulkArchiveKnowledgePoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    bulkRetryJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    bulkResolveIssues: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    bulkIgnoreIssues: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkResult"];
+                };
+            };
+        };
+    };
+    retry_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminAiJobView"];
+                };
+            };
+        };
+    };
+    editTitleReason: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditTitleReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyTaskView"];
+                };
+            };
+        };
+    };
+    adjustPriority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustPriorityRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyTaskView"];
+                };
+            };
+        };
+    };
+    adjustDueAt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                taskId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustDueAtRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyTaskView"];
                 };
             };
         };
@@ -3277,7 +9139,7 @@ export interface operations {
             };
         };
     };
-    get: {
+    get_7: {
         parameters: {
             query?: never;
             header?: never;
@@ -3299,7 +9161,7 @@ export interface operations {
             };
         };
     };
-    list_10: {
+    list_20: {
         parameters: {
             query?: never;
             header?: never;
@@ -3321,7 +9183,7 @@ export interface operations {
             };
         };
     };
-    get_1: {
+    get_8: {
         parameters: {
             query?: never;
             header?: never;
@@ -3343,13 +9205,14 @@ export interface operations {
             };
         };
     };
-    get_2: {
+    timeSeries: {
         parameters: {
-            query?: never;
+            query?: {
+                bucket?: string;
+            };
             header?: never;
             path: {
                 spaceId: number;
-                sourceId: number;
             };
             cookie?: never;
         };
@@ -3361,12 +9224,186 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SourceResponse"];
+                    "application/json": components["schemas"]["TimeSeriesPoint"][];
                 };
             };
         };
     };
-    list_11: {
+    studyTaskCompletion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyTaskCompletion"][];
+                };
+            };
+        };
+    };
+    reviewBacklogTrend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewBacklogTrend"][];
+                };
+            };
+        };
+    };
+    questionTypePerformance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionTypePerformance"][];
+                };
+            };
+        };
+    };
+    overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpaceOverview"];
+                };
+            };
+        };
+    };
+    masteryMovement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasteryMovement"][];
+                };
+            };
+        };
+    };
+    kpPracticeTrend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KpPracticeTrend"][];
+                };
+            };
+        };
+    };
+    globalOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalSpaceOverview"][];
+                };
+            };
+        };
+    };
+    examTrend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamTrend"][];
+                };
+            };
+        };
+    };
+    list_21: {
         parameters: {
             query?: never;
             header?: never;
@@ -3389,7 +9426,53 @@ export interface operations {
             };
         };
     };
-    list_12: {
+    getSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+                snapshotId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FolderImportSnapshot"];
+                };
+            };
+        };
+    };
+    deleteSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+                snapshotId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_22: {
         parameters: {
             query?: {
                 pageId?: number;
@@ -3414,7 +9497,7 @@ export interface operations {
             };
         };
     };
-    get_3: {
+    get_9: {
         parameters: {
             query?: never;
             header?: never;
@@ -3438,10 +9521,63 @@ export interface operations {
             };
         };
     };
+    downloadRaw: {
+        parameters: {
+            query?: never;
+            header?: {
+                Range?: string;
+            };
+            path: {
+                spaceId: number;
+                sourceId: number;
+                assetId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    duplicateCheck: {
+        parameters: {
+            query: {
+                sha256: string;
+                name?: string;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateCheckResponse"];
+                };
+            };
+        };
+    };
     search: {
         parameters: {
             query: {
                 q: string;
+                /** @description Comma-separated: SOURCE,CONTENT_BLOCK,KNOWLEDGE_POINT,QUESTION,WRONG_QUESTION,NOTE */
                 types?: string;
                 page?: number;
                 size?: number;
@@ -3492,54 +9628,7 @@ export interface operations {
             };
         };
     };
-    list_13: {
-        parameters: {
-            query?: {
-                dueBefore?: string;
-            };
-            header?: never;
-            path: {
-                spaceId: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewTaskView"][];
-                };
-            };
-        };
-    };
-    get_4: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                spaceId: number;
-                questionId: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QuestionAuthoringResponse"];
-                };
-            };
-        };
-    };
-    get_5: {
+    get_10: {
         parameters: {
             query?: never;
             header?: never;
@@ -3562,7 +9651,7 @@ export interface operations {
             };
         };
     };
-    list_14: {
+    list_23: {
         parameters: {
             query?: never;
             header?: never;
@@ -3584,7 +9673,7 @@ export interface operations {
             };
         };
     };
-    get_6: {
+    get_11: {
         parameters: {
             query?: never;
             header?: never;
@@ -3607,53 +9696,7 @@ export interface operations {
             };
         };
     };
-    get_7: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                spaceId: number;
-                knowledgePointId: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgePointResponse"];
-                };
-            };
-        };
-    };
-    get_8: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                spaceId: number;
-                categoryId: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeCategoryResponse"];
-                };
-            };
-        };
-    };
-    get_9: {
+    get_12: {
         parameters: {
             query?: never;
             header?: never;
@@ -3676,13 +9719,14 @@ export interface operations {
             };
         };
     };
-    get_10: {
+    list_24: {
         parameters: {
-            query?: never;
+            query?: {
+                jobId?: number;
+            };
             header?: never;
             path: {
                 spaceId: number;
-                examId: number;
             };
             cookie?: never;
         };
@@ -3694,12 +9738,35 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ExamResponse"];
+                    "application/json": components["schemas"]["IngestionIssue"][];
                 };
             };
         };
     };
-    get_11: {
+    get_13: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                blueprintId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamBlueprintResponse"];
+                };
+            };
+        };
+    };
+    get_14: {
         parameters: {
             query?: never;
             header?: never;
@@ -3745,7 +9812,7 @@ export interface operations {
             };
         };
     };
-    get_12: {
+    get_15: {
         parameters: {
             query?: never;
             header?: never;
@@ -3764,6 +9831,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExamDiagnosisView"];
+                };
+            };
+        };
+    };
+    get_16: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                jobId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIGenerationJob"];
                 };
             };
         };
@@ -3811,7 +9901,7 @@ export interface operations {
             };
         };
     };
-    listUsers: {
+    list_25: {
         parameters: {
             query?: {
                 page?: number;
@@ -3829,7 +9919,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["AdminUserPageResponse"];
+                    "application/json": components["schemas"]["AiUsageRecord"][];
                 };
             };
         };
@@ -3852,6 +9942,624 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AdminUserDetail"];
+                };
+            };
+        };
+    };
+    registry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DescriptorView"][];
+                };
+            };
+        };
+    };
+    list_26: {
+        parameters: {
+            query?: {
+                ownerSubject?: string;
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminSpaceView"][];
+                };
+            };
+        };
+    };
+    get_17: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminSpaceView"];
+                };
+            };
+        };
+    };
+    listSources: {
+        parameters: {
+            query?: {
+                q?: string;
+                spaceId?: number;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    sourceDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    revisions: {
+        parameters: {
+            query: {
+                spaceId: number;
+            };
+            header?: never;
+            path: {
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ExtractionRevision"][];
+                };
+            };
+        };
+    };
+    raw: {
+        parameters: {
+            query: {
+                spaceId: number;
+            };
+            header?: never;
+            path: {
+                sourceId: number;
+                assetId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    pages: {
+        parameters: {
+            query: {
+                spaceId: number;
+            };
+            header?: never;
+            path: {
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SourcePage"][];
+                };
+            };
+        };
+    };
+    jobs: {
+        parameters: {
+            query: {
+                spaceId: number;
+            };
+            header?: never;
+            path: {
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    issues: {
+        parameters: {
+            query: {
+                spaceId: number;
+            };
+            header?: never;
+            path: {
+                sourceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["IngestionIssue"][];
+                };
+            };
+        };
+    };
+    list_27: {
+        parameters: {
+            query?: {
+                spaceId?: number;
+                status?: string;
+                questionType?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminQuestionView"][];
+                };
+            };
+        };
+    };
+    get_18: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                questionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminQuestionView"];
+                };
+            };
+        };
+    };
+    getActive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CalibrationView"];
+                };
+            };
+        };
+    };
+    listPoints: {
+        parameters: {
+            query?: {
+                spaceId?: number;
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminKnowledgePointView"][];
+                };
+            };
+        };
+    };
+    getPoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kpId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminKnowledgePointView"];
+                };
+            };
+        };
+    };
+    listCategories: {
+        parameters: {
+            query?: {
+                spaceId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminCategoryView"][];
+                };
+            };
+        };
+    };
+    getCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                categoryId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminCategoryView"];
+                };
+            };
+        };
+    };
+    list_28: {
+        parameters: {
+            query?: {
+                spaceId?: number;
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminExamView"][];
+                };
+            };
+        };
+    };
+    get_19: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminExamView"];
+                };
+            };
+        };
+    };
+    listAttempts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                examId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ExamAttempt"][];
+                };
+            };
+        };
+    };
+    list_29: {
+        parameters: {
+            query?: {
+                status?: string;
+                spaceId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminAiJobView"][];
+                };
+            };
+        };
+    };
+    get_20: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminAiJobView"];
+                };
+            };
+        };
+    };
+    unlinkSourceBlock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                questionId: number;
+                blockId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    unlink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                noteId: number;
+                blockId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    unlink_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                noteId: number;
+                kpId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                kpId: number;
+                relationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    removeQuestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                examId: number;
+                examQuestionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamQuestion"];
                 };
             };
         };
