@@ -124,6 +124,7 @@ export function createMockApiClient(): ApiClient {
     updateNote: vi.fn(async () => noData),
     deleteNote: vi.fn(async () => noData),
     archiveNote: vi.fn(async () => noData),
+    restoreNote: vi.fn(async () => noData),
     addNoteKnowledgePoints: vi.fn(async () => noData),
     listNoteKnowledgePoints: vi.fn(async () => noData),
     removeNoteKnowledgePoint: vi.fn(async () => noData),

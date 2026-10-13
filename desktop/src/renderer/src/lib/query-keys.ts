@@ -132,7 +132,12 @@ export const queryKeys = {
   // G01 — Notes. The list is paged, so the page belongs in the key.
   notes: (
     spaceId: number | null,
-    filters: { page?: number; size?: number; keyword?: string } = {}
+    filters: {
+      page?: number;
+      size?: number;
+      keyword?: string;
+      archived?: boolean;
+    } = {}
   ) => ['notes', part(spaceId), ...labelled(filters)] as const,
   note: (spaceId: number | null, noteId: number | null) =>
     ['note', part(spaceId), part(noteId)] as const,

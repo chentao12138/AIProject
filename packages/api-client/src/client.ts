@@ -1127,7 +1127,13 @@ export function createApiClient(
     /** GET .../notes — paged list of MY notes in the space. */
     async listNotes(
       spaceId: number,
-      query?: { page?: number; size?: number; keyword?: string }
+      query?: {
+        page?: number;
+        size?: number;
+        keyword?: string;
+        /** Archived rows are filtered out unless this is true. */
+        archived?: boolean;
+      }
     ) {
       return client.GET('/api/v1/spaces/{spaceId}/notes', {
         params: { path: { spaceId }, query },
@@ -1173,6 +1179,17 @@ export function createApiClient(
     async archiveNote(spaceId: number, noteId: number) {
       return client.POST(
         '/api/v1/spaces/{spaceId}/notes/{noteId}/archive',
+        {
+          params: { path: { spaceId, noteId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /** POST .../notes/{noteId}/restore — bring an archived note back (204). */
+    async restoreNote(spaceId: number, noteId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/notes/{noteId}/restore',
         {
           params: { path: { spaceId, noteId } },
           headers: await bearerHeaders(tokenProvider),

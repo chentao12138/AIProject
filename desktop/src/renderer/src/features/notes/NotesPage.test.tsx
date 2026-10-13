@@ -454,3 +454,87 @@ describe('NotesPage states', () => {
     expect(document.querySelector('a[href*="undefined"]')).toBeNull();
   });
 });
+
+describe('NotesPage archived view and restore (C-Notes-archive)', () => {
+  it('asks the server for the archived page when the box is checked', async () => {
+    const user = userEvent.setup();
+    const listNotes = vi.fn(async (_spaceId: number, _query?: NoteListQuery) =>
+      pageResponse([noteRow(9, { archivedAt: '2026-10-03T09:00:00Z' })], {
+        totalItems: 1,
+        totalPages: 1,
+      })
+    );
+
+    renderNotes({ api: mockApiClient({ listNotes }) });
+    await screen.findByText('笔记 9');
+
+    // Default view: the parameter is not sent at all, so the server's own
+    // "hide archived" rule is what decides the list.
+    expect(listNotes).toHaveBeenLastCalledWith(7, {
+      page: 0,
+      size: PAGE_SIZE,
+      keyword: undefined,
+      archived: undefined,
+    });
+
+    await user.click(screen.getByRole('checkbox', { name: '只看已归档' }));
+
+    await waitFor(() =>
+      expect(listNotes).toHaveBeenLastCalledWith(7, {
+        page: 0,
+        size: PAGE_SIZE,
+        keyword: undefined,
+        archived: true,
+      })
+    );
+    expect(await screen.findByTestId('notes-archived-mode')).toBeInTheDocument();
+  });
+
+  it('restores only the row the server marked archived', async () => {
+    const user = userEvent.setup();
+    const restoreNote = vi.fn(async () => ({ data: undefined, response: { status: 204 } }));
+    const listNotes = vi.fn(async () =>
+      pageResponse([
+        noteRow(9, { archivedAt: '2026-10-03T09:00:00Z' }),
+        noteRow(10),
+      ])
+    );
+
+    renderNotes({
+      api: mockApiClient({ listNotes, restoreNote }),
+      url: '/spaces/7/notes?archived=1',
+    });
+
+    await screen.findByText('笔记 9');
+    expect(screen.getByTestId('note-archived-flag')).toBeInTheDocument();
+    // Only the row the server marked archived is offered for restore.
+    expect(screen.queryAllByRole('button', { name: '恢复' })).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: '恢复' }));
+    await waitFor(() => expect(restoreNote).toHaveBeenCalledWith(7, 9));
+  });
+
+  it('reports a failed restore instead of pretending the row came back', async () => {
+    const user = userEvent.setup();
+    const restoreNote = vi.fn(async () => ({
+      error: { code: 'NOTE_NOT_FOUND', detail: 'gone' },
+      response: { status: 404 },
+    }));
+
+    renderNotes({
+      api: mockApiClient({
+        restoreNote,
+        listNotes: vi.fn(async () =>
+          pageResponse([noteRow(9, { archivedAt: '2026-10-03T09:00:00Z' })])
+        ),
+      }),
+      url: '/spaces/7/notes?archived=1',
+    });
+
+    await user.click(await screen.findByRole('button', { name: '恢复' }));
+
+    const alert = await screen.findByTestId('note-restore-error');
+    expect(alert).toHaveTextContent('资源不存在或当前不可访问');
+    expect(alert).not.toHaveTextContent('gone');
+  });
+});

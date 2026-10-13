@@ -25,7 +25,7 @@ import {
   unwrap,
 } from '../../lib/api-error';
 import { spaceQuery } from '../../lib/queries';
-import { useSpaceId } from '../../lib/space-scope';
+import { requireId, useSpaceId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { isPositiveId } from '../../lib/ids';
 import { formatDateTime, NOTE_FORM_LIMITS } from '../../lib/format';
@@ -87,6 +87,9 @@ export function NotesPage() {
   const page = parseNotePageParam(searchParams.get('page'));
   const keywordParam = (searchParams.get('keyword') ?? '').trim();
   const keyword = keywordParam === '' ? undefined : keywordParam;
+  // The list hides archived notes unless the URL asks for them; `?archived=1`
+  // is the whole state, so Back/Forward and a shared link behave the same.
+  const archivedOnly = (searchParams.get('archived') ?? '').trim() === '1';
   const prefill = readNotePrefill(searchParams);
 
   // null = the box mirrors the URL; a string = the user is mid-edit. Back or
@@ -96,12 +99,13 @@ export function NotesPage() {
   const listQuery = useQuery(
     spaceQuery(
       spaceId,
-      queryKeys.notes(spaceId, { page, keyword }),
+      queryKeys.notes(spaceId, { page, keyword, archived: archivedOnly || undefined }),
       (id) =>
         api.listNotes(id, {
           page,
           size: NOTE_FORM_LIMITS.pageSize,
           keyword,
+          archived: archivedOnly || undefined,
         })
     )
   );
@@ -110,8 +114,17 @@ export function NotesPage() {
     return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
-  function commitUrl(updates: { page?: number; keyword?: string | null }) {
+  function commitUrl(
+    updates: { page?: number; keyword?: string | null; archived?: boolean }
+  ) {
     const next = new URLSearchParams(searchParams);
+    if ('archived' in updates) {
+      if (updates.archived) {
+        next.set('archived', '1');
+      } else {
+        next.delete('archived');
+      }
+    }
     if ('page' in updates) {
       const value = updates.page ?? 0;
       if (value > 0) {
@@ -197,6 +210,30 @@ export function NotesPage() {
       <section className="workbench-section" aria-label="笔记列表">
         <h2 className="section-title">笔记列表</h2>
 
+        {/* The server filters archived rows for us: `GET /notes` hides them
+            unless `archived=true`, so "what is archived" is only reachable by
+            asking for it — hence a real control, not a client-side filter. */}
+        <div className="practice-nav">
+          <label className="field__inline" htmlFor="notes-archived-filter">
+            <input
+              id="notes-archived-filter"
+              type="checkbox"
+              checked={archivedOnly}
+              onChange={(event) =>
+                commitUrl({ archived: event.target.checked, page: 0 })
+              }
+              disabled={listQuery.isFetching}
+              data-testid="notes-archived-filter"
+            />
+            只看已归档
+          </label>
+          {archivedOnly && (
+            <span className="muted" role="status" data-testid="notes-archived-mode">
+              正在列出已归档笔记
+            </span>
+          )}
+        </div>
+
         {listQuery.isPending && <LoadingState text="加载笔记…" />}
         {listQuery.isError && (
           <ErrorState
@@ -229,6 +266,7 @@ export function NotesPage() {
                   <th>正文</th>
                   <th>格式</th>
                   <th>更新时间</th>
+                  <th>状态</th>
                 </tr>
               </thead>
               <tbody>
@@ -270,8 +308,33 @@ export function NotesPage() {
 }
 
 function NoteRowItem({ spaceId, note }: { spaceId: number; note: NoteRow }) {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
   const noteId = note.id;
   const excerpt = noteExcerpt(note.content);
+  // `archivedAt` is the server's own flag (C-Notes-archive closed): a row in the
+  // archived view can be brought back, and nothing here guesses the state from
+  // the list it happens to appear in.
+  const archived = Boolean(note.archivedAt);
+
+  const restore = useMutation({
+    // A row without an id cannot be restored. `requireId` is the repo's single
+    // id guard (the button is disabled for exactly this row, so the throw is a
+    // backstop, not a user-facing path).
+    mutationFn: () =>
+      api.restoreNote(spaceId, requireId(noteId ?? null, 'note id')).then(unwrap),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notes(spaceId),
+      });
+      if (isPositiveId(noteId)) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.note(spaceId, noteId),
+        });
+      }
+    },
+  });
+
   return (
     <tr>
       <td>
@@ -287,6 +350,29 @@ function NoteRowItem({ spaceId, note }: { spaceId: number; note: NoteRow }) {
       <td className="muted">{excerpt === '' ? '—' : excerpt}</td>
       <td>{contentFormatLabel(note.contentFormat)}</td>
       <td>{formatDateTime(note.updatedAt)}</td>
+      <td>
+        {archived ? (
+          <>
+            <span data-testid="note-archived-flag">已归档</span>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!isPositiveId(noteId) || restore.isPending}
+              onClick={() => restore.mutate()}
+              data-testid={`note-restore-${noteId}`}
+            >
+              {restore.isPending ? '恢复中…' : '恢复'}
+            </Button>
+            {restore.isError && (
+              <span className="muted" role="alert" data-testid="note-restore-error">
+                {normalizeApiError(restore.error).message}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="muted">在用</span>
+        )}
+      </td>
     </tr>
   );
 }
