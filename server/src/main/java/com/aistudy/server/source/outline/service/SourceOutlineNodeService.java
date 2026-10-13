@@ -50,6 +50,11 @@ public class SourceOutlineNodeService {
     }
 
     @Transactional
+    /** Nodes of one revision. Read through the owning module for version compare. */
+    public List<SourceOutlineNode> listByRevision(Long spaceId, Long revisionId) {
+        return sourceOutlineNodeMapper.selectByRevision(revisionId, spaceId);
+    }
+
     public SourceOutlineNode create(String ownerSubject, Long spaceId, Long sourceId,
                                     CreateOutlineNodeRequest request) {
         if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
