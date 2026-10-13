@@ -57,7 +57,7 @@ Real command output, not a historical claim:
 | Lint | `npm run lint` | 0 errors, 0 warnings |
 | Typecheck | `npx tsc --noEmit -p tsconfig.node.json` / `-p tsconfig.web.json` | 0 errors |
 | Contract gate | `npm run api:check` | `openapi.json and api.d.ts are in sync` |
-| Unit | `npm run test:run` | 63 files / 758 tests passed |
+| Unit | `npm run test:run` | 63 files / 759 tests passed |
 | Coverage | `npm run test:coverage` | statements 90% (7275/8083), branches 84.4%, functions 81.34% |
 | Build | `npm run build` | main 13.93 kB, preload 1.65 kB, renderer 775.91 kB |
 | Package | `npm run dist:win` (with the two mirror variables in README) | `dist/AIStudy Setup 0.1.0.exe`, 111 MB, timestamp matches the built commit |
@@ -109,6 +109,24 @@ the source:
 Still not covered here, and open: verifying these headers and the network graph
 in a running packaged app (DevTools / real requests) needs the backend up, which
 is also what R02 install, R03 auth and R04/R05 E2E are waiting on.
+
+## Contract endpoints deliberately not wired (A/B decision, not an oversight)
+
+These exist in `packages/api-client` today and have **no call site** in the
+renderer. Master A1–A11 does not ask for them, so under the "only A or B" rule
+they are recorded as out of this round rather than built because the endpoint
+happens to exist:
+
+| Client method | Why it is not wired |
+|---------------|---------------------|
+| `studyCoach` | No A item defines a coach surface; the AI tutor routes already cover asking questions. |
+| `explainPracticeAnswer` / `explainExamAnswer` | Review already shows the server's stored `explanation` on each answer row (`ExamResultItemView.explanation`, `PracticeAnswerView.explanation`), which is what A5.3/A6.3 ask for. An on-demand AI re-explanation is a different feature. |
+| `getExamDiagnosis` | Its summary is a backend-composed English string — `ExamDiagnosisService.java:79` does `setSummary("Exam score " + resultScore + "/" + resultMaxScore)` — which cannot be shown in this UI; the structured-fields request is outstanding. The graded result page does not depend on it. |
+| `GET /wrong-questions` | No wrong-question list is in A1–A11; a wrong-question *search hit* still opens its question via `SearchResult.questionId`. |
+
+If the product owner promotes any of these to A, it becomes this round's work —
+the row is here so the omission is a decision that can be reversed, not a gap
+nobody noticed.
 
 ## Out of scope (B-class)
 
