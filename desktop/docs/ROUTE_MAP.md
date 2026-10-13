@@ -51,6 +51,12 @@ There is no question *edit* route: the contract has no update verb, so
 ## Deep-link contract
 
 - Source reader accepts `?page=<sourcePageId>&block=<contentBlockId>` to jump to a specific page and highlight a content block.
+- Question list accepts `?status=&questionType=&knowledgePointId=`; the knowledge-point
+  filter has a UI control, and arriving from a knowledge point detail page uses the
+  same key, so no screen asks the user to type an id.
+- Practice start accepts `?knowledgePointId=`, which selects the knowledge point in
+  the start form once the server list has loaded; question and knowledge point
+  detail pages link to it (W16/A9.2).
 - Search results navigate to entity routes using real backend IDs.
 - Exam flow: list → `exams/:examId` (review / publish) → `createExamAttempt` →
   `exams/:examId/attempts/:attemptId`. The attempt ID always comes from the
