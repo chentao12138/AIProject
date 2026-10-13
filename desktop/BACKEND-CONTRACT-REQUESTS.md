@@ -23,6 +23,32 @@ Each item maps to a specific checklist section.
 
 ---
 
+## Status after merging `main` (2026-10-13, merge 960ca1f)
+
+Reading the server sources that just landed changed the picture for three items.
+The generated client in `packages/api-client` is still the older 67-path
+snapshot, so none of this is usable from TypeScript yet — but these are no
+longer *backend coding* asks:
+
+| Item | Verified in `main` code | What is actually left |
+|------|-------------------------|-----------------------|
+| C01 Notes | `note/controller/NoteController.java`: list+create, `GET`/`PUT`/`DELETE /{noteId}`, `POST /{noteId}/archive`; `note/dto/NoteView\|NoteCreateRequest\|NoteUpdateRequest\|NotePageResponse`; `V057__add_note_context_links.sql`; `NoteOpenApiContractTest` asserts the paths reach the contract | Start the server, then `npm run api:generate` here; then the frontend builds the Notes module |
+| C05 Question update | `QuestionController` has `@PutMapping("/{questionId}")` | Regenerate, then re-register the edit route and the form's edit branch |
+| C07 Question delete/archive | `QuestionController` has `/archive` and `/restore` | Regenerate, then expose archive/restore. The A/B "informational" ambiguity is resolved: this is A and the endpoint exists |
+
+Everything else in this file stays a real contract ask until a regenerated
+`api.d.ts` proves otherwise (`packages/api-client` still has no Notes paths):
+C02 provenance ids, C03 AI context, C04 citation ids, C06 practice result,
+C09 ordering/matching payloads, C10 saved exam answers, C11 attempt list,
+C12 discriminable conflict codes, C-Paging, C-Search `NOTE`, C13 content-block
+hit id semantics, C14 per-asset page filtering, C15 jobs readable at queue time.
+
+**Coordination:** asks go to the backend session one at a time, waiting for each
+reply. The one currently standing is "start the server + a desktop login
+account"; the regeneration itself is frontend work, not theirs.
+
+---
+
 ## Contract verification, 2026-10-13
 
 Every row above was re-checked field by field against
