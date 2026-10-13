@@ -181,4 +181,5 @@ sensenova-load-test/
 AIStudyData/
 *.tmp
 *.temp
-local/
+local/__pycache__/
+*.pyc
