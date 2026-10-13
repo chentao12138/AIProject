@@ -50,15 +50,15 @@ import { ApiRequestError, normalizeApiError, unwrap } from '../../lib/api-error'
 import { useApiClient } from '../../lib/api-context';
 import { queryKeys } from '../../lib/query-keys';
 import { QUESTION_FIELD_LIMITS, questionTypeSupport } from '../../lib/format';
-// The pair / position grammar lives with the component that edits it, so the
-// payload built here is checked by the SAME reader the editor writes with —
-// one place decides what a legal `{left,right}` pair or a legal position is.
+// The pair / position grammar lives in one module, so the payload built here is
+// checked by the SAME reader the editor writes with — one place decides what a
+// legal `{left,right}` pair or a legal ordering position is.
 import {
   readMatchingPair,
   serializeMatchingPairs,
   splitMatchingOptions,
   type MatchingPair,
-} from '../../components/QuestionRenderer';
+} from '../../components/answer-grammar';
 // Aliased so the vocabulary this module already speaks stays intact while the
 // shapes themselves come from the client (lib/types.ts) instead of a
 // feature-local copy of a generated DTO.

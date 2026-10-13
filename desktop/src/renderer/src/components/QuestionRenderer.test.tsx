@@ -19,12 +19,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {
-  QuestionRenderer,
-  parseMatchingPairs,
-  splitMatchingOptions,
-  type QuestionPayload,
-} from './QuestionRenderer';
+import { QuestionRenderer, type QuestionPayload } from './QuestionRenderer';
+import { parseMatchingPairs, splitMatchingOptions } from './answer-grammar';
 
 /**
  * A page holding the answer state, because the renderer is fully controlled:
