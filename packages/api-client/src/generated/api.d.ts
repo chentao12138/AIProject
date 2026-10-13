@@ -30,6 +30,7 @@ export interface paths {
         get?: never;
         put: operations["update_1"];
         post?: never;
+        /** @description 409 code: OUTLINE_NODE_HAS_CHILDREN — reparent or delete the children first, so a subtree can never be orphaned by one click. */
         delete: operations["delete"];
         options?: never;
         head?: never;
@@ -304,6 +305,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description 409 code: STUDY_TASK_REORDER_FAILED when a listed task is no longer in the plan. */
         post: operations["reorder_1"];
         delete?: never;
         options?: never;
@@ -320,6 +322,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description 409 codes: STUDY_PLAN_COMPLETED (a finished plan is kept for the record), STUDY_PLAN_NO_CANDIDATES. */
         post: operations["regenerate"];
         delete?: never;
         options?: never;
@@ -336,6 +339,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description 409 codes: STUDY_TASK_NOT_SKIPPED, STUDY_TASK_STALE. */
         post: operations["unskip"];
         delete?: never;
         options?: never;
@@ -352,6 +356,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description 409 codes: STUDY_TASK_ALREADY_CLOSED, STUDY_TASK_STALE. */
         post: operations["skip"];
         delete?: never;
         options?: never;
@@ -384,6 +389,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description 409 codes: STUDY_TASK_SKIPPED_NOT_COMPLETABLE, STUDY_TASK_ALREADY_CLOSED, STUDY_TASK_STALE (another request moved the task first). */
         post: operations["complete"];
         delete?: never;
         options?: never;
@@ -400,6 +406,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Builds a plan from pending review tasks and mastery evidence. 409 codes: STUDY_PLAN_ACTIVE_EXISTS (this space already has an ACTIVE plan), STUDY_PLAN_NO_CANDIDATES (nothing to plan yet). */
         post: operations["generate"];
         delete?: never;
         options?: never;
@@ -933,6 +940,7 @@ export interface paths {
         };
         get: operations["list_13"];
         put?: never;
+        /** @description 409 code: KP_RELATION_CYCLE when the new edge would close a cycle in the graph. */
         post: operations["add"];
         delete?: never;
         options?: never;
@@ -1338,6 +1346,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description 409 codes: AI_JOB_NOT_RETRYABLE (only FAILED jobs are retried), AI_JOB_STALE. */
         post: operations["retry_1"];
         delete?: never;
         options?: never;
@@ -1354,7 +1363,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Explain a submitted practice answer (post-submit only) */
+        /**
+         * Explain a submitted practice answer (post-submit only)
+         * @description 409 `code: AI_EXPLANATION_NOT_READY` while the answer's session is not SUBMITTED: an explanation of an unfinished attempt would leak grading.
+         */
         post: operations["explainPracticeAnswer"];
         delete?: never;
         options?: never;
@@ -1371,7 +1383,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Explain a submitted exam answer (post-submit only) */
+        /**
+         * Explain a submitted exam answer (post-submit only)
+         * @description 409 `code: AI_EXPLANATION_NOT_READY` while the attempt is not submitted.
+         */
         post: operations["explainExamAnswer"];
         delete?: never;
         options?: never;
@@ -1415,7 +1430,7 @@ export interface paths {
         put?: never;
         /**
          * Send a user message and receive the AI tutor reply
-         * @description Optional sourceId / sourcePageId / contentBlockId / knowledgePointId pin the material the question is about. Only IDs are accepted: the server resolves them against this LearningSpace (unknown, foreign-space or soft-deleted IDs are a 400 VALIDATION_ERROR), retrieves the material itself, and lets the pinned material take precedence over automatic retrieval.
+         * @description Optional sourceId / sourcePageId / contentBlockId / knowledgePointId pin the material the question is about. Only IDs are accepted: the server resolves them against this LearningSpace (unknown, foreign-space or soft-deleted IDs are a 400 VALIDATION_ERROR), retrieves the material itself, and lets the pinned material take precedence over automatic retrieval. 409 `code: AI_CONVERSATION_NOT_ACTIVE` when the conversation is archived.
          */
         post: operations["sendMessage"];
         delete?: never;
@@ -1740,6 +1755,7 @@ export interface paths {
         };
         get: operations["list_19"];
         put?: never;
+        /** @description 409 code: MASTERY_CALIBRATION_VERSION_EXISTS when that version is already stored. */
         post: operations["create_15"];
         delete?: never;
         options?: never;
@@ -2672,6 +2688,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description 409 codes: EXAM_DIAGNOSIS_NOT_AVAILABLE while the attempt is not submitted, EXAM_DIAGNOSIS_MISSING when a submitted attempt has no diagnosis rows to show (an empty card must never read as 'no weak points'). */
         get: operations["get_15"];
         put?: never;
         post?: never;
