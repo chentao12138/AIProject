@@ -41,17 +41,17 @@ What that regeneration changed, with the contract evidence:
 | Ask | Landed? | Evidence in `openapi.json` |
 |-----|---------|-----------------------------|
 | C01 Notes | yes | `/spaces/{spaceId}/notes` GET(page,size,keyword)+POST, `/{noteId}` GET+PUT+DELETE, `/{noteId}/archive` POST(204), `/{noteId}/knowledge-points`(+`/{kpId}`), `/{noteId}/source-blocks`(+`/{blockId}`); `NotePageResponse{items,page,pageSize,totalItems,totalPages}` |
-| C05 Question update | yes, narrower than asked | `PUT /spaces/{spaceId}/questions/{questionId}`; `UpdateQuestionRequest{stem,explanation,difficulty}` only |
+| C05 Question update | yes, narrower than asked | `PUT /spaces/{spaceId}/questions/{questionId}`; `UpdateQuestionRequest{stem,explanation,difficulty}` only. **Unverified precondition:** the backend's message says "仅 DRAFT 可改", but this workspace's `QuestionService.update()` (QuestionService.java:122-126) rejects only ARCHIVED → 404 (QuestionController.java:72-76), and the regenerated op carries no description and lists only a 200 response. A prose rule is not a contract: the UI keeps the ARCHIVED gate it can prove and does not add a PUBLISHED gate it cannot, so editing a PUBLISHED question is still offered. Asked which the running server does and with which status code; until it lands in the contract (`@Operation(description=…)` or a structured 409 + code) this row stays **未验证**, not "delivered". |
 | C07 Question archive/restore | yes | `POST /questions/{id}/archive`, `POST /questions/{id}/restore` (same pair exists for exams, spaces, sources, knowledge points) |
 | C09 ORDERING / MATCHING write side | yes | `CreateQuestionRequest.correctOrder` (`array<int32>`, `maxItems:100`) and `.matches` (`string`, `maxLength:4000`); `AnswerPayloadView.orderingAnswer` (`array<int32 items minimum:1>`, `maxItems:100`) and `.matchingAnswer` (`string`, `maxLength:10000`) |
-| C06 Practice per-question review | yes, **but only half the ask** | `GET .../practice-sessions/{sessionId}/answers` → `PracticeAnswerView{id,practiceSessionQuestionId,questionId,isCorrect,correctAnswer,explanation,score,answeredAt}` — the 错题回顾 part. The 成绩 part is still missing: `PracticeSessionSummary` and `PracticeSessionDetail` have no score/maxScore, and the totals only appear in the `finish` response, so re-opening a finished session from history cannot show its score. Still need `score`/`maxScore`/`correctCount` on the session read model (or a `GET .../result`). |
+| C06 Practice result + per-question review | **yes, both halves** | `GET .../practice-sessions/{sessionId}/answers` → `PracticeAnswerView{id,practiceSessionQuestionId,questionId,isCorrect,correctAnswer,explanation,score,answeredAt}` (错题回顾), and `GET .../practice-sessions/{sessionId}/result` → `PracticeResultView{sessionId,status,questionCount,answeredCount,correctCount,score,maxScore}` (成绩). The backend states the totals are written inside the `finish` transaction (V066 added `score`/`max_score`/`answered_count`/`correct_count`), not recomputed per read, and that `result` deliberately does NOT repeat the answer shape — per-question detail stays in `answers`. Two 409 branches: `code:"PRACTICE_SESSION_NOT_SUBMITTED"` (not finished yet) and `code:"PRACTICE_RESULT_NOT_RECORDED"` (finished before V066, so no stored score). Neither code exists anywhere in this workspace's `server/` copy (its migrations stop at V057), so they are pinned as named constants sourced from the backend's message, and C12 remains the ask that would pin them in the contract. |
 | C-Search `NOTE` | yes | `SearchResult.type` enum includes `NOTE`; the hit gained `noteId` (and `sourceId`/`sourceAssetId`/`sourcePageId`/`pageNumber`/`knowledgePointId`/`questionId`) |
-| C02 provenance ids | **no** | `KnowledgePointSourceResponse` unchanged |
-| C03 AI context | **no** | `SendMessageRequest{content}` unchanged |
-| C04 citation ids | **no** | `ContextReference{type,id,title,snippet,locator}` unchanged; `locator` is still free text |
-| C10 exam answer read-back | **no** | `/exam-attempts/{attemptId}/answers` has only POST; `ExamAnswerView{id,examAttemptId,examQuestionId,gradingStatus,answeredAt}` |
-| C11 learner attempt list | **no** | attempts are only listable under `/admin/exams/{examId}/attempts` |
-| C-Paging question list | **no** | GET params unchanged |
+| C02 provenance ids | **yes** | `KnowledgePointSourceResponse{id,spaceId,knowledgePointId,contentBlockId,sourceId,sourcePageId,relationType,relevanceScore,createdAt}` — `sourceId`/`sourcePageId` are on the wire, which is why the `provenanceExtras` cast is gone |
+| C03 AI context | **yes** | `SendMessageRequest{content,sourceId,sourcePageId,contentBlockId,knowledgePointId}` — the context ids are sendable, so the UI attaches them instead of prefixing prose into `content` |
+| C04 citation ids | **yes** | `ContextReference{type,id,title,snippet,locator,sourceId,sourcePageId,contentBlockId}` — the ids are structured; `locator` is still published and stays free text, so navigation reads the ids and never parses `locator` |
+| C10 exam answer read-back | **yes** | `AttemptQuestionView{examQuestionId,questionId,sortOrder,score,questionType,stem,options,answer,answered}` on `GET .../exam-attempts/{attemptId}` — the saved `answer` is an `AnswerPayloadView` and `answered` is the server's own flag. There is still no `GET .../exam-attempts/{attemptId}/answers` subresource (only POST), which is the shape we originally asked for; the read-side on the attempt is sufficient, so we adapt to it. |
+| C11 learner attempt list | **yes** | `GET /spaces/{spaceId}/exam-attempts?examId=&status=&page=&size=` → `AttemptPageResponse{items,page,pageSize,totalItems,totalPages}` of `AttemptSummaryView{id,examId,status,startedAt,submittedAt,score,maxScore}`. One space-level list with an optional `examId` filter covers both shapes we discussed (a paper's attempts, and recent attempts across papers), so we asked them NOT to add `/exams/{examId}/attempts`. Open question: whether `score`/`maxScore` are null or 0 for an attempt that is not graded yet — the UI distinguishes "no score yet" from "0 points" and never computes either (ADR-031). |
+| C-Paging question list | **yes** | `QuestionPageResponse{items,page,pageSize,totalItems,totalPages}` and `GET /questions` takes `page`/`size`; the list page reads its page from `?page=` instead of faking a gap |
 | FILL_BLANK per-blank grading | **no** (accepted) | `textAnswer` is one `string` (`maxLength:4000`) and `QuestionAnswerEvaluator.gradeFillBlank` does whole-string `trim().equals`, so a multi-blank answer is only correct if it matches the reference's exact punctuation. The UI copy says so instead of promising per-blank marking. |
 
 ### Two asks this round added (they are new consequences of the widened write side)
@@ -417,6 +417,11 @@ The frontend `QuestionDetailPage.tsx` is ready to accept an additional `delete` 
 
 ## A5.3 Practice session result endpoint
 
+**Status (2026-10-14): delivered.** `GET /spaces/{spaceId}/practice-sessions/{sessionId}/result`
+is in the committed snapshot and `api:live` is green against the running server, returning
+`PracticeResultView{sessionId,status,questionCount,answeredCount,correctCount,score,maxScore}`.
+The gap text below is kept as the record of why the score was never derived client-side.
+
 **Checklist:** A5.3 (Completion)
 **Current gap:** `POST /practice-sessions/{sessionId}/finish` returns
 `PracticeSubmitView` (`score`, `maxScore`, `answeredCount`, `correctCount`,
@@ -464,6 +469,12 @@ mutation, re-register the route and link it from `QuestionDetailPage`.
 ---
 
 ## C11 Exam attempt history (audit W07)
+
+**Status (2026-10-14): delivered, in a better shape than asked.**
+`GET /spaces/{spaceId}/exam-attempts?examId=&status=&page=&size=` returns
+`AttemptPageResponse` of `AttemptSummaryView{id,examId,status,startedAt,submittedAt,score,maxScore}`
+— one space-level paged list covers both a single paper's history and recent attempts across
+papers, so we told the backend not to add `/exams/{examId}/attempts` on top of it.
 
 **Checklist:** A6.1, A6.3
 **Verified gap (2026-10-13):** `ExamResponse` has no attempts field, and there is
@@ -572,27 +583,36 @@ Not asks — constraints our code has to satisfy, read out of
 
 ## Resolution order
 
-Rewritten after the `main` merge, because the original list assumed the backend
-still had to build Notes and question update — both are already in the server
-sources, so the first step is no longer an ask at all.
+Refreshed 2026-10-14 after the second and third regenerations (67 → 195 → 197 paths),
+which delivered most of the original list. What is actually still open:
 
-1. **Start the server + a desktop login account** (the only standing ask). Then
-   the frontend runs `npm run api:generate`, which alone unblocks: Notes CRUD and
-   archive (C01), question update (C05), question archive/restore (C07), the
-   ordered/pair answer fields (C09), the practice answers list, and the `NOTE`
-   search type.
-2. **C02 provenance ids** — `sourceId` / `sourcePageId` on
-   `KnowledgePointSourceResponse`, otherwise knowledge points can never deep-link
-   to a page.
-3. **C03 AI context ids**, then **C04 citation ids** — the tutor cannot be scoped
-   to a source/page/block, and citations cannot navigate.
-4. **C10 saved exam answers** (reload recovery), then **C11 attempt list**
-   (reopen a past attempt).
-5. **C-Paging** for the question list, and **C06** for a finished session's score
-   summary (the per-question review is already reachable via the answers list).
-6. **C12** — mechanical: pass the existing `ApiErrorCodes` values as the ProblemDetail
-   `code` at the two `ExamAttemptService` throw sites.
-7. **C14 / C15** — verify after regeneration; they may already exist.
+1. **A login account that survives long enough to verify against.** The backend runs
+   Flyway on the shared `aistudy_flyway_test` schema, and its most recent run went to
+   V066; `dev` / `devpassword123` has already been wiped twice by that path. Requested:
+   re-seed and name a stable window (no integration tests inside it) so the two live
+   journeys recorded as "not run" — practice grading through the new `result` endpoint,
+   and `deadlineAt` on an exam attempt — plus R03–R05 can be executed.
+2. **C05's precondition** — does the running server accept `PUT /questions/{id}` for a
+   PUBLISHED question, or reject it, and with which code? Prose said DRAFT-only; the
+   code and the contract say otherwise (see the table row above). Nothing may be gated
+   on the prose.
+3. **C09 read side and enums** — typed `matchingAnswer` pairs (instead of a JSON string),
+   the authoring read-back of `correctOrder` / `matches`, and real `questionType` /
+   `status` enums in the contract. Every status/kind field is still `string`, which is
+   precisely why `backend-vocabulary-contract.test.ts` has to read Java constants to
+   catch guessing.
+4. **C12 discriminable codes** — the exam conflicts still collapse into `code:"CONFLICT"`
+   with the reason only in free-text `detail`, and the two new practice-result codes
+   (`PRACTICE_SESSION_NOT_SUBMITTED`, `PRACTICE_RESULT_NOT_RECORDED`) exist only in a
+   chat message: neither appears anywhere in this workspace's `server/` copy, whose
+   migrations stop at V057. Landing them in the contract is what turns the frontend's
+   named constants into a checked fact.
+5. **The `explanation` defect** — `GET .../practice-sessions/{id}/answers` always returns
+   `explanation: null`; the backend confirmed that is a bug, not a design, and owns the fix.
+6. **C-Paging for the remaining lists** — questions are paged now; the conversation and
+   message pages need their ordering documented (the backend's answer: conversations sort
+   `COALESCE(last_message_at, created_at) DESC`, messages sort `created_at ASC`, so page 0
+   is the OLDEST message).
 
 Once each item is reflected in `packages/api-client/src/generated/api.d.ts` and
 typecheck passes, the frontend implements the matching UI in the same pass — no
