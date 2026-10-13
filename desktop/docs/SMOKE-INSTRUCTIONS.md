@@ -8,17 +8,38 @@ declaring `FRONTEND V1 FUNCTIONALLY COMPLETE`.
 ### Prerequisites
 
 - Windows x64 machine
-- Backend running at `http://localhost:8080` with a valid MySQL schema
-- Valid test username/password
+- Backend reachable and **verified to be AIStudy**: `GET <base>/v3/api-docs` must
+  list `/api/v1/spaces` and `/api/v1/auth/login`. As of 2026-10-14 the backend
+  session runs it on `http://localhost:8081`; `:8080` belongs to another project
+  on this machine, and pointing the app there produced a "login works, everything
+  else 404" session once.
+- Valid test username/password (requested from the backend session; the server
+  ships no seed account, so this cannot be self-served)
+- `OPENAPI_URL=<base>/v3/api-docs npm run api:live` green — the app must be built
+  against the snapshot the server actually publishes
 
 ### Steps
 
-1. Build installer:
+1. Build installer (the mirror variables are required on this network; a failed
+   download leaves the **previous** artifact in `dist/` and looks like success):
    ```powershell
    cd D:\AIProject-frontend\desktop
+   $env:ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"
+   $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
    npm run dist:win
    ```
-2. Install `dist/AIStudy Setup.exe` (double-click, accept defaults).
+   Confirm `dist/AIStudy Setup 0.1.0.exe` has **today's timestamp** before installing.
+2. Install `dist/AIStudy Setup 0.1.0.exe` (double-click, accept defaults).
+3. Point the installed app at the running backend. The build default is
+   `http://localhost:8080`; precedence is
+   `AISTUDY_API_BASE_URL` env → `%APPDATA%\AIStudy\config.json` → build-time
+   `VITE_API_BASE_URL` → default. Use the config file, because it also proves the
+   runtime path and that CSP `connect-src` follows it:
+   ```powershell
+   Set-Content "$env:APPDATA\AIStudy\config.json" '{"apiBaseUrl":"http://localhost:8081"}'
+   ```
+   The header must then show `后端地址：http://localhost:8081`. If it shows the
+   default, the file is not being read — that is a finding, not a step to skip.
 3. Launch AIStudy from Start Menu.
 4. Verify Electron boot:
    - Window title = `AIStudy`
@@ -198,8 +219,14 @@ checked. A step is evidence, not a checkbox.
       (A8 Notes, A2.1, A3.2, A3.3, A4.5, A5.3 + C09/C10/C-Paging/C-Search)
 - [x] Packaging instructions in README
 - [x] Smoke instructions in this file
-- [ ] `docs/frontend-current-task.md` — file does not exist in this repo
-- [ ] `docs/frontend-development-log.md` — file does not exist in this repo
+- [x] `docs/frontend-current-task.md` — it exists, but one level up:
+      `../docs/frontend-current-task.md` (repo-root docs, not the desktop
+      package). Same for the development log below. The earlier "does not exist
+      in this repo" line was a wrong negative caused by looking only inside
+      `desktop/`.
+- [x] `docs/frontend-development-log.md` — `../docs/frontend-development-log.md`;
+      it was last written for Stage C/D/E (2026-09-21) and is being brought
+      forward with this round's entries.
 
 ---
 
