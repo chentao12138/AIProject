@@ -226,7 +226,7 @@ export function QuestionRenderer({
           onKeyDown={handleTextKeyDown}
           placeholder={
             isFillBlank
-              ? '输入填空内容，多个空用英文逗号分隔…'
+              ? '按题目顺序填写，多个空用英文逗号分隔（需与参考答案写法完全一致）'
               : '输入你的答案…'
           }
           rows={3}

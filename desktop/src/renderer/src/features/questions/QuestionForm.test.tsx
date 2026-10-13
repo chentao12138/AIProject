@@ -254,6 +254,18 @@ describe('QuestionForm — FILL_BLANK closes the authoring loop (G02)', () => {
       String(QUESTION_FIELD_LIMITS.explanation)
     );
   });
+
+  it('states the grading rule the server actually applies', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await pickType(user, 'FILL_BLANK');
+
+    // QuestionAnswerEvaluator.gradeFillBlank compares the whole trimmed string,
+    // so a hint promising per-blank matching would teach authors a rule that
+    // silently marks correct learners wrong.
+    expect(await screen.findByText(/整串精确比对/)).toBeInTheDocument();
+    expect(screen.queryByText(/逐项/)).not.toBeInTheDocument();
+  });
 });
 
 describe('QuestionForm — knowledge point picker (W09)', () => {

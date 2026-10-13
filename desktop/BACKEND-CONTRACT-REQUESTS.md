@@ -438,6 +438,25 @@ refuses a new answer.
 needed that grading compares array order; otherwise wait for C09's
 `orderedOptionKeys`/`pairs` rather than inventing a wire format.
 
+**(e) FILL_BLANK is coarser than its own documentation claims (refines C09).**
+`AnswerDataCodec.buildFillBlankAnswerData` is documented as "comma-delimited per
+blank", but `QuestionAnswerEvaluator.gradeFillBlank` (:135) decides correctness
+with `payload.textAnswer().trim().equals(reference.trim())` — one whole-string
+comparison. There is no per-blank split, so:
+
+- a learner who fills every blank correctly but writes `北京, 上海` (space) or
+  `北京，上海` (full-width comma) is graded wrong;
+- partial credit per blank is impossible;
+- the answer-count of the stem cannot be validated at all.
+
+The frontend now states the real rule in both places that could otherwise
+mislead (the authoring hint in `QuestionForm` and the practice answer
+placeholder), because teaching "逐项比对" would promise behaviour the grader does
+not have. **Ask:** either implement per-blank grading behind `textAnswers:
+string[]` (already requested in C09) or drop the "comma-delimited per blank"
+javadoc so the contract and the code agree.
+
+
 ## Resolution order
 
 Rewritten after the `main` merge, because the original list assumed the backend

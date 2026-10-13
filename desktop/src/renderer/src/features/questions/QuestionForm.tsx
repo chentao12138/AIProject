@@ -401,7 +401,10 @@ export function QuestionForm() {
             {questionType === 'FILL_BLANK' && (
               <p className="field__hint">
                 填空答案走 AnswerPayloadView.textAnswer，参考答案走
-                CreateQuestionRequest.referenceAnswer；多个空由后端按逗号分隔逐项精确比对。
+                CreateQuestionRequest.referenceAnswer。判分是<strong>整串精确比对</strong>
+                （只忽略首尾空白）：学员答案的分隔符、顺序、空格必须与参考答案一致，
+                答对其中一部分不会得部分分。所以多个空请统一用「英文逗号+无空格」写，
+                例如 <code>北京,上海</code>；用中文逗号或加空格都会被判错。
               </p>
             )}
           </div>
