@@ -63,19 +63,32 @@ public class OcrHealthIndicator implements HealthIndicator {
             // A health check must never be the thing that breaks a request.
             usable = false;
         }
+        String engineName;
+        try {
+            engineName = text(engine.name(), "unknown");
+        } catch (RuntimeException e) {
+            engineName = "unknown";
+        }
+        String endpoint = text(endpoint(), "unknown");
         if (usable) {
             return Health.up()
-                    .withDetail("engine", engine.name())
-                    .withDetail("endpoint", endpoint())
+                    .withDetail("engine", engineName)
+                    .withDetail("endpoint", endpoint)
                     .build();
         }
+        // Health.Builder.withDetail rejects a null value, and this runs inside
+        // the actuator response path: every detail is coerced to a string first.
         Health.Builder builder = strict ? Health.down() : Health.status(STATUS_DEGRADED);
         return builder
-                .withDetail("engine", engine.name())
-                .withDetail("endpoint", endpoint())
+                .withDetail("engine", engineName)
+                .withDetail("endpoint", endpoint)
                 .withDetail("reason", "OCR engine is configured but not reachable or not installed")
                 .withDetail("action", "start the ocr service (deploy/ocr) or set aistudy.ocr.enabled=false")
                 .build();
+    }
+
+    private static String text(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     /**
@@ -90,12 +103,20 @@ public class OcrHealthIndicator implements HealthIndicator {
         return engine.available();
     }
 
-    /** @return the remote endpoint for HTTP, or {@code local-process} / {@code none} */
+    /**
+     * @return the remote endpoint for HTTP, or {@code local-process} / {@code none}.
+     *         Any engine-side failure degrades to a label rather than throwing,
+     *         because this is called from the health path.
+     */
     private String endpoint() {
-        if (engine instanceof HttpOcrEngine http) {
-            String url = http.endpoint();
-            return url == null ? "not-configured" : url;
+        try {
+            if (engine instanceof HttpOcrEngine http) {
+                String url = http.endpoint();
+                return url == null ? "not-configured" : url;
+            }
+            return engine.available() ? "local-process" : "local-process-missing";
+        } catch (RuntimeException e) {
+            return "unknown";
         }
-        return engine.available() ? "local-process" : "local-process-missing";
     }
 }

@@ -1,0 +1,36 @@
+-- V063__source_page_revision_order_index.sql
+--
+-- F-31 — page reading order is now a Source-wide invariant, so the two
+-- queries that enforce it need a matching access path:
+--
+--   * SourcePageService.allocateOrderSlots(space, source) — the lowest free
+--     page_order across the Source's visible pages (called once per asset by
+--     image and PDF ingestion).
+--   * revision-scoped reads (version compare, "current revision pages") which
+--     filter by extraction_revision_id and then order by page_order.
+--
+-- V010 created (space_id, source_id, page_order, id): it serves the first
+-- query already. It cannot serve the second, because extraction_revision_id was
+-- only added in V053 and its index (V053) is (space_id, extraction_revision_id)
+-- without the ordering column, so a revision-scoped ordered page list still
+-- sorts per query.
+--
+-- Design notes:
+--   * Plain (non-unique) index on purpose — see V064 and the "Why no unique
+--     index (yet)" section for the deliberate boundary.
+--   * Column order follows equality-then-range/sort: space_id, source_id,
+--     extraction_revision_id, page_order, id. `id` is appended so the
+--     ORDER BY page_order, id used by every page listing is fully covered by
+--     the index (same convention as V010 and V011).
+--   * IFNULL(extraction_revision_id, 0) is NOT baked into a generated column
+--     here: pages carry NULL revision only while a draft is being built, the
+--     publisher stamps them in one transaction (IngestionRevisionPublisher),
+--     and a functional index over that transient state would add write cost to
+--     ingestion without protecting anything V064 does not already cover.
+--   * Additive only: no column change, no data change, no FK, no CASCADE —
+--     safe to run on an existing database and never blocks reads.
+--
+-- Charset/engine: unchanged (index-only migration).
+
+CREATE INDEX idx_source_page_space_source_revision_order
+    ON source_page (space_id, source_id, extraction_revision_id, page_order, id);

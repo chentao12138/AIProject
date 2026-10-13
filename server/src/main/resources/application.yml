@@ -137,6 +137,13 @@ management:
           include: livenessState
         readiness:
           include: readinessState,db,storage
+          # The `ocr` detail (ingestion/ocr/OcrHealthIndicator) is NOT in
+          # readiness by default: an OCR sidecar that is cold or down must not
+          # take the whole API out of rotation, since only image/scanned-PDF
+          # ingestion depends on it. Operators who want that coupling add it:
+          #   include: readinessState,db,storage,ocr
+          # and set AISTUDY_OCR_HEALTH_STRICT=true so the indicator reports DOWN
+          # instead of DEGRADED. See docs/operations-ocr-docker.md.
     prometheus:
       enabled: true
   endpoints:

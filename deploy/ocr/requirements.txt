@@ -1,0 +1,6 @@
+# Pinned for the PaddleOCR 2.x Python API used by ocr_sidecar.py.
+# float-free on purpose: the 2.x -> 3.x rename of PaddleOCR.ocr() breaks the
+# adapter silently (empty results), which is the worst possible OCR failure.
+paddlepaddle==2.6.2
+paddleocr==2.7.3
+numpy<2.0

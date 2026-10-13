@@ -178,7 +178,7 @@ public class HttpOcrEngine implements OcrEngine {
                     "OCR sidecar response has no result object",
                     OcrDiagnostics.redact(body, maxDiagnosticsChars, null), null);
         }
-        String text = node.path("text").asText("");
+        String text = node.path("text").asText("").trim();
         double confidence = node.path("confidence").isNumber()
                 ? node.path("confidence").asDouble() : OcrEngine.CONFIDENCE_UNKNOWN;
         if (Double.isFinite(confidence) && (confidence < 0.0 || confidence > 1.0)) {
