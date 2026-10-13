@@ -7,6 +7,7 @@ import com.aistudy.server.exam.entity.ExamResult;
 import com.aistudy.server.question.eval.AnswerDataCodec;
 import com.aistudy.server.question.eval.AnswerDataCodec.SnapshotView;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -171,7 +172,8 @@ public final class ExamAttemptDto {
                 String textAnswer,
 
                 @Size(max = 100, message = "orderingAnswer must be at most 100 items")
-                List<Integer> orderingAnswer,
+                List<@Min(value = 1, message = "orderingAnswer entries are 1-based option positions")
+                     Integer> orderingAnswer,
 
                 @Size(max = 10000, message = "matchingAnswer JSON must be at most 10000 characters")
                 String matchingAnswer

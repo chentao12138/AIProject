@@ -23,6 +23,12 @@ public final class ApiErrorCodes {
     public static final String SOURCE_NOT_FOUND = "SOURCE_NOT_FOUND";
     public static final String QUESTION_NOT_FOUND = "QUESTION_NOT_FOUND";
     /**
+     * Only a DRAFT question may be edited (contract request C05): a published
+     * question already feeds snapshots, mastery and diagnosis, so editing it
+     * would silently change what an existing paper grades against.
+     */
+    public static final String QUESTION_NOT_EDITABLE = "QUESTION_NOT_EDITABLE";
+    /**
      * Note link endpoints used to answer 201 with an empty body when the note or
      * the link target did not belong to the caller, so a client could not tell a
      * successful link from a silently ignored one (contract request

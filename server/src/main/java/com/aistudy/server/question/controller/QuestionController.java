@@ -6,6 +6,8 @@ import com.aistudy.server.question.dto.QuestionPageResponse;
 import com.aistudy.server.question.dto.UpdateQuestionRequest;
 import com.aistudy.server.question.entity.Question;
 import com.aistudy.server.question.service.QuestionService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -76,6 +78,20 @@ public class QuestionController {
         return toAuthoring(question);
     }
 
+    @Operation(
+            description = "Edits stem, explanation and difficulty of a DRAFT question only. "
+                    + "A PUBLISHED, ARCHIVED or REJECTED question answers 409 with "
+                    + "`code: QUESTION_NOT_EDITABLE`: published questions are already quoted by "
+                    + "exam/practice snapshots and by mastery and diagnosis rows, so editing them "
+                    + "would change what an existing paper grades against. Publish and archive are "
+                    + "the verbs for a published question.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "Updated draft"),
+                    @ApiResponse(responseCode = "404",
+                            description = "No such question in this space (`code: NOT_FOUND`)"),
+                    @ApiResponse(responseCode = "409",
+                            description = "`code: QUESTION_NOT_EDITABLE` — the question is not a DRAFT")
+            })
     @PutMapping(value = "/{questionId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public QuestionAuthoringResponse update(@PathVariable Long spaceId,
                                             @PathVariable Long questionId,

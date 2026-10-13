@@ -514,6 +514,152 @@ class QuestionVerticalSliceIntegrationTest {
                 "question_option must not carry correctness: " + columns);
     }
 
+    // ==================== ORDERING / MATCHING (audit C09) ====================
+
+    /** (18) ORDERING round-trips: the stored order is readable, not write-only. */
+    @Test
+    void orderingAnswerReadsBack() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        String token = tokenFor("biz-e2e-user-1");
+        MvcResult created = createQuestion(token, spaceId, orderingBody("[2,3,1]"));
+        assertTrue(created.getResponse().getStatus() == 201,
+                "expected 201, got " + created.getResponse().getStatus() + " "
+                        + created.getResponse().getContentAsString());
+        Long id = extractJsonLong(created.getResponse().getContentAsString(), "id");
+
+        String body = mockMvc.perform(get(QUESTIONS + "/{questionId}", spaceId, id)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertEquals(java.util.List.of(2, 3, 1),
+                com.jayway.jsonpath.JsonPath.read(body, "$.answer.correctOrder"), body);
+    }
+
+    /** (19) ORDERING needs the items to order; positions refer to `options`. */
+    @Test
+    void orderingWithoutOptionsIsRejected() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        MvcResult result = createQuestion(tokenFor("biz-e2e-user-1"), spaceId,
+                "{\"questionType\":\"ORDERING\",\"stem\":\"排序\",\"correctOrder\":[1,2]}");
+        assertEquals(400, result.getResponse().getStatus());
+        assertTrue(result.getResponse().getContentAsString().contains("at least 2 options"),
+                result.getResponse().getContentAsString());
+    }
+
+    /**
+     * (20) C-Ordering-space: grading compares the submitted permutation with
+     * `correctOrder` by exact List.equals, and the answer side is declared
+     * 1-based, so a stored 0 could only ever be wrong — with no error anywhere.
+     */
+    @Test
+    void zeroBasedCorrectOrderIsRejected() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        MvcResult result = createQuestion(tokenFor("biz-e2e-user-1"), spaceId,
+                orderingBody("[0,1,2]"));
+        assertEquals(400, result.getResponse().getStatus());
+    }
+
+    /** (21) A permutation must cover every option exactly once. */
+    @Test
+    void incompleteCorrectOrderIsRejected() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        MvcResult truncated = createQuestion(tokenFor("biz-e2e-user-1"), spaceId,
+                orderingBody("[1,2]"));
+        assertEquals(400, truncated.getResponse().getStatus());
+        assertTrue(truncated.getResponse().getContentAsString().contains("every option"),
+                truncated.getResponse().getContentAsString());
+
+        MvcResult repeated = createQuestion(tokenFor("biz-e2e-user-1"), spaceId,
+                orderingBody("[1,1,1]"));
+        assertEquals(400, repeated.getResponse().getStatus());
+    }
+
+    /** (22) MATCHING pairs read back verbatim so an editor can pre-fill them. */
+    @Test
+    void matchingAnswerReadsBack() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        String token = tokenFor("biz-e2e-user-1");
+        MvcResult created = createQuestion(token, spaceId,
+                matchingBody("[{\"left\":\"A\",\"right\":\"1\"},{\"left\":\"B\",\"right\":\"2\"}]"));
+        assertEquals(201, created.getResponse().getStatus());
+        Long id = extractJsonLong(created.getResponse().getContentAsString(), "id");
+
+        String body = mockMvc.perform(get(QUESTIONS + "/{questionId}", spaceId, id)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answer.matches").isString())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue(body.contains("\\\"left\\\":\\\"A\\\""), body);
+    }
+
+    /**
+     * (23) The matching document is parsed again at grading time, so a malformed
+     * or half-filled pair must be refused at authoring, not surface as a 500 on
+     * the learner's answer.
+     */
+    @Test
+    void malformedMatchesIsRejected() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        String token = tokenFor("biz-e2e-user-1");
+
+        assertEquals(400, createQuestion(token, spaceId, matchingBody("not json")).getResponse().getStatus());
+        MvcResult halfPair = createQuestion(token, spaceId,
+                matchingBody("[{\"left\":\"A\"}]"));
+        assertEquals(400, halfPair.getResponse().getStatus());
+        assertTrue(halfPair.getResponse().getContentAsString().contains("left and right"),
+                halfPair.getResponse().getContentAsString());
+        assertEquals(400, createQuestion(token, spaceId,
+                matchingBody("[{\"left\":\"A\",\"right\":\"1\"},{\"left\":\"A\",\"right\":\"2\"}]"))
+                .getResponse().getStatus(), "left side must be unique");
+    }
+
+    // ==================== update precondition (contract request C05) ====================
+
+    /** (24) A DRAFT edits; a PUBLISHED question is a typed conflict. */
+    @Test
+    void onlyDraftQuestionsAreEditable() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        String token = tokenFor("biz-e2e-user-1");
+        Long draftId = extractJsonLong(
+                createQuestion(token, spaceId, singleChoiceBody()).getResponse().getContentAsString(),
+                "id");
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put(QUESTIONS + "/{questionId}", spaceId, draftId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"stem\":\"1+1=? (改)\"}")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stem").value("1+1=? (改)"));
+
+        publishBody(token, spaceId, draftId);
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put(QUESTIONS + "/{questionId}", spaceId, draftId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"stem\":\"改了已发布\"}")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("QUESTION_NOT_EDITABLE"));
+
+        // The refused edit must not have touched the row: the stem is still
+        // what the DRAFT edit wrote, not "改了已发布".
+        assertEquals("1+1=? (改)", jdbcTemplate.queryForObject(
+                "SELECT stem FROM question WHERE id = ?", String.class, draftId));
+    }
+
+    private static String orderingBody(String correctOrder) {
+        return "{\"questionType\":\"ORDERING\",\"stem\":\"按发生顺序排列\","
+                + "\"options\":[{\"optionKey\":\"A\",\"content\":\"甲\"},"
+                + "{\"optionKey\":\"B\",\"content\":\"乙\"},"
+                + "{\"optionKey\":\"C\",\"content\":\"丙\"}],"
+                + "\"correctOrder\":" + correctOrder + "}";
+    }
+
+    private static String matchingBody(String matchesJson) {
+        return "{\"questionType\":\"MATCHING\",\"stem\":\"配对\","
+                + "\"matches\":\"" + matchesJson.replace("\"", "\\\"") + "\"}";
+    }
+
     // ==================== cleanup ====================
 
     private void cleanBizTestRows() {

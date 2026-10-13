@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.Set;
 
@@ -183,8 +184,18 @@ public class QuestionService {
     @Transactional
     public Question update(String ownerSubject, Long spaceId, Long questionId, UpdateQuestionRequest request) {
         Question existing = getMine(ownerSubject, spaceId, questionId);
-        if (existing == null || STATUS_ARCHIVED.equals(existing.getStatus())) {
+        if (existing == null) {
             return null;
+        }
+        // C05: the prose rule said "DRAFT only" but the code rejected only
+        // ARCHIVED, so a published question could be edited underneath the
+        // snapshots and diagnosis rows that already quote it. Refused with a
+        // code the client can branch on, not an English sentence.
+        if (!STATUS_DRAFT.equals(existing.getStatus())) {
+            throw new com.aistudy.server.common.problem.ApiException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    com.aistudy.server.common.problem.ApiErrorCodes.QUESTION_NOT_EDITABLE,
+                    "only a DRAFT question can be edited, this one is " + existing.getStatus());
         }
         LocalDateTime now = LocalDateTime.now();
         int updated = questionMapper.updateDetailsByIdAndSpace(
@@ -320,13 +331,71 @@ public class QuestionService {
                 }
             }
             case TYPE_ORDERING -> {
+                // correctOrder is graded by exact List.equals against the
+                // submitted 1-based positions, so a stored value outside the
+                // option range makes every answer wrong with no error anywhere
+                // (contract request C-Ordering-space).
+                if (!hasOptions || options.size() < 2) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "ORDERING requires at least 2 options to order");
+                }
                 if (request.correctOrder() == null || request.correctOrder().isEmpty()) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ORDERING requires correctOrder");
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "ORDERING requires correctOrder");
+                }
+                if (new HashSet<>(request.correctOrder()).size() != request.correctOrder().size()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "correctOrder must not repeat a position");
+                }
+                for (Integer position : request.correctOrder()) {
+                    if (position == null || position < 1 || position > options.size()) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "correctOrder entries must be a permutation of the 1-based option"
+                                        + " positions 1.." + options.size() + ", found: " + position);
+                    }
+                }
+                if (request.correctOrder().size() != options.size()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "correctOrder must cover every option: " + options.size()
+                                    + " options, " + request.correctOrder().size() + " positions");
                 }
             }
             case TYPE_MATCHING -> {
                 if (request.matches() == null || request.matches().isEmpty()) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATCHING requires matches");
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "MATCHING requires matches");
+                }
+                // The evaluator parses this string at grading time; malformed
+                // or half-filled pairs would surface as a learner-facing 500.
+                List<Map<String, String>> pairs;
+                try {
+                    pairs = AnswerDataCodec.parseMatchingPairs(request.matches());
+                } catch (IllegalArgumentException e) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "matches must be a JSON array of {\"left\":…,\"right\":…} objects: "
+                                    + e.getMessage());
+                }
+                if (pairs.isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "matches must contain at least one pair");
+                }
+                Set<String> lefts = new HashSet<>();
+                Set<String> rights = new HashSet<>();
+                for (Map<String, String> pair : pairs) {
+                    String left = pair.get("left");
+                    String right = pair.get("right");
+                    if (left == null || left.isBlank() || right == null || right.isBlank()) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "each match pair needs a non-blank left and right: " + pair);
+                    }
+                    if (!lefts.add(left)) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "match left side must be unique: " + left);
+                    }
+                    if (!rights.add(right)) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "match right side must be unique: " + right);
+                    }
                 }
             }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported questionType: " + type);

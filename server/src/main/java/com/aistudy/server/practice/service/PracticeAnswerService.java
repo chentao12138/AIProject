@@ -387,7 +387,8 @@ public class PracticeAnswerService {
             case "FILL_BLANK" -> {
                 if (request.textAnswer() == null || request.textAnswer().isBlank()) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "FILL_BLANK requires textAnswer (JSON array string)");
+                            "FILL_BLANK requires textAnswer (one plain-text string; it is compared"
+                                    + " as a whole against the reference, so every blank must match)");
                 }
                 if (request.selectedOptionKeys() != null || request.booleanAnswer() != null
                         || request.orderingAnswer() != null || request.matchingAnswer() != null) {

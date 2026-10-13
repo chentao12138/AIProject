@@ -729,14 +729,20 @@ public class ExamAttemptService {
                 yield new AnswerPayload(null, null, request.textAnswer(), null, null);
             }
             case "ORDERING" -> {
-                if (request.orderingAnswer() != null && !request.orderingAnswer().isEmpty()) {
-                    yield new AnswerPayload(null, null, null, request.orderingAnswer(), null);
-                }
-                if (request.selectedOptionKeys() == null || request.selectedOptionKeys().isEmpty()) {
+                // selectedOptionKeys used to be accepted here and fed through
+                // Integer.valueOf, so the "legacy order" path only worked for
+                // digit-shaped option keys and threw NumberFormatException for
+                // A/B/C. Practice already requires orderingAnswer alone; both
+                // surfaces now agree (contract request C-Ordering-space).
+                if (request.orderingAnswer() == null || request.orderingAnswer().isEmpty()) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "ORDERING requires orderingAnswer or selectedOptionKeys order");
+                            "ORDERING requires orderingAnswer");
                 }
-                yield new AnswerPayload(null, null, null, request.selectedOptionKeys().stream().map(Integer::valueOf).toList(), null);
+                if (request.selectedOptionKeys() != null && !request.selectedOptionKeys().isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "ORDERING answer must only carry orderingAnswer");
+                }
+                yield new AnswerPayload(null, null, null, request.orderingAnswer(), null);
             }
             case "MATCHING" -> {
                 if (request.matchingAnswer() == null || request.matchingAnswer().isBlank()) {

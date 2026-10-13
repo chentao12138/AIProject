@@ -20,11 +20,19 @@ import java.util.List;
 public record QuestionAuthoringResponse(
         Long id,
         Long spaceId,
+        @io.swagger.v3.oas.annotations.media.Schema(
+                description = "Answer shape the `answer` and `options` fields follow.",
+                allowableValues = {"SINGLE_CHOICE", "MULTIPLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER",
+                        "FILL_BLANK", "ORDERING", "MATCHING"})
         String questionType,
         String stem,
         String explanation,
         String difficulty,
         String originType,
+        @io.swagger.v3.oas.annotations.media.Schema(
+                description = "Lifecycle state. Only DRAFT is editable (PUT answers 409 "
+                        + "QUESTION_NOT_EDITABLE otherwise).",
+                allowableValues = {"DRAFT", "PUBLISHED", "ARCHIVED", "REJECTED"})
         String status,
         List<QuestionOptionResponse> options,
         QuestionAnswerView answer,
@@ -54,7 +62,9 @@ public record QuestionAuthoringResponse(
                         answerData.correctOptionKey(),
                         answerData.correctOptionKeys(),
                         answerData.correctBoolean(),
-                        answerData.referenceAnswer()
+                        answerData.referenceAnswer(),
+                        answerData.correctOrder(),
+                        answerData.matchesJson()
                 ),
                 knowledgePoints == null ? List.of() : knowledgePoints.stream()
                         .map(QuestionKnowledgePoint::getKnowledgePointId)
@@ -104,7 +114,12 @@ public record QuestionAuthoringResponse(
             String correctOptionKey,
             List<String> correctOptionKeys,
             Boolean correctBoolean,
-            String referenceAnswer
+            String referenceAnswer,
+            // C09b: ORDERING/MATCHING answers were writable but never readable,
+            // so the detail page could not show the standard order or pair set
+            // and an editor could not pre-fill it.
+            List<Integer> correctOrder,
+            String matches
     ) {
     }
 }

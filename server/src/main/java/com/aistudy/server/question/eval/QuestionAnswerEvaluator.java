@@ -159,13 +159,10 @@ public final class QuestionAnswerEvaluator {
             throw new IllegalArgumentException("MATCHING has no matches stored");
         }
         try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            java.util.List<java.util.Map<String, String>> correctPairs = mapper.readValue(
-                    matchesJson, mapper.getTypeFactory().constructCollectionType(
-                            java.util.List.class, java.util.LinkedHashMap.class));
-            java.util.List<java.util.Map<String, String>> userPairs = mapper.readValue(
-                    payload.matchingAnswer(), mapper.getTypeFactory().constructCollectionType(
-                            java.util.List.class, java.util.LinkedHashMap.class));
+            java.util.List<java.util.Map<String, String>> correctPairs =
+                    AnswerDataCodec.parseMatchingPairs(matchesJson);
+            java.util.List<java.util.Map<String, String>> userPairs =
+                    AnswerDataCodec.parseMatchingPairs(payload.matchingAnswer());
             if (correctPairs.size() != userPairs.size()) {
                 return GradeResult.graded(false, matchesJson);
             }

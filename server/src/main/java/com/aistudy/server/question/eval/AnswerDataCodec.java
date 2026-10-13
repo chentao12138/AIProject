@@ -3,6 +3,7 @@ package com.aistudy.server.question.eval;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -79,6 +80,37 @@ public final class AnswerDataCodec {
             map.put("matchesJson", matchesJson);
         }
         return write(map);
+    }
+
+    /**
+     * Parses a MATCHING pair document: a JSON array of
+     * {@code {"left":…,"right":…}} objects.
+     *
+     * <p>Shared by authoring validation and grading so a document accepted at
+     * create time cannot be the one that throws later.
+     *
+     * @throws IllegalArgumentException when the text is not that shape
+     */
+    public static List<Map<String, String>> parseMatchingPairs(String matchesJson) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = MAPPER.readTree(matchesJson);
+            if (!root.isArray()) {
+                throw new IllegalArgumentException("expected a JSON array of pair objects");
+            }
+            List<Map<String, String>> pairs = new ArrayList<>();
+            for (com.fasterxml.jackson.databind.JsonNode node : root) {
+                if (!node.isObject()) {
+                    throw new IllegalArgumentException("expected a pair object, found: " + node);
+                }
+                Map<String, String> pair = new LinkedHashMap<>();
+                node.fields().forEachRemaining(entry -> pair.put(entry.getKey(),
+                        entry.getValue().isNull() ? null : entry.getValue().asText()));
+                pairs.add(pair);
+            }
+            return pairs;
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("not valid JSON: " + e.getOriginalMessage(), e);
+        }
     }
 
     /** Parses a stored answer-data document. */

@@ -1,6 +1,9 @@
 package com.aistudy.server.question.dto;
 
+import com.aistudy.server.question.service.QuestionService;
+
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
@@ -25,7 +28,9 @@ import java.util.List;
  * (path), status (DRAFT), originType (USER_CURATED), createdByUserId
  * (JWT sub), timestamps, publishedAt, deletedAt.
  *
- * @param questionType      SINGLE_CHOICE | MULTIPLE_CHOICE | TRUE_FALSE | SHORT_ANSWER
+ * @param questionType      one of the seven QuestionService TYPE_* values; the
+ *                          contract publishes them as an enum so a client cannot
+ *                          invent a type the evaluator would reject
  * @param stem              question body
  * @param explanation       optional post-answer explanation
  * @param difficulty        free-form bounded string or {@code null}
@@ -34,11 +39,21 @@ import java.util.List;
  * @param correctOptionKeys MULTIPLE_CHOICE correct option keys (exact set)
  * @param correctBoolean    TRUE_FALSE correct value
  * @param referenceAnswer   SHORT_ANSWER grading reference (authoring only)
+ * @param correctOrder      ORDERING: 1-based positions of `options`, a
+ *                          permutation of 1..options.size()
+ * @param matches           MATCHING: JSON array of {"left":…,"right":…} pairs
  * @param knowledgePointIds optional same-space knowledge points
  */
 public record CreateQuestionRequest(
         @NotBlank(message = "questionType must not be blank")
         @Size(max = 32, message = "questionType must be at most 32 characters")
+        @io.swagger.v3.oas.annotations.media.Schema(
+                description = "Authoring type. ORDERING carries options to be put in a 1-based order; "
+                        + "MATCHING carries `matches` as a JSON array of {left,right} pair objects.",
+                allowableValues = {QuestionService.TYPE_SINGLE_CHOICE, QuestionService.TYPE_MULTIPLE_CHOICE,
+                        QuestionService.TYPE_TRUE_FALSE, QuestionService.TYPE_SHORT_ANSWER,
+                        QuestionService.TYPE_FILL_BLANK, QuestionService.TYPE_ORDERING,
+                        QuestionService.TYPE_MATCHING})
         String questionType,
 
         @NotBlank(message = "stem must not be blank")
@@ -66,7 +81,8 @@ public record CreateQuestionRequest(
         String referenceAnswer,
 
         @Size(max = 100, message = "correctOrder must be at most 100 items")
-        List<Integer> correctOrder,
+        List<@Min(value = 1, message = "correctOrder entries are 1-based option positions")
+             Integer> correctOrder,
 
         @Size(max = 4000, message = "matches must be at most 4000 characters")
         String matches,
