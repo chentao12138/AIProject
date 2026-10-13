@@ -215,14 +215,20 @@ describe('ExamAttemptPage', () => {
     await user.click(screen.getByRole('button', { name: '下一题' }));
     expect(await screen.findByText('第二题题干')).toBeInTheDocument();
 
-    expect(within(list).getByRole('button', { name: '1' })).toHaveClass(
-      'btn--secondary'
-    );
+    // W17/A9.4: the answered state must be readable, not only colour-coded —
+    // the accessible name carries it, and the class assertion still guards the
+    // visual half.
+    expect(
+      within(list).getByRole('button', { name: '第 1 题（已作答）' })
+    ).toHaveClass('btn--secondary');
     // Slot 2 is only highlighted because it is the current one — it must not
-    // be styled as answered.
-    expect(within(list).getByRole('button', { name: '2' })).not.toHaveClass(
-      'btn--secondary'
-    );
+    // be reported as answered.
+    expect(
+      within(list).getByRole('button', { name: '第 2 题（未作答）' })
+    ).not.toHaveClass('btn--secondary');
+    expect(
+      within(list).getByRole('button', { name: '第 2 题（未作答）' })
+    ).toHaveAttribute('aria-current', 'true');
   });
 
   // W06: the server deadline is now visible DURING the attempt, not only on

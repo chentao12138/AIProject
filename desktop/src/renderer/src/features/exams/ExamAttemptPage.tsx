@@ -433,7 +433,7 @@ function ActiveExam({
       />
       <div className="practice-layout">
         <div className="practice-main">
-          <div className="practice-progress" aria-label="作答进度">
+          <div className="practice-progress" role="status">
             第 {currentIndex + 1} / {total} 题 · 已答 {answeredCount} · 未答{' '}
             {total - answeredCount}
           </div>
@@ -508,6 +508,13 @@ function ActiveExam({
                     variant={
                       idx === currentIndex ? 'primary' : savedHere ? 'secondary' : 'ghost'
                     }
+                    // The button's only text is the number, so variant and CSS
+                    // class carry the answered/saving state — invisible to a
+                    // screen reader. Say it in the name instead (W17/A9.4).
+                    aria-label={`第 ${idx + 1} 题${
+                      savingHere ? '（保存中）' : savedHere ? '（已作答）' : '（未作答）'
+                    }`}
+                    aria-current={idx === currentIndex ? 'true' : undefined}
                     className={savingHere ? 'is-saving' : undefined}
                     onClick={() => setCurrentIndex(idx)}
                   >
