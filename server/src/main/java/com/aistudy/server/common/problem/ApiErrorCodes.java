@@ -33,6 +33,28 @@ public final class ApiErrorCodes {
     public static final String EXAM_NOT_AVAILABLE = "EXAM_NOT_AVAILABLE";
     public static final String EXAM_ATTEMPT_NOT_IN_PROGRESS = "EXAM_ATTEMPT_NOT_IN_PROGRESS";
     public static final String EXAM_DEADLINE_EXCEEDED = "EXAM_DEADLINE_EXCEEDED";
+
+    /**
+     * Exam conflict codes (contract request C12 / audit F-30). Every one of
+     * these arrives as HTTP 409 today; the code is the only thing a client may
+     * branch on, because {@code detail} is display text and is not a contract.
+     */
+    /** Start was requested while an attempt of this exam is still open. */
+    public static final String EXAM_ACTIVE_ATTEMPT_EXISTS = "EXAM_ACTIVE_ATTEMPT_EXISTS";
+    /** The attempt had already been submitted when it was submitted again. */
+    public static final String EXAM_ATTEMPT_ALREADY_SUBMITTED = "EXAM_ATTEMPT_ALREADY_SUBMITTED";
+    /** Result/grading was requested before the attempt was submitted. */
+    public static final String EXAM_RESULT_NOT_AVAILABLE = "EXAM_RESULT_NOT_AVAILABLE";
+    /** A submitted attempt has no persisted result row — a data defect, not user input. */
+    public static final String EXAM_RESULT_MISSING = "EXAM_RESULT_MISSING";
+    /** Grading was requested for an attempt that is not in a gradable state. */
+    public static final String EXAM_GRADING_NOT_AVAILABLE = "EXAM_GRADING_NOT_AVAILABLE";
+    /** This answer cannot be graded (e.g. already graded or not stored). */
+    public static final String EXAM_ANSWER_NOT_GRADABLE = "EXAM_ANSWER_NOT_GRADABLE";
+    /** Another request moved the attempt on between read and write. */
+    public static final String EXAM_ATTEMPT_STALE = "EXAM_ATTEMPT_STALE";
+    /** Another request moved the answer on between read and write. */
+    public static final String EXAM_ANSWER_STALE = "EXAM_ANSWER_STALE";
     public static final String AI_NOT_CONFIGURED = "AI_NOT_CONFIGURED";
     public static final String AI_PROVIDER_UNAVAILABLE = "AI_PROVIDER_UNAVAILABLE";
 

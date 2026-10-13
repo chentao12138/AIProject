@@ -38,6 +38,47 @@ public interface ExamAttemptMapper extends BaseMapper<ExamAttempt> {
                                              @Param("userSubject") String userSubject,
                                              @Param("ownerSubject") String ownerSubject);
 
+    /**
+     * Paged attempt history of one caller (C11), optionally narrowed to a
+     * single exam or status. Same owner JOIN as
+     * {@link #selectBySpaceOwnerUser}, so a caller can never list another
+     * user's attempts by guessing an exam id.
+     */
+    @Select("<script>"
+            + "SELECT ea.* FROM exam_attempt ea "
+            + "JOIN learning_space ls ON ls.id = ea.space_id "
+            + "WHERE ea.space_id = #{spaceId} "
+            + "  AND ea.user_subject = #{userSubject} "
+            + "  AND ls.owner_subject = #{ownerSubject} "
+            + "<if test='examId != null'> AND ea.exam_id = #{examId} </if>"
+            + "<if test='status != null'> AND ea.status = #{status} </if>"
+            + "ORDER BY ea.created_at DESC, ea.id DESC "
+            + "LIMIT #{limit} OFFSET #{offset}"
+            + "</script>")
+    List<ExamAttempt> selectPageByOwnerUser(@Param("spaceId") Long spaceId,
+                                            @Param("userSubject") String userSubject,
+                                            @Param("ownerSubject") String ownerSubject,
+                                            @Param("examId") Long examId,
+                                            @Param("status") String status,
+                                            @Param("limit") int limit,
+                                            @Param("offset") int offset);
+
+    /** Total behind {@link #selectPageByOwnerUser} — identical filter block. */
+    @Select("<script>"
+            + "SELECT COUNT(*) FROM exam_attempt ea "
+            + "JOIN learning_space ls ON ls.id = ea.space_id "
+            + "WHERE ea.space_id = #{spaceId} "
+            + "  AND ea.user_subject = #{userSubject} "
+            + "  AND ls.owner_subject = #{ownerSubject} "
+            + "<if test='examId != null'> AND ea.exam_id = #{examId} </if>"
+            + "<if test='status != null'> AND ea.status = #{status} </if>"
+            + "</script>")
+    long countByOwnerUser(@Param("spaceId") Long spaceId,
+                          @Param("userSubject") String userSubject,
+                          @Param("ownerSubject") String ownerSubject,
+                          @Param("examId") Long examId,
+                          @Param("status") String status);
+
     /** NOT_STARTED → IN_PROGRESS guarded transition. */
     @Update("UPDATE exam_attempt SET status = #{toStatus}, started_at = #{startedAt}, "
             + "deadline_at = #{deadlineAt}, updated_at = #{updatedAt} "

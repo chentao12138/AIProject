@@ -1,5 +1,7 @@
 package com.aistudy.server.exam.controller;
 
+import com.aistudy.server.exam.dto.ExamAttemptDto.AttemptPageResponse;
+import com.aistudy.server.exam.dto.ExamAttemptDto.AttemptSummaryView;
 import com.aistudy.server.exam.dto.ExamAttemptDto.ExamAnswerGradingView;
 import com.aistudy.server.exam.dto.ExamAttemptDto.ExamAnswerRequest;
 import com.aistudy.server.exam.dto.ExamAttemptDto.ExamAnswerView;
@@ -9,19 +11,29 @@ import com.aistudy.server.exam.dto.ExamAttemptDto.GradeAnswerRequest;
 import com.aistudy.server.exam.entity.ExamAttempt;
 import com.aistudy.server.exam.service.ExamAttemptService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import java.util.List;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
+
 import org.springframework.web.bind.annotation.GetMapping;
+
 import org.springframework.web.bind.annotation.PathVariable;
+
 import org.springframework.web.bind.annotation.PostMapping;
+
 import org.springframework.web.bind.annotation.PutMapping;
+
 import org.springframework.web.bind.annotation.RequestBody;
+
 import org.springframework.web.bind.annotation.RequestMapping;
+
 import org.springframework.web.bind.annotation.RequestParam;
+
 import org.springframework.web.bind.annotation.RestController;
+
 import org.springframework.web.server.ResponseStatusException;
 
 /**
@@ -143,7 +155,37 @@ public class ExamAttemptController {
                 authentication.getName(), spaceId, attemptId, answerId, request);
     }
 
+    /**
+     * C11: paged history of the caller's own attempts, optionally narrowed to
+     * one exam. Without it an attempt could only ever be opened from the exam
+     * detail page that created it, so a previous attempt and its result were
+     * unreachable from the UI.
+     */
+    @GetMapping(value = "/exam-attempts", produces = MediaType.APPLICATION_JSON_VALUE)
+    public AttemptPageResponse listAttempts(
+            @PathVariable Long spaceId,
+            @RequestParam(required = false) Long examId,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        ExamAttemptService.AttemptPage result = examAttemptService.listAttempts(
+                authentication.getName(), spaceId, examId, status,
+                Math.max(page, 0), safeSize);
+        List<AttemptSummaryView> items = result.items().stream()
+                .map(attempt -> AttemptSummaryView.from(
+                        attempt, examAttemptService.resultOrNull(attempt)))
+                .toList();
+        int totalPages = (int) ((result.total() + safeSize - 1) / safeSize);
+        return new AttemptPageResponse(items, result.page(), safeSize,
+                result.total(), totalPages);
+    }
+
     private ExamAttemptView attemptView(ExamAttempt attempt) {
-        return ExamAttemptView.from(attempt, examAttemptService.questionsOf(attempt));
+        // C10: the attempt view carries the caller's own saved payloads, so a
+        // reloaded exam page can rebuild which slots were already answered.
+        return ExamAttemptView.from(attempt, examAttemptService.questionsOf(attempt),
+                examAttemptService.answersOf(attempt));
     }
 }

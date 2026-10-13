@@ -1,5 +1,7 @@
 package com.aistudy.server.exam.service;
 
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import com.aistudy.server.exam.dto.ExamAttemptDto;
 import com.aistudy.server.exam.dto.ExamAttemptDto.ExamAnswerGradingView;
 import com.aistudy.server.exam.dto.ExamAttemptDto.ExamAnswerRequest;
@@ -84,13 +86,13 @@ public class ExamAttemptService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found");
         }
         if (!ExamService.STATUS_PUBLISHED.equals(exam.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "exam is not available (EXAM_NOT_AVAILABLE): " + exam.getStatus());
+            throw ApiException.conflict(ApiErrorCodes.EXAM_NOT_AVAILABLE,
+                    "exam is not available: " + exam.getStatus());
         }
         ExamPaper paper = examService.paperOf(exam);
         if (paper == null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "exam has no paper (EXAM_NOT_AVAILABLE)");
+            throw ApiException.conflict(ApiErrorCodes.EXAM_NOT_AVAILABLE,
+                    "exam has no paper");
         }
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
         ExamAttempt attempt = new ExamAttempt();
@@ -112,7 +114,7 @@ public class ExamAttemptService {
             return null;
         }
         if (!STATUS_NOT_STARTED.equals(existing.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_ACTIVE_ATTEMPT_EXISTS,
                     "exam attempt is not NOT_STARTED: " + existing.getStatus());
         }
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
@@ -124,7 +126,7 @@ public class ExamAttemptService {
                 attemptId, spaceId, ownerSubject,
                 STATUS_NOT_STARTED, STATUS_IN_PROGRESS, now, deadline, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_ATTEMPT_STALE,
                     "exam attempt state changed concurrently");
         }
         existing.setStatus(STATUS_IN_PROGRESS);
@@ -146,6 +148,61 @@ public class ExamAttemptService {
     }
 
     /**
+     * Every answer the caller already stored for one attempt, so the attempt
+     * view can echo the submitted payload back (C10) and a reloaded exam page
+     * can rebuild which slots were filled.
+     */
+    public List<ExamAnswer> answersOf(ExamAttempt attempt) {
+        return examAnswerMapper.selectByAttemptId(attempt.getSpaceId(), attempt.getId());
+    }
+
+    /**
+     * The persisted result of an attempt, or {@code null} when it has none yet.
+     *
+     * <p>Read per row while building the history list (C11): bounded by the
+     * page size, which the endpoint clamps to at most 100, so this cannot turn
+     * into an unbounded scan.
+     */
+    public ExamResult resultOrNull(ExamAttempt attempt) {
+        return examResultMapper.selectByAttemptId(attempt.getSpaceId(), attempt.getId());
+    }
+
+    /**
+     * Paged attempt history for the caller inside one space (C11).
+     *
+     * <p>Ownership is enforced twice over: the SQL pins
+     * {@code ea.user_subject} and JOINs {@code learning_space.owner_subject},
+     * so an {@code examId} belonging to someone else simply matches nothing
+     * instead of revealing that it exists.
+     *
+     * @param examId optional filter to one exam
+     * @param status optional lifecycle filter
+     * @param page   0-based index, clamped to {@code >= 0}
+     * @param size   rows per page, clamped by the caller to {@code 1..100}
+     * @return the page plus the total behind the same filter
+     */
+    public AttemptPage listAttempts(String subject, Long spaceId, Long examId,
+                                    String status, int page, int size) {
+        int safePage = Math.max(page, 0);
+        long total = examAttemptMapper.countByOwnerUser(
+                spaceId, subject, subject, examId, status);
+        List<ExamAttempt> items = examAttemptMapper.selectPageByOwnerUser(
+                spaceId, subject, subject, examId, status, size, safePage * size);
+        return new AttemptPage(items, total, safePage, size);
+    }
+
+    /**
+     * One page of attempts with the total matching the same filter.
+     *
+     * @param items  attempts of this page, newest first
+     * @param total  every attempt matching the filter, not just this page
+     * @param page   the 0-based index served
+     * @param size   the page size used
+     */
+    public record AttemptPage(List<ExamAttempt> items, long total, int page, int size) {
+    }
+
+    /**
      * Stores (or re-stores) one answer. Graded silently; the response
      * carries NO correctness fields.
      *
@@ -160,8 +217,8 @@ public class ExamAttemptService {
         }
         finalizeIfExpired(attempt, ownerSubject, spaceId);
         if (!STATUS_IN_PROGRESS.equals(attempt.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "exam attempt is not IN_PROGRESS (EXAM_ATTEMPT_NOT_IN_PROGRESS): "
+            throw ApiException.conflict(ApiErrorCodes.EXAM_ATTEMPT_NOT_IN_PROGRESS,
+                    "exam attempt is not IN_PROGRESS: "
                             + attempt.getStatus());
         }
         assertNotExpired(attempt);
@@ -231,14 +288,14 @@ public class ExamAttemptService {
         }
         finalizeIfExpired(attempt, ownerSubject, spaceId);
         if (!STATUS_IN_PROGRESS.equals(attempt.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_ATTEMPT_NOT_IN_PROGRESS,
                     "only IN_PROGRESS attempts can be submitted: " + attempt.getStatus());
         }
         assertNotExpired(attempt);
 
         ExamResultView result = doFinalize(ownerSubject, spaceId, attempt);
         if (result == null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_ATTEMPT_ALREADY_SUBMITTED,
                     "exam attempt already submitted");
         }
         return result;
@@ -255,12 +312,12 @@ public class ExamAttemptService {
         }
         finalizeIfExpired(attempt, ownerSubject, spaceId);
         if (!STATUS_SUBMITTED.equals(attempt.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_RESULT_NOT_AVAILABLE,
                     "result is only available after submit: " + attempt.getStatus());
         }
         ExamResult result = examResultMapper.selectByAttemptId(spaceId, attemptId);
         if (result == null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_RESULT_MISSING,
                     "exam result missing for submitted attempt");
         }
         List<ExamQuestion> slots = questionsOf(attempt);
@@ -294,7 +351,7 @@ public class ExamAttemptService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ExamAttempt not found");
         }
         if (!STATUS_SUBMITTED.equals(attempt.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_RESULT_NOT_AVAILABLE,
                     "grading is only available after submit: " + attempt.getStatus());
         }
         ExamAnswer answer = examAnswerMapper.selectByIdAndSpace(answerId, spaceId);
@@ -303,7 +360,7 @@ public class ExamAttemptService {
         }
         if (!GRADING_UNGRADED.equals(answer.getGradingStatus())
                 && !GRADING_NEEDS_REVIEW.equals(answer.getGradingStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_ANSWER_NOT_GRADABLE,
                     "answer is not in a gradable state: " + answer.getGradingStatus());
         }
         ExamQuestion slot = examQuestionMapper.selectByIdAndSpace(
@@ -325,7 +382,7 @@ public class ExamAttemptService {
                 request.score(), GRADING_GRADED, request.feedback(),
                 ownerSubject, now, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_ANSWER_STALE,
                     "answer state changed concurrently");
         }
         answer.setScore(request.score());
@@ -575,7 +632,7 @@ public class ExamAttemptService {
                 attempt.getId(), spaceId, ownerSubject,
                 STATUS_IN_PROGRESS, STATUS_SUBMITTED, now, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_ATTEMPT_STALE,
                     "exam attempt state changed concurrently");
         }
         attempt.setStatus(STATUS_SUBMITTED);
@@ -602,8 +659,8 @@ public class ExamAttemptService {
 
     private void assertNotExpired(ExamAttempt attempt) {
         if (attempt.getDeadlineAt() != null && LocalDateTime.now().isAfter(attempt.getDeadlineAt())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "exam deadline exceeded (EXAM_DEADLINE_EXCEEDED)");
+            throw ApiException.conflict(ApiErrorCodes.EXAM_DEADLINE_EXCEEDED,
+                    "exam deadline exceeded");
         }
     }
 

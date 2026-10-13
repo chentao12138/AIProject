@@ -357,6 +357,80 @@ class ExamVerticalSliceIntegrationTest {
         return attemptId;
     }
 
+    /**
+     * C10 + C11 + C12 in one flow: a saved answer is echoed back so a reload
+     * can rebuild the form (without ever revealing grading), the attempt is
+     * reachable again through the history list, and a refused request carries a
+     * stable machine-readable code instead of English prose.
+     */
+    @Test
+    void savedAnswerIsEchoedAttemptsAreListableAndConflictsCarryCodes() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        String token = tokenFor("biz-e2e-user-1");
+        Long q1 = createPublishedQuestion(token, spaceId, "选择一");
+        Long examId = createExamAndPublish(token, spaceId, q1, 2);
+        Long attemptId = startAttempt(token, spaceId, examId);
+        Long slot = slotIdOfAttempt(token, spaceId, attemptId);
+
+        mockMvc.perform(post(ATTEMPTS + "/{attemptId}/answers", spaceId, attemptId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"examQuestionId\":" + slot
+                                + ",\"answer\":{\"selectedOptionKeys\":[\"A\"]}}")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answer.selectedOptionKeys[0]").value("A"))
+                .andExpect(jsonPath("$.submitted").value(false))
+                .andExpect(jsonPath("$.isCorrect").doesNotExist());
+
+        mockMvc.perform(get(ATTEMPTS + "/{attemptId}", spaceId, attemptId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.questions[0].answered").value(true))
+                .andExpect(jsonPath("$.questions[0].answer.selectedOptionKeys[0]").value("A"))
+                .andExpect(jsonPath("$.questions[0].correctOptionKey").doesNotExist());
+
+        mockMvc.perform(get(ATTEMPTS, spaceId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(attemptId))
+                .andExpect(jsonPath("$.items[0].status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.items[0].score").doesNotExist());
+
+        // A different user cannot even address this space: SpaceScopeInterceptor
+        // answers 404 before the handler runs, so the list endpoint cannot be
+        // used to probe whether an exam or attempt exists elsewhere.
+        mockMvc.perform(get(ATTEMPTS, spaceId)
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-2")))
+                .andExpect(status().isNotFound());
+
+        // The same caller in a space of their own sees none of user-1's work.
+        Long otherSpace = insertFixtureSpace("biz-e2e-user-2", "user2 空间");
+        mockMvc.perform(get(ATTEMPTS, otherSpace)
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-2")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItems").value(0));
+
+        mockMvc.perform(post(ATTEMPTS + "/{attemptId}/submit", spaceId, attemptId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        // C12: answering a submitted attempt is refused by code, not by text.
+        mockMvc.perform(post(ATTEMPTS + "/{attemptId}/answers", spaceId, attemptId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"examQuestionId\":" + slot
+                                + ",\"answer\":{\"selectedOptionKeys\":[\"B\"]}}")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EXAM_ATTEMPT_NOT_IN_PROGRESS"));
+
+        // After submit the same answer is listed as final.
+        mockMvc.perform(get(ATTEMPTS + "/{attemptId}", spaceId, attemptId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.questions[0].answer.selectedOptionKeys[0]").value("A"));
+    }
+
     /** (6) create+start published exam; deadline = start + duration. */
     @Test
     void startPublishedExamComputesDeadline() throws Exception {

@@ -26,6 +26,23 @@ public class ApiException extends RuntimeException {
         this.code = code;
     }
 
+    /**
+     * 409 with a stable code. Exists because a bare
+     * {@code ResponseStatusException(CONFLICT, "...(EXAM_NOT_AVAILABLE)...")}
+     * hides the code inside English prose, which a client cannot branch on.
+     */
+    public static ApiException conflict(String code, String detail) {
+        return new ApiException(HttpStatus.CONFLICT, code, detail);
+    }
+
+    /**
+     * 404 with a stable code. The status stays 404 on purpose: an ownership or
+     * space mismatch must not reveal that the resource exists elsewhere.
+     */
+    public static ApiException notFound(String code, String detail) {
+        return new ApiException(HttpStatus.NOT_FOUND, code, detail);
+    }
+
     public HttpStatus status() {
         return status;
     }

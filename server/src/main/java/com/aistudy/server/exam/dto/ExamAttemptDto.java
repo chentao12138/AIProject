@@ -38,12 +38,26 @@ public final class ExamAttemptDto {
             List<AttemptQuestionView> questions
     ) {
         public static ExamAttemptView from(ExamAttempt attempt, List<ExamQuestion> slots) {
+            return from(attempt, slots, List.of());
+        }
+
+        /**
+         * @param answers every answer the caller already stored for this
+         *                attempt; each is echoed onto its own slot so a
+         *                reloaded exam page shows what was saved (C10)
+         */
+        public static ExamAttemptView from(ExamAttempt attempt, List<ExamQuestion> slots,
+                                           List<ExamAnswer> answers) {
+            java.util.Map<Long, ExamAnswer> bySlot = new java.util.HashMap<>();
+            for (ExamAnswer answer : answers) {
+                bySlot.put(answer.getExamQuestionId(), answer);
+            }
             return new ExamAttemptView(
                     attempt.getId(), attempt.getExamId(), attempt.getExamPaperId(),
                     attempt.getStatus(), attempt.getStartedAt(), attempt.getDeadlineAt(),
                     attempt.getSubmittedAt(),
                     slots == null ? List.of() : slots.stream()
-                            .map(AttemptQuestionView::from)
+                            .map(slot -> AttemptQuestionView.from(slot, bySlot.get(slot.getId())))
                             .toList());
         }
     }
@@ -56,10 +70,28 @@ public final class ExamAttemptDto {
             Integer score,
             String questionType,
             String stem,
-            List<OptionView> options
+            List<OptionView> options,
+            ExamAnswerRequest.AnswerPayloadView answer,
+            boolean answered
     ) {
         static AttemptQuestionView from(ExamQuestion slot) {
+            return from(slot, null);
+        }
+
+        /**
+         * @param slot  the frozen paper slot
+         * @param saved the caller's own stored answer for this slot, or
+         *              {@code null} while it is still unanswered
+         *
+         * <p>Only what the candidate submitted is echoed. The correct answer,
+         * score and explanation stay exclusive to the result view, so a reload
+         * can rebuild the form (C10) without revealing grading mid-exam.
+         */
+        static AttemptQuestionView from(ExamQuestion slot, ExamAnswer saved) {
             SnapshotView snapshot = AnswerDataCodec.parseSnapshot(slot.getQuestionSnapshotJson());
+            AnswerDataCodec.AnswerPayloadView stored = saved == null
+                    ? null
+                    : AnswerDataCodec.parseAnswerPayload(saved.getAnswerDataJson());
             return new AttemptQuestionView(
                     slot.getId(), slot.getQuestionId(), slot.getSortOrder(), slot.getScore(),
                     snapshot.questionType(), snapshot.stem(),
@@ -69,12 +101,53 @@ public final class ExamAttemptDto {
                                     String.valueOf(o.get("content")),
                                     o.get("sortOrder") == null ? null
                                             : ((Number) o.get("sortOrder")).intValue()))
-                            .toList());
+                            .toList(),
+                    stored == null ? null
+                            : new ExamAnswerRequest.AnswerPayloadView(
+                                    stored.selectedOptionKeys(), stored.booleanAnswer(),
+                                    stored.textAnswer(), stored.orderingAnswer(),
+                                    stored.matchingAnswer()),
+                    saved != null);
         }
     }
 
     /** Option without any correctness flag. */
     public record OptionView(String optionKey, String content, Integer sortOrder) {
+    }
+
+    /**
+     * One row of the attempt history (C11).
+     *
+     * <p>{@code score}/{@code maxScore} stay {@code null} until the attempt has
+     * a persisted result: an unfinished attempt has no score, and 0 would be a
+     * fabricated grade that the client cannot tell apart from a real zero.
+     */
+    public record AttemptSummaryView(
+            Long id,
+            Long examId,
+            String status,
+            LocalDateTime startedAt,
+            LocalDateTime submittedAt,
+            Integer score,
+            Integer maxScore
+    ) {
+        public static AttemptSummaryView from(ExamAttempt attempt, ExamResult result) {
+            return new AttemptSummaryView(
+                    attempt.getId(), attempt.getExamId(), attempt.getStatus(),
+                    attempt.getStartedAt(), attempt.getSubmittedAt(),
+                    result == null ? null : result.getScore(),
+                    result == null ? null : result.getMaxScore());
+        }
+    }
+
+    /** Paged attempt history, sharing the §11 envelope shape. */
+    public record AttemptPageResponse(
+            List<AttemptSummaryView> items,
+            int page,
+            int pageSize,
+            long totalItems,
+            int totalPages
+    ) {
     }
 
     /** Request for {@code POST .../exam-attempts/{attemptId}/answers}. */
@@ -115,12 +188,31 @@ public final class ExamAttemptDto {
             Long examAttemptId,
             Long examQuestionId,
             String gradingStatus,
-            LocalDateTime answeredAt
+            LocalDateTime answeredAt,
+            ExamAnswerRequest.AnswerPayloadView answer,
+            boolean submitted
     ) {
         public static ExamAnswerView from(ExamAnswer answer) {
+            return from(answer, false);
+        }
+
+        /**
+         * @param submitted whether the owning attempt is already submitted,
+         *                  which is what tells the client the answer is now
+         *                  read-only instead of editable
+         */
+        public static ExamAnswerView from(ExamAnswer answer, boolean submitted) {
+            AnswerDataCodec.AnswerPayloadView stored =
+                    AnswerDataCodec.parseAnswerPayload(answer.getAnswerDataJson());
             return new ExamAnswerView(
                     answer.getId(), answer.getExamAttemptId(), answer.getExamQuestionId(),
-                    answer.getGradingStatus(), answer.getAnsweredAt());
+                    answer.getGradingStatus(), answer.getAnsweredAt(),
+                    stored == null ? null
+                            : new ExamAnswerRequest.AnswerPayloadView(
+                                    stored.selectedOptionKeys(), stored.booleanAnswer(),
+                                    stored.textAnswer(), stored.orderingAnswer(),
+                                    stored.matchingAnswer()),
+                    submitted);
         }
     }
 
