@@ -2,15 +2,21 @@
 
 Electron + React + TypeScript + Vite 桌面客户端。
 早期阶段名 FE-001 / FE-001.5 只覆盖 Spaces/Sources/Knowledge 骨架与产品硬化；
-当前范围已含 Questions（七类题型，排序/配对等后端契约）、Practice、Exams、Search、
-AI 辅导与登录会话恢复。各表面的真实状态以 `docs/FINAL-FEATURE-MATRIX.md`
-（已实现 / 被契约阻塞 / B 类排除）为准，本文件不再维护第二份完成度清单。
+当前范围已含 Questions（七类题型全部可创建、可作答、由服务端判分，含排序/配对）、
+Notes、Practice、Exams、Search、AI 辅导与登录会话恢复。各表面的真实状态以
+`docs/FINAL-FEATURE-MATRIX.md`（已实现 / 被契约阻塞 / B 类排除）为准，
+本文件不再维护第二份完成度清单。
 
 ## Prerequisites
 
 - **Windows Node >= 22.12.0**（本机 v24.11.1 / npm 11.x 验证；`package.json`
   `engines.node` 与 Electron 44 的要求一致，不再有 "Node >= 20" 旧契约）
-- 后端 Spring Boot 运行在 `http://localhost:8080`（默认 `VITE_API_BASE_URL`）
+- 后端 Spring Boot 可访问。默认 `VITE_API_BASE_URL` 是 `http://localhost:8080`，
+  但**先确认那个端口上真的是 AIStudy**（`GET <base>/v3/api-docs` 里必须有
+  `/api/v1/spaces`）——2026-10-14 这台机器的 `:8080` 属于另一个项目，AIStudy 跑在
+  `:8081`。换端口不需要重新构建：写 `%APPDATA%\AIStudy\config.json`
+  `{"apiBaseUrl":"http://localhost:8081"}`，或设 `AISTUDY_API_BASE_URL`，
+  CSP 的 `connect-src` 会跟着走同一个 origin。
 - 构建/测试/运行全部使用 **Windows 工具链**：npm、Electron、Git
 
 > 重要：本目录的 `node_modules` 由 **Windows npm** 生成。
