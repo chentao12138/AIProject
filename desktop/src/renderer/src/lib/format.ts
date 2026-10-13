@@ -331,6 +331,25 @@ export type PracticeSessionStatus =
   (typeof PRACTICE_SESSION_STATUSES)[keyof typeof PRACTICE_SESSION_STATUSES];
 
 /**
+ * The two 409 codes `GET /practice-sessions/{sessionId}/result` can answer with
+ * (backend: the totals are written in the `finish` transaction, V066 added the
+ * `score`/`max_score`/`answered_count`/`correct_count` columns).
+ *
+ * NOT pinned by `backend-vocabulary-contract.test.ts`: that guard reads Java
+ * constants out of this workspace's `server/` copy, which stops at
+ * `V057__add_note_context_links.sql` and contains neither string. So these are
+ * a stated fact, not a checked one — landing them in the contract is exactly
+ * what BACKEND-CONTRACT-REQUESTS.md C12 asks for. Until then the UI branches on
+ * the code and never on the English `detail`.
+ */
+export const PRACTICE_RESULT_ERROR_CODES = {
+  /** The session has not been finished, so there is no result yet. */
+  NOT_SUBMITTED: 'PRACTICE_SESSION_NOT_SUBMITTED',
+  /** Finished before V066, so the server never stored a score for it. */
+  NOT_RECORDED: 'PRACTICE_RESULT_NOT_RECORDED',
+} as const;
+
+/**
  * Knowledge origin types (`KnowledgePoint.ORIGIN_TYPE_*`), pinned to the
  * backend by `backend-vocabulary-contract.test.ts`.
  */

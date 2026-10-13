@@ -283,14 +283,12 @@ account. Nothing here is marked passed — an unrun step is an unrun step.
 
 | Step | Blocked by | What a pass looks like |
 |------|-----------|------------------------|
-| Knowledge point → exact Source page + block highlight | C02 (`KnowledgePointSourceResponse` still has no `sourceId`/`sourcePageId`) | Provenance row is a working deep link, not plain text |
-| Source / KP → Ask AI with context | C03 (`SendMessageRequest` = `content` only) | The message carries the id, and the answer demonstrably uses that material |
-| AI citation → page/block | C04 (`ContextReference.locator` is free text) | Every supported reference type navigates |
-| Reload mid-exam and continue | C10 (`/exam-attempts/{id}/answers` is POST-only; `AttemptQuestionView` has no answer) | Previously saved selections are shown; saved state is per question |
-| Reopen a finished practice and see its score | C06, the half that did not land (`PracticeSessionSummary`/`Detail` have no score; only the `finish` response does) | Score comes from the server at any later time, not from a response held in memory |
-| Question list paging | C-Paging (`GET /questions` accepts no `page`/`size`) | Pager drives server requests; no full-list fetch |
-| Exam attempt history | C11 (attempts are only listable under `/admin/exams/{examId}/attempts`) | From the paper, a learner re-opens a past attempt and its result |
-| Show the standard order / pair set of a stored question | C09b (`QuestionAnswerView` has neither `correctOrder` nor `matches`) | An editor pre-fills and a reader sees what the author set |
+| Show the standard order / pair set of a stored question | C09b (`QuestionAnswerView` has neither `correctOrder` nor `matches` — they exist only on `CreateQuestionRequest`, re-verified against the current 197-path snapshot) | An editor pre-fills and a reader sees what the author set |
+| See that a note is archived, and bring it back | C-Notes (archive sets `archived_at` and the list filters it out; `NoteView` has no `archivedAt` and there is no `POST /notes/{id}/restore`) | The archived note is findable and restorable |
+
+Everything else that used to sit in this table has been unblocked by the
+regenerations and moved below — including C02, C03, C04, C06's score half, C10,
+C11 and C-Paging, all of which are now in the committed contract.
 
 ### Unblocked by the regeneration — waiting only on a running backend and a test account
 
@@ -303,6 +301,13 @@ contract; they need execution, not a backend change.
 | Modify an existing draft question | C05: `PUT /questions/{id}` — note `UpdateQuestionRequest` is only `stem`/`explanation`/`difficulty`, so options and the correct answer stay locked and the UI says so |
 | Archive / restore a question | C07: `POST /questions/{id}/archive` and `/restore` |
 | Reopen a finished practice and review each answer | C06 (review half): `GET .../practice-sessions/{sessionId}/answers` |
+| Reopen a finished practice and see its SCORE | C06 is fully closed: `GET .../practice-sessions/{sessionId}/result` → `PracticeResultView`. Unit-verified (the view calls only that endpoint, and a `finish` response that contradicts it is ignored); not yet run live. Two 409 branches to cover: `PRACTICE_SESSION_NOT_SUBMITTED` (session still open) and `PRACTICE_RESULT_NOT_RECORDED` (a session finished before V066 — expect this on any pre-existing session, since the workspace's `server/` copy is still at V057) |
+| Question list paging | C-Paging: `QuestionPageResponse` + `page`/`size` on `GET /questions`; the page comes from `?page=` |
+| Reload mid-exam and continue | C10 / A6.2: `AttemptQuestionView{answer,answered}` on the attempt read |
+| Exam attempt history, and re-opening a past attempt | C11 / W07: `GET /spaces/{spaceId}/exam-attempts?examId=&status=&page=&size=` |
+| Knowledge point → exact Source page + block highlight | C02 / A2.1: `KnowledgePointSourceResponse.sourceId` + `.sourcePageId` |
+| Source / KP → Ask AI with context | C03 / A3.2: `SendMessageRequest{sourceId,sourcePageId,contentBlockId,knowledgePointId}` |
+| AI citation → page/block navigation | C04 / A3.3: `ContextReference{sourceId,sourcePageId,contentBlockId}` — navigate on the ids, never parse `locator` |
 | Search hit of type NOTE | C-Search: enum has `NOTE`, hit carries `noteId` |
 | 排序/配对 authoring + answering + grading | C09 write side: `correctOrder`/`matches`, `orderingAnswer`/`matchingAnswer` |
 | Exam created with a time limit, and the countdown that depends on it | Field-name correction: the server binds `timeLimitMinutes`; the frontend had been sending `durationMinutes`, so no exam ever got a limit and `deadlineAt` came back null |

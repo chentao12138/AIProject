@@ -118,16 +118,6 @@ export type CreatePracticeSessionBody = NonNullable<
   Parameters<ApiClient['createPracticeSession']>[1]
 >;
 
-/**
- * Practice score summary. NOTE: only `finishPracticeSession` returns this —
- * the session detail does NOT carry score/answered/correct counts, so a
- * finished session re-read from the server has no score to display. See
- * BACKEND-CONTRACT-REQUESTS.md (A5.3).
- */
-export type PracticeSubmitSummary = ResultData<
-  ApiClient['finishPracticeSession']
->;
-
 /** Question as stored (options + answer key + provenance ids). */
 export type QuestionDetail = ResultData<ApiClient['getQuestion']>;
 

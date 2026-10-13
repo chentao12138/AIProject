@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ApiRequestError,
   NetworkUnavailableError,
+  apiProblemCode,
   normalizeApiError,
   unwrap,
 } from './api-error';
@@ -140,5 +141,38 @@ describe('unwrap', () => {
     }
     expect(thrown).toBeInstanceOf(ApiRequestError);
     expect((thrown as ApiRequestError).status).toBe(404);
+  });
+});
+
+describe('apiProblemCode', () => {
+  it('reads the ProblemDetail code so a page can branch on it', () => {
+    const error = new ApiRequestError(409, {
+      code: '  PRACTICE_RESULT_NOT_RECORDED  ',
+      detail: 'score columns did not exist',
+    });
+    expect(apiProblemCode(error)).toBe('PRACTICE_RESULT_NOT_RECORDED');
+  });
+
+  it('is null when the body carries no usable code', () => {
+    expect(apiProblemCode(new ApiRequestError(409, {}))).toBeNull();
+    expect(apiProblemCode(new ApiRequestError(409))).toBeNull();
+    expect(apiProblemCode(new ApiRequestError(409, { code: '   ' }))).toBeNull();
+    expect(apiProblemCode(new ApiRequestError(409, { code: 409 }))).toBeNull();
+  });
+
+  // normalizeApiError must stay code-blind: a known code is a page's decision,
+  // never a licence to put the server's English detail on screen.
+  it('is null for anything that is not an ApiRequestError', () => {
+    expect(apiProblemCode(new Error('boom'))).toBeNull();
+    expect(apiProblemCode(undefined)).toBeNull();
+    expect(apiProblemCode('PRACTICE_SESSION_NOT_SUBMITTED')).toBeNull();
+  });
+
+  it('does not change the safe copy of a coded 409', () => {
+    const error = new ApiRequestError(409, {
+      code: 'PRACTICE_SESSION_NOT_SUBMITTED',
+      detail: 'session is not submitted',
+    });
+    expect(normalizeApiError(error).message).toBe('请求失败，请稍后重试。');
   });
 });

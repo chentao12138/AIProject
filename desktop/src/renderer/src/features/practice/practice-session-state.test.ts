@@ -1,15 +1,25 @@
 /**
  * Practice state helpers — payload shapes the backend accepts, error copy,
- * and the response mirror that survives unmount (audit W01 / W02 / W03) plus
- * the A5.2 resume read (`GET …/answers`).
+ * the response mirror that survives unmount (audit W01 / W02 / W03), the A5.2
+ * resume read (`GET …/answers`) and the A5.3 score read (`GET …/result`).
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { ApiRequestError, NetworkUnavailableError } from '../../lib/api-error';
-import { createTestQueryClient } from '../../test/test-utils';
+import {
+  ApiRequestError,
+  NetworkUnavailableError,
+  normalizeApiError,
+} from '../../lib/api-error';
+import { ApiClientProvider } from '../../lib/api-context';
+import { queryKeys } from '../../lib/query-keys';
+import type { PracticeResult } from '../../lib/types';
+import {
+  createTestQueryClient,
+  mockApiClient,
+} from '../../test/test-utils';
 import {
   buildAnswerPayload,
   describePracticeError,
@@ -18,9 +28,12 @@ import {
   firstOpenSlotIndex,
   practiceLocalStateKey,
   practicePayloadContext,
+  practiceResultState,
+  practiceResultErrorNotice,
   toPracticeSlots,
   unanswerableTypeNotice,
   usePracticeLocalState,
+  usePracticeResult,
   type PracticeSubmittedAnswer,
 } from './practice-session-state';
 
@@ -349,6 +362,174 @@ describe('firstOpenSlotIndex', () => {
   });
 });
 
+describe('practiceResultState', () => {
+  // A5.3: the finished view renders exactly one of these states, and only
+  // `graded` may show a score. The status words are the backend's own three —
+  // PracticeSessionService.java:58-60 (STATUS_CREATED / _IN_PROGRESS /
+  // _SUBMITTED), the list `lib/backend-vocabulary-contract.test.ts` pins to
+  // PRACTICE_SESSION_STATUSES. That vocabulary has NO "not yet graded" session
+  // state, so an absent `score` on a SUBMITTED session is its own state.
+  const base: PracticeResult = {
+    sessionId: 1,
+    status: 'SUBMITTED',
+    questionCount: 2,
+    answeredCount: 2,
+    correctCount: 1,
+    score: 1,
+    maxScore: 2,
+  };
+  const payload = (extra: PracticeResult = {}): PracticeResult => ({
+    ...base,
+    ...extra,
+  });
+
+  it('shows a score only when the payload carries one', () => {
+    expect(practiceResultState(payload())).toEqual({
+      kind: 'graded',
+      counts: {
+        score: 1,
+        maxScore: 2,
+        answeredCount: 2,
+        correctCount: 1,
+        questionCount: 2,
+      },
+    });
+    // An absent number stays absent — it is never turned into 0.
+    expect(practiceResultState(payload({ score: undefined }))).toEqual({
+      kind: 'unscored',
+      counts: {
+        score: null,
+        maxScore: 2,
+        answeredCount: 2,
+        correctCount: 1,
+        questionCount: 2,
+      },
+    });
+    expect(practiceResultState(payload({ maxScore: undefined }))).toEqual({
+      kind: 'graded',
+      counts: {
+        score: 1,
+        maxScore: null,
+        answeredCount: 2,
+        correctCount: 1,
+        questionCount: 2,
+      },
+    });
+  });
+
+  // A real 0 from the server is a 0, not a missing value.
+  it('keeps a graded zero as a number', () => {
+    const state = practiceResultState({ status: 'SUBMITTED', score: 0 });
+    expect(state.kind).toBe('graded');
+    if (state.kind === 'graded') {
+      expect(state.counts.score).toBe(0);
+      expect(state.counts.maxScore).toBeNull();
+      expect(state.counts.answeredCount).toBeNull();
+    }
+  });
+
+  it('keeps the server states apart', () => {
+    expect(practiceResultState(payload({ status: 'IN_PROGRESS' })).kind).toBe(
+      'not-finished'
+    );
+    expect(practiceResultState(payload({ status: 'CREATED' })).kind).toBe(
+      'not-finished'
+    );
+    // Practice sessions have no GRADED / FINISHED / COMPLETED status — matching
+    // invented ones is how a submitted session once reopened as a blank form,
+    // so an unknown word is reported, never interpreted.
+    expect(practiceResultState(payload({ status: 'GRADED' })).kind).toBe(
+      'unknown-status'
+    );
+    expect(practiceResultState(payload({ status: undefined })).kind).toBe(
+      'unknown-status'
+    );
+    // Enums arrive as bare strings; case and padding are normalized first.
+    expect(practiceResultState(payload({ status: ' submitted ' })).kind).toBe(
+      'graded'
+    );
+  });
+
+  it('reads an empty result body as no payload, not as zero', () => {
+    expect(practiceResultState(undefined)).toEqual({ kind: 'no-payload' });
+    expect(practiceResultState(null)).toEqual({ kind: 'no-payload' });
+  });
+});
+
+describe('usePracticeResult', () => {
+  // The score read is keyed on its own and goes to the result endpoint — the
+  // session detail carries no score, and the `finish` response is not a store.
+  function renderResultHook(
+    getPracticeResult: (...args: never[]) => unknown
+  ) {
+    const client = createTestQueryClient();
+    const apiClient = mockApiClient({ getPracticeResult });
+    const harness = ({ children }: { children: ReactNode }) =>
+      createElement(ApiClientProvider, {
+        client: apiClient,
+        children: createElement(QueryClientProvider, { client }, children),
+      });
+    return {
+      client,
+      rendered: renderHook(() => usePracticeResult(7, 1), { wrapper: harness }),
+    };
+  }
+
+  it('reads GET …/result under the practiceResult key', async () => {
+    const getPracticeResult = vi.fn(async () => ({
+      data: {
+        sessionId: 1,
+        status: 'SUBMITTED',
+        questionCount: 2,
+        answeredCount: 2,
+        correctCount: 1,
+        // The wire sends null where the generated types promise a number.
+        score: null,
+        maxScore: null,
+      },
+      response: { status: 200 },
+    }));
+    const { client, rendered } = renderResultHook(getPracticeResult);
+
+    await waitFor(() => expect(rendered.result.current.isSuccess).toBe(true));
+    expect(getPracticeResult).toHaveBeenCalledWith(7, 1);
+    expect(client.getQueryData(queryKeys.practiceResult(7, 1))).toEqual(
+      expect.objectContaining({ status: 'SUBMITTED' })
+    );
+    // `score: null` is a missing grade, not 0 — and it is still `unscored` even
+    // though the session's own status says SUBMITTED.
+    expect(practiceResultState(rendered.result.current.data).kind).toBe(
+      'unscored'
+    );
+  });
+
+  it('reads an absent result body as null', async () => {
+    const getPracticeResult = vi.fn(async () => ({
+      data: undefined,
+      response: { status: 200 },
+    }));
+    const { rendered } = renderResultHook(getPracticeResult);
+
+    await waitFor(() => expect(rendered.result.current.isSuccess).toBe(true));
+    expect(rendered.result.current.data).toBeNull();
+    expect(practiceResultState(rendered.result.current.data)).toEqual({
+      kind: 'no-payload',
+    });
+  });
+
+  it('fails the read like any other server call so the page can report it', async () => {
+    const getPracticeResult = vi.fn(async () => {
+      throw new ApiRequestError(500, {});
+    });
+    const { rendered } = renderResultHook(getPracticeResult);
+
+    await waitFor(() => expect(rendered.result.current.isError).toBe(true));
+    expect(
+      normalizeApiError(rendered.result.current.error).message
+    ).toContain('服务器暂时无法完成请求');
+  });
+});
+
 describe('usePracticeLocalState', () => {
   it('is scoped to one session', () => {
     expect(practiceLocalStateKey(7, 1)).toEqual(['practice-session-state', 7, 1]);
@@ -493,5 +674,33 @@ describe('usePracticeLocalState', () => {
     });
     expect(result.current.state.submitted[11]?.view.isCorrect).toBe(true);
     expect(result.current.state.submitted[11]?.source).toBe('submitted');
+  });
+});
+
+describe('practiceResultErrorNotice', () => {
+  const coded = (code: string) =>
+    new ApiRequestError(409, { code, detail: 'english reason from the server' });
+
+  it('names the two reasons the result endpoint distinguishes', () => {
+    const notSubmitted = practiceResultErrorNotice(
+      coded('PRACTICE_SESSION_NOT_SUBMITTED')
+    );
+    const notRecorded = practiceResultErrorNotice(
+      coded('PRACTICE_RESULT_NOT_RECORDED')
+    );
+
+    expect(notSubmitted).toContain('还没有交卷');
+    expect(notRecorded).toContain('无分可读');
+    // One branch saying the other would make the distinction pointless.
+    expect(notSubmitted).not.toBe(notRecorded);
+    // The server's English text stays off the screen (C12).
+    expect(notSubmitted).not.toContain('english reason');
+    expect(notRecorded).not.toContain('english reason');
+  });
+
+  it('stays silent for a code it does not know', () => {
+    expect(practiceResultErrorNotice(coded('CONFLICT'))).toBeNull();
+    expect(practiceResultErrorNotice(new ApiRequestError(500, {}))).toBeNull();
+    expect(practiceResultErrorNotice(new Error('other'))).toBeNull();
   });
 });

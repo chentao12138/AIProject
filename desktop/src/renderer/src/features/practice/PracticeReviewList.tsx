@@ -12,8 +12,12 @@
  *  - Neither view echoes the user's own answer text. An entry without a local
  *    echo is reported as 已作答 with the verdict only; nothing about what was
  *    answered is invented here.
- *  - The session SCORE still has no read endpoint (`…/result` is not in the
- *    contract — gap C06), which is the page's business, not this list's.
+ *  - The session SCORE comes from `GET /practice-sessions/{id}/result` (A5.3)
+ *    and is the page's business; this list stays the per-question read, so the
+ *    two never mix into a locally computed total.
+ *  - `explanation` is null on every row of `GET …/answers` (backend-confirmed
+ *    defect, not a design choice), so a missing explanation says so plainly
+ *    instead of rendering an empty 解析 block.
  */
 
 import { Link } from 'react-router-dom';
@@ -154,12 +158,17 @@ function PracticeReviewItem({
         <p>正确答案：{entry.view.correctAnswer}</p>
       )}
       {entry.view.explanation ? (
-        <p>
+        <p data-testid="review-explanation">
           <span className="muted">解析：</span>
           {entry.view.explanation}
         </p>
       ) : (
-        <p className="muted">后端未返回该题解析。</p>
+        // `GET …/answers` sends `explanation: null` for every row today (a
+        // backend defect they confirmed), so this line — never an empty 解析
+        // block — is what a reopened session shows.
+        <p className="muted" data-testid="review-explanation-missing">
+          后端未返回该题解析。
+        </p>
       )}
     </div>
   );

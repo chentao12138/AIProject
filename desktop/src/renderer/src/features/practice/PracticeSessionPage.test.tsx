@@ -94,6 +94,24 @@ function serverAnswer(slotId: number, extra: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * A body of `GET …/result` — `PracticeResultView`, the only score source
+ * (A5.3). Defaults to a totals set that NOTHING on this page can produce by
+ * counting, so an assertion on a number proves it came from the endpoint.
+ */
+function resultPayload(extra: Record<string, unknown> = {}) {
+  return {
+    sessionId: 1,
+    status: 'SUBMITTED',
+    questionCount: 9,
+    answeredCount: 8,
+    correctCount: 3,
+    score: 7,
+    maxScore: 9,
+    ...extra,
+  };
+}
+
 function ok<T>(data: T) {
   return { data, response: { status: 200 } };
 }
@@ -583,6 +601,19 @@ describe('PracticeSessionPage', () => {
       mockApiClient({
         getPracticeSession,
         submitPracticeAnswer: vi.fn(answerServer),
+        // The score block is read back from the result endpoint (A5.3), exactly
+        // as it is when the same session is reopened from history.
+        getPracticeResult: vi.fn(async () =>
+          ok(
+            resultPayload({
+              questionCount: 2,
+              answeredCount: 2,
+              correctCount: 1,
+              score: 1,
+              maxScore: 2,
+            })
+          )
+        ),
         finishPracticeSession: vi.fn(async () =>
           ok({
             sessionId: 1,
@@ -627,19 +658,34 @@ describe('PracticeSessionPage', () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
-  // G05 (reachable part): a session finished in an earlier visit has neither a
-  // score nor per-question results — state the gap, never compute (ADR-031).
-  it('states the missing result endpoint when a finished session is reopened', async () => {
+  // A5.3 (was gap C06): a session opened from history reads its score from
+  // `GET …/result`. The payload below disagrees with anything this page could
+  // count from its own paper and answer rows, so a rendered number can only be
+  // the server's (ADR-031 forbids client-side grading).
+  it('reads a reopened finished session score from getPracticeResult', async () => {
+    const getPracticeResult = vi.fn(async () => ok(resultPayload()));
+    // `GET …/answers` sends `explanation: null` on every row today (a
+    // backend-confirmed defect), so the review must fall back, not render an
+    // empty 解析 block.
+    const listPracticeAnswers = vi.fn(async () =>
+      ok([
+        serverAnswer(11, { explanation: null }),
+        serverAnswer(12, { isCorrect: false, explanation: null }),
+      ])
+    );
+
     renderSession(
       mockApiClient({
         getPracticeSession: vi.fn(async () =>
           ok(
-            session('SUBMITTED', [SINGLE], {
+            session('SUBMITTED', [SINGLE, TRUE_FALSE], {
               startedAt: '2026-10-13T07:00:00Z',
               finishedAt: '2026-10-13T09:00:00Z',
             })
           )
         ),
+        getPracticeResult,
+        listPracticeAnswers,
       }),
       createTestQueryClient()
     );
@@ -647,20 +693,180 @@ describe('PracticeSessionPage', () => {
     expect(
       await screen.findByRole('heading', { name: '练习 #1 — 成绩' })
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '提交' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '交卷' })).toBeNull();
+    await waitFor(() => expect(getPracticeResult).toHaveBeenCalledWith(7, 1));
+
+    // The endpoint's totals, not 得分 1/2 nor 已作答 2/2 from this paper.
+    expect(await screen.findByText('得分：7 / 9')).toBeInTheDocument();
+    expect(screen.getByText('已作答：8 / 9')).toBeInTheDocument();
+    expect(screen.getByText('答对：3')).toBeInTheDocument();
+    expect(screen.getByText(/题目数：9/)).toBeInTheDocument();
+    expect(screen.queryByText('得分：1 / 2')).toBeNull();
+    // The old gap copy is gone: nothing claims a finished session has no score.
+    expect(screen.queryByTestId('score-unavailable')).toBeNull();
+
+    // The per-question review is still the OTHER read (`GET …/answers`), and
+    // its `explanation` is null there, so no empty 解析 block is rendered.
+    await waitFor(() => expect(listPracticeAnswers).toHaveBeenCalledWith(7, 1));
+    expect(
+      await screen.findByText(/已记录 2 \/ 2 题的后端逐题结果/)
+    ).toBeInTheDocument();
+    expect(screen.getAllByTestId('review-explanation-missing')).toHaveLength(2);
+    expect(screen.queryByTestId('review-explanation')).toBeNull();
+  });
+
+  // A finished session with no score in the payload is reported as missing.
+  // Absent is NOT 0: 得分 0 / 0 would be a grade the backend never gave.
+  it('does not render a missing score as 0 / 0', async () => {
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () => ok(session('SUBMITTED', [SINGLE]))),
+        getPracticeResult: vi.fn(async () =>
+          ok({
+            sessionId: 1,
+            status: 'SUBMITTED',
+            questionCount: 1,
+            answeredCount: 1,
+            correctCount: null,
+            score: null,
+            maxScore: null,
+          })
+        ),
+      }),
+      createTestQueryClient()
+    );
+
+    const note = await screen.findByTestId('result-score-missing');
+    expect(note.textContent).toContain('没有返回分数');
+    expect(screen.queryByTestId('result-score')).toBeNull();
     expect(screen.queryByText(/得分：/)).toBeNull();
+    expect(screen.queryByText(/0 \/ 0/)).toBeNull();
+    // The counts it did send show; the ones it did not stay unrendered numbers.
+    expect(screen.getByText('已作答：1 / 1')).toBeInTheDocument();
+    expect(screen.getByText('答对：后端未返回')).toBeInTheDocument();
+  });
 
-    const note = await screen.findByTestId('score-unavailable');
-    expect(note.textContent).toContain('成绩需后端 result 端点');
-    expect(note.textContent).toContain('C06');
+  // The vocabulary has no "not yet graded" session status (PracticeSessionService
+  // emits CREATED / IN_PROGRESS / SUBMITTED only), so an unfinished result is
+  // named by that status instead of being shown as a score.
+  it('says the session is not finished instead of showing a score', async () => {
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () => ok(session('SUBMITTED', [SINGLE]))),
+        getPracticeResult: vi.fn(async () =>
+          ok(resultPayload({ status: 'IN_PROGRESS', score: null, maxScore: null }))
+        ),
+      }),
+      createTestQueryClient()
+    );
 
-    // The per-question read EXISTS now, so the empty list is a fact about this
-    // session, not a missing endpoint: it says the server holds nothing.
-    const review = await screen.findByTestId('review-unavailable');
-    expect(review.textContent).toContain('/answers');
-    expect(review.textContent).toContain('空列表');
-    expect(review.textContent).not.toContain('没有逐题答案读取端点');
+    const note = await screen.findByTestId('result-not-finished');
+    expect(note.textContent).toContain('尚未交卷');
+    expect(note.textContent).toContain('IN_PROGRESS');
+    expect(screen.queryByTestId('result-score')).toBeNull();
+    expect(screen.queryByText(/得分：/)).toBeNull();
+  });
+
+  // A status outside the pinned vocabulary gets no interpretation — the page
+  // says which word it got rather than treating it as finished or in progress.
+  it('names an unknown result status instead of guessing it', async () => {
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () => ok(session('SUBMITTED', [SINGLE]))),
+        getPracticeResult: vi.fn(async () =>
+          ok(resultPayload({ status: 'GRADED' }))
+        ),
+      }),
+      createTestQueryClient()
+    );
+
+    const note = await screen.findByTestId('result-status-unknown');
+    expect(note.textContent).toContain('GRADED');
+    expect(note.textContent).toContain('不猜测');
+    expect(screen.queryByText(/得分：/)).toBeNull();
+  });
+
+  // An empty result body is a fact about the response, not a 0-score session.
+  it('reports a result read that carried no payload', async () => {
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () => ok(session('SUBMITTED', [SINGLE]))),
+        getPracticeResult: vi.fn(async () => ok(undefined)),
+      }),
+      createTestQueryClient()
+    );
+
+    const note = await screen.findByTestId('result-empty');
+    expect(note.textContent).toContain('没有返回成绩数据');
+    expect(screen.queryByText(/得分：/)).toBeNull();
+  });
+
+  // A failed score read is visible, and the review (a separate read) survives.
+  it('surfaces a failed result read without computing a score', async () => {
+    const user = userEvent.setup();
+    const getPracticeResult = vi.fn(async () => {
+      throw new ApiRequestError(500, {});
+    });
+
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () => ok(session('SUBMITTED', [SINGLE]))),
+        getPracticeResult,
+        listPracticeAnswers: vi.fn(async () => ok([serverAnswer(11)])),
+      }),
+      createTestQueryClient()
+    );
+
+    const note = await screen.findByTestId('result-error');
+    expect(note.textContent).toContain('无法读取本次练习的成绩');
+    expect(note.textContent).toContain('服务器暂时无法完成请求');
+    expect(screen.queryByText(/得分：/)).toBeNull();
+    expect(
+      screen.getByText(/已记录 1 \/ 1 题的后端逐题结果/)
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '重试读取' }));
+    await waitFor(() => expect(getPracticeResult).toHaveBeenCalledTimes(2));
+  });
+
+  // The two 409 codes the result endpoint answers with mean different things,
+  // and the copy says which. Branching on `code` is what keeps the English
+  // `detail` out of the UI (C12), and neither branch may render a score.
+  it.each([
+    ['PRACTICE_SESSION_NOT_SUBMITTED', '还没有交卷'],
+    ['PRACTICE_RESULT_NOT_RECORDED', '无分可读'],
+  ])('explains a %s without showing the server detail', async (code, phrase) => {
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () => ok(session('SUBMITTED', [SINGLE]))),
+        getPracticeResult: vi.fn(async () => {
+          throw new ApiRequestError(409, { code, detail: 'some internal english text' });
+        }),
+      }),
+      createTestQueryClient()
+    );
+
+    const notice = await screen.findByTestId('result-error-notice');
+    expect(notice.textContent).toContain(phrase);
+    expect(screen.queryByText(/some internal english text/)).toBeNull();
+    expect(screen.queryByText(/得分：/)).toBeNull();
+    expect(screen.queryByText(/0 \/ 0/)).toBeNull();
+  });
+
+  // An unknown code must not be dressed up as either known reason.
+  it('keeps the generic copy for a code it does not know', async () => {
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () => ok(session('SUBMITTED', [SINGLE]))),
+        getPracticeResult: vi.fn(async () => {
+          throw new ApiRequestError(409, { code: 'SOMETHING_NEW', detail: 'x' });
+        }),
+      }),
+      createTestQueryClient()
+    );
+
+    const note = await screen.findByTestId('result-error');
+    expect(screen.queryByTestId('result-error-notice')).toBeNull();
+    expect(note.textContent).toContain('无法读取本次练习的成绩');
   });
 
   // A5.2 / W03: a session reopened after 交卷 still gets its per-question
@@ -698,15 +904,20 @@ describe('PracticeSessionPage', () => {
     expect(screen.getAllByTestId('review-answer-unreadable')).toHaveLength(2);
   });
 
-  it('keeps the finish summary readable after leaving and returning', async () => {
+  // A5.3: the score survives leaving and returning because it is READ again,
+  // not because this client kept the `finish` response. The two disagree here on
+  // purpose: whatever renders is the endpoint's number.
+  it('re-reads the score from the result endpoint instead of the finish response', async () => {
     const user = userEvent.setup();
     const queryClient = createTestQueryClient();
     const getPracticeSession = vi.fn(async () =>
       ok(session('SUBMITTED', [SINGLE]))
     );
     getPracticeSession.mockResolvedValueOnce(ok(session('IN_PROGRESS', [SINGLE])));
+    const getPracticeResult = vi.fn(async () => ok(resultPayload()));
     const apiClient = mockApiClient({
       getPracticeSession,
+      getPracticeResult,
       finishPracticeSession: vi.fn(async () =>
         ok({
           sessionId: 1,
@@ -722,13 +933,18 @@ describe('PracticeSessionPage', () => {
 
     const first = renderSession(apiClient, queryClient);
     await user.click(await screen.findByRole('button', { name: '交卷' }));
-    await screen.findByText(/得分：1 \/ 1/);
+
+    expect(await screen.findByText('得分：7 / 9')).toBeInTheDocument();
+    expect(screen.queryByText('得分：1 / 1')).toBeNull();
+    await waitFor(() => expect(getPracticeResult).toHaveBeenCalledWith(7, 1));
+    const callsWhileMounted = getPracticeResult.mock.calls.length;
     first.unmount();
 
     renderSession(apiClient, queryClient);
-    expect(await screen.findByText(/得分：1 \/ 1/)).toBeInTheDocument();
-    expect(screen.getByText(/已作答：1 \/ 1/)).toBeInTheDocument();
-    expect(screen.getByText('答对：1')).toBeInTheDocument();
+    expect(await screen.findByText('得分：7 / 9')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(getPracticeResult).toHaveBeenCalledTimes(callsWhileMounted + 1)
+    );
   });
 
   it('renders the answering UI for a FILL_BLANK question', async () => {

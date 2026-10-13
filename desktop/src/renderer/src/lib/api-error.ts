@@ -140,6 +140,22 @@ function validationMessage(body: unknown): string | null {
   return null;
 }
 
+/**
+ * The ProblemDetail `code`, when the body carries one.
+ *
+ * `normalizeApiError` deliberately collapses every status into safe copy, so a
+ * page that must react to one specific server condition reads its code here.
+ * The alternative — matching the English `detail` text — is the defect C12
+ * exists to remove, and a detail can echo internals.
+ */
+export function apiProblemCode(error: unknown): string | null {
+  if (!(error instanceof ApiRequestError)) {
+    return null;
+  }
+  const code = (error.body as ProblemBody | undefined)?.code;
+  return typeof code === 'string' && code.trim() !== '' ? code.trim() : null;
+}
+
 export function normalizeApiError(
   error: unknown
 ): NormalizedApiError {

@@ -10,23 +10,34 @@
 | AI Tutor | `/spaces/:spaceId/ai`, `/spaces/:spaceId/ai/:conversationId` | Implemented |
 | Questions | `/spaces/:spaceId/questions`, `/spaces/:spaceId/questions/new`, `/spaces/:spaceId/questions/:questionId`, `/spaces/:spaceId/questions/:questionId/edit` | Implemented — all seven types authorable, edit (stem/explanation/difficulty only, as the contract allows), publish, archive/restore |
 | Notes | `/spaces/:spaceId/notes`, `/spaces/:spaceId/notes/:noteId` | Implemented — server-paged list + keyword, create with cross-entity prefill, editor with unsaved-changes guard, archive/delete, knowledge-point and content-block links |
-| Practice | `/spaces/:spaceId/practice`, `/spaces/:spaceId/practice/:sessionId` | Implemented |
+| Practice | `/spaces/:spaceId/practice`, `/spaces/:spaceId/practice/:sessionId` | Implemented — server resume (`GET .../answers`), and the score of a finished session read from `GET .../result` at any later time, never from the `finish` response and never counted here (ADR-031) |
 | Exams | `/spaces/:spaceId/exams`, `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | Implemented |
 | Search | `/spaces/:spaceId/search` | Implemented |
 | Auth | `/login` | Implemented |
 | AI Settings | `/settings/ai` | Implemented |
 
+## Closed by the contract wave — frontend work, not a backend gap (2026-10-14)
+
+Every row below was Blocked on a contract that has since shipped. The evidence
+column is what the committed snapshot now contains (`api:live` green against the
+running server), so none of these is a reason to stop. Nothing here says
+"Implemented": that claim belongs in the section above, and only once the UI is
+wired, the gates pass and the live journey has been run.
+
+| Feature | Route | Contract that closed it | Frontend status |
+|---------|-------|-------------------------|-----------------|
+| Practice history score | `/spaces/:spaceId/practice/:sessionId` | `GET .../practice-sessions/{sessionId}/result` → `PracticeResultView{sessionId,status,questionCount,answeredCount,correctCount,score,maxScore}` (C06 / A5.3) | Wired — the finished view reads ONLY this endpoint; `finish` keeps nothing, and the two 409 codes (`PRACTICE_SESSION_NOT_SUBMITTED`, `PRACTICE_RESULT_NOT_RECORDED`) each get their own copy instead of a generic read failure |
+| Question list paging | `/spaces/:spaceId/questions` | `QuestionPageResponse{items,page,pageSize,totalItems,totalPages}` + `page`/`size` on `GET /questions` (C-Paging) | Wired — the page comes from `?page=`, the pager drives server requests |
+| Exam answer resume | `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | `AttemptQuestionView{answer,answered}` on `GET .../exam-attempts/{attemptId}` (C10 / A6.2) | Wiring in this round |
+| Exam attempt history | `/spaces/:spaceId/exams/:examId` | `GET /spaces/{spaceId}/exam-attempts?examId=&status=&page=&size=` → `AttemptPageResponse` (C11 / W07) | Wiring in this round |
+| Knowledge → source deep link | `/spaces/:spaceId/knowledge/:knowledgePointId` | `KnowledgePointSourceResponse.sourceId` / `.sourcePageId` (C02 / A2.1) | Wiring in this round |
+| Ask AI with context | `/spaces/:spaceId/ai` | `SendMessageRequest{sourceId,sourcePageId,contentBlockId,knowledgePointId}` (C03 / A3.2) | Wiring in this round |
+| Citation navigation | `/spaces/:spaceId/ai/:conversationId` | `ContextReference{sourceId,sourcePageId,contentBlockId}` alongside `locator` (C04 / A3.3) | Wiring in this round |
+
 ## Blocked (A-class, pending backend contract)
 
 | Feature | Routes | Blocker |
 |---------|--------|---------|
-| AI context chips | N/A (request body extension) | `SendMessageRequest` lacks `sourceId`/`sourcePageId`/`contentBlockId`/`knowledgePointId` (C03). |
-| Full provenance nav | `/spaces/:spaceId/knowledge/:knowledgePointId` | `KnowledgePointSourceResponse` lacks `sourceId`/`sourcePageId` (C02). |
-| AI citation deep link | `/spaces/:spaceId/ai/:conversationId` | `ContextReference.locator` is free text; no page/block ids, so `CONTENT_BLOCK` cannot navigate (C04). |
-| Exam answer resume | `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | `/exam-attempts/{attemptId}/answers` is POST-only and `AttemptQuestionView` carries no answer (C10). The per-question save state and the "cannot resume" copy are honest; nothing restores. |
-| Practice history score | `/spaces/:spaceId/practice/:sessionId` | `PracticeSessionSummary`/`Detail` have no score fields; only the `finish` response does (C06, review half landed via `GET .../answers`). |
-| Question paging | `/spaces/:spaceId/questions` | `GET /questions` accepts no `page`/`size` (C-Paging); the list states this instead of faking a pager. |
-| Exam attempt history | `/spaces/:spaceId/exams/:examId` | Attempts are only listable under `/admin/exams/{examId}/attempts` (C11), which the desktop client does not call. |
 | Show a stored standard order / pair set | `/spaces/:spaceId/questions/:questionId` | `QuestionAnswerView` has neither `correctOrder` nor `matches` (C09b): authoring is one-way, so the detail page cannot echo what was set and an editor cannot pre-fill it. |
 | Notes archive is one-way and invisible | `/spaces/:spaceId/notes` | Archive sets `archived_at` while the list filters it out, `NoteView` has no `archivedAt` and there is no restore endpoint (C-Notes-archive); there is also no entity → notes read (C-Notes-reverse) and both link-add endpoints answer 201 while silently dropping a foreign id (C-Notes-link-noop). |
 

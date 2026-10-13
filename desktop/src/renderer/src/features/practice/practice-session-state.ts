@@ -22,9 +22,13 @@
  *    content is not returned. The payload we sent stays a client-side echo,
  *    kept for the answers THIS device submitted.
  *  - `POST .../finish` returns `PracticeSubmitView` (score/answeredCount/
- *    correctCount/…), again nowhere else. There is still no
- *    `/practice-sessions/{id}/result`, so a session finished in an earlier
- *    visit has no score to read back (BACKEND-CONTRACT-REQUESTS A5.3, C06).
+ *    correctCount/…) for the session it just closed, and
+ *    `GET /practice-sessions/{id}/result` returns the same totals as
+ *    `PracticeResultView{sessionId,status,questionCount,answeredCount,
+ *    correctCount,score,maxScore}` (A5.3 / C06 — now delivered). So a session
+ *    finished in an earlier visit, on another device, or straight after 交卷
+ *    reads its score from THAT endpoint: the finish response is not a store,
+ *    and the totals are never counted here (ADR-031).
  *
  * That is why submitted state lives in the React Query cache instead of
  * component state: the cache outlives unmount and route re-entry, so a
@@ -46,10 +50,20 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import type { ApiClient } from '@aistudy/api-client';
-import { ApiRequestError, normalizeApiError, unwrap } from '../../lib/api-error';
+import {
+  ApiRequestError,
+  apiProblemCode,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
 import { useApiClient } from '../../lib/api-context';
 import { queryKeys } from '../../lib/query-keys';
-import { QUESTION_FIELD_LIMITS, questionTypeSupport } from '../../lib/format';
+import {
+  PRACTICE_RESULT_ERROR_CODES,
+  PRACTICE_SESSION_STATUSES,
+  QUESTION_FIELD_LIMITS,
+  questionTypeSupport,
+} from '../../lib/format';
 // The pair / position grammar lives in one module, so the payload built here is
 // checked by the SAME reader the editor writes with — one place decides what a
 // legal `{left,right}` pair or a legal ordering position is.
@@ -65,8 +79,8 @@ import {
 import type {
   PracticeAnswerPayload as AnswerPayloadView,
   PracticeAnswerRecord as PracticeAnswerView,
+  PracticeResult,
   PracticeSessionDetail,
-  PracticeSubmitSummary,
 } from '../../lib/types';
 
 /** One question of the paper, narrowed to what this contract actually sends. */
@@ -566,10 +580,13 @@ export function describePracticeError(
 
 /**
  * Response data kept in the query cache because the contract has nowhere else
- * to read it from (drafts, the finish summary, the per-question echo).
+ * to read it from (drafts, the per-question answer echo).
  * `enabled: false` makes React Query the store only: writes
  * go through `setQueryData`, reads come back from the cache — including after
  * this component unmounts and the route is entered again.
+ *
+ * Scores are NOT stored this way: `GET …/result` reads them back (A5.3), which
+ * is what kept a finished session from losing its score between visits.
  */
 function useCacheMirror<T>(key: QueryKey, fallback: T) {
   const queryClient = useQueryClient();
@@ -743,24 +760,132 @@ export function usePracticeResumeState(
   return { state, setDraft, markSubmitted, setCurrentIndex, answersQuery };
 }
 
-/** `PracticeSubmitView` — returned by `finish` only (A5.3 / C06 gap). */
-export function usePracticeSubmitSummary(
-  spaceId: number | null,
-  sessionId: number | null
-) {
-  const key = queryKeys.practiceSubmit(spaceId, sessionId);
-  const { value, write } = useCacheMirror<PracticeSubmitSummary | null>(key, null);
-  const save = useCallback(
-    (summary: PracticeSubmitSummary | null) => {
-      if (spaceId === null || sessionId === null) {
-        // A URL without resolvable ids has nowhere to file this response.
-        return;
-      }
-      write(() => summary);
-    },
-    [sessionId, spaceId, write]
-  );
-  return { summary: value, save };
+/**
+ * `GET /practice-sessions/{sessionId}/result` — the session's score totals,
+ * readable at any time (A5.3, which closed gap C06).
+ *
+ * This is the ONLY score source the finished view uses: the `finish` response
+ * is not mirrored anywhere, so a session reopened from history, refreshed, or
+ * opened on another device shows exactly what the server says — never a number
+ * this client remembered or computed (ADR-031).
+ *
+ * An absent body is read as `null` ("the endpoint returned no result"), which
+ * the view reports as such: React Query treats `undefined` as a failed query,
+ * and a missing payload is a fact about the response, not a transport error.
+ */
+export function usePracticeResult(spaceId: number, sessionId: number) {
+  const api = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.practiceResult(spaceId, sessionId),
+    queryFn: () =>
+      api
+        .getPracticeResult(spaceId, sessionId)
+        .then(unwrap)
+        .then((result) => result ?? null),
+  });
+}
+
+/**
+ * The totals `PracticeResultView` carries. Every one of them is optional in the
+ * contract (`components['schemas']['PracticeResultView']` declares no required
+ * property), so a missing number stays `null` — rendering it as `0` would be a
+ * grade the backend never gave.
+ */
+export interface PracticeResultCounts {
+  score: number | null;
+  maxScore: number | null;
+  answeredCount: number | null;
+  correctCount: number | null;
+  questionCount: number | null;
+}
+
+/**
+ * Which server state this result statement describes, so the view can say it
+ * instead of guessing. The session vocabulary is exactly the three constants in
+ * `PracticeSessionService` (server/src/main/java/com/aistudy/server/practice/
+ * service/PracticeSessionService.java:58-60 — CREATED / IN_PROGRESS / SUBMITTED),
+ * and `lib/backend-vocabulary-contract.test.ts` pins that list to
+ * `PRACTICE_SESSION_STATUSES`. There is therefore NO "not yet graded" session
+ * status to render: what a finished session CAN lack is the score itself
+ * (`score` absent from the payload), which is its own state below.
+ */
+export type PracticeResultState =
+  /** The read succeeded with no result body — nothing to show, not zero. */
+  | { kind: 'no-payload' }
+  /** Status is outside the three the backend can emit: no interpretation. */
+  | { kind: 'unknown-status'; status: string; counts: PracticeResultCounts }
+  /** The server says the session is still CREATED / IN_PROGRESS. */
+  | { kind: 'not-finished'; status: string; counts: PracticeResultCounts }
+  /** SUBMITTED, but the payload carries no score. */
+  | { kind: 'unscored'; counts: PracticeResultCounts }
+  /** SUBMITTED with a numeric score — the only state that shows one. */
+  | { kind: 'graded'; counts: PracticeResultCounts & { score: number } };
+
+/**
+ * Anything that is not a number — absent, or a wire `null` the generated types
+ * do not model (every `PracticeResultView` field is optional `int32`) — becomes
+ * `null`, which the view renders as missing instead of as 0.
+ */
+function optionalCount(value?: number | null): number | null {
+  return typeof value === 'number' ? value : null;
+}
+
+/**
+ * Read `PracticeResultView` without inventing anything it did not say.
+ * Pure, so the state split is testable apart from the page.
+ */
+export function practiceResultState(
+  result?: PracticeResult | null
+): PracticeResultState {
+  if (!result) {
+    return { kind: 'no-payload' };
+  }
+  const counts: PracticeResultCounts = {
+    score: optionalCount(result.score),
+    maxScore: optionalCount(result.maxScore),
+    answeredCount: optionalCount(result.answeredCount),
+    correctCount: optionalCount(result.correctCount),
+    questionCount: optionalCount(result.questionCount),
+  };
+  // Backend enums arrive as bare strings, so the comparison normalizes first.
+  const status = normalizeCode(result.status);
+
+  if (
+    status === PRACTICE_SESSION_STATUSES.CREATED ||
+    status === PRACTICE_SESSION_STATUSES.IN_PROGRESS
+  ) {
+    return { kind: 'not-finished', status, counts };
+  }
+  if (status !== PRACTICE_SESSION_STATUSES.SUBMITTED) {
+    return { kind: 'unknown-status', status, counts };
+  }
+  if (typeof counts.score === 'number') {
+    return { kind: 'graded', counts: { ...counts, score: counts.score } };
+  }
+  return { kind: 'unscored', counts };
+}
+
+/**
+ * Copy for a failed result read, when the server said WHY in its `code`.
+ *
+ * The backend answers `GET .../result` with 409 + one of two codes, and the two
+ * mean different things to the learner: one says the session is still open, the
+ * other says a score was never stored for it (it finished before the columns
+ * existed). Both must not read as "0 分", and neither may fall back to the
+ * English `detail` — that text is not a contract (C12).
+ *
+ * Returns null for anything else, so the view keeps its generic read-failure
+ * copy instead of guessing at an unknown code.
+ */
+export function practiceResultErrorNotice(error: unknown): string | null {
+  const code = apiProblemCode(error);
+  if (code === PRACTICE_RESULT_ERROR_CODES.NOT_SUBMITTED) {
+    return '服务端说这次练习还没有交卷，因此没有成绩可读。';
+  }
+  if (code === PRACTICE_RESULT_ERROR_CODES.NOT_RECORDED) {
+    return '这次练习结束时后端还没有记录分数的字段，服务端没有留存成绩——这不代表 0 分，只是无分可读。';
+  }
+  return null;
 }
 
 /**

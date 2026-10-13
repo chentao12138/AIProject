@@ -15,8 +15,10 @@
  *    submitted optimistically, and an unsaved draft never counts as an answer.
  *  - The read view carries the verdict only — no answer content — so a resumed
  *    answer shows what the server said and never a reconstructed reply.
- *  - `PracticeSubmitView` (the only score this contract has) is mirrored the
- *    same way, so leaving the page and coming back does not erase the result.
+ *  - The session SCORE comes from one read only: `GET …/result` (A5.3). The
+ *    `finish` response is never kept, so a session reopened from history shows
+ *    the same numbers as the one that was just closed — and a score the server
+ *    did not send is reported as missing, never as 0 (ADR-031).
  */
 
 import { useNavigate, useParams } from 'react-router-dom';
@@ -36,13 +38,13 @@ import { PRACTICE_SESSION_STATUSES } from '../../lib/format';
 import type {
   PracticeAnswerPayload as AnswerPayloadView,
   PracticeSessionDetail,
-  PracticeSubmitSummary,
 } from '../../lib/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
+import { StatusBadge } from '../../components/StatusBadge';
 import { PracticeQuestionCard } from './PracticeQuestionCard';
 import { PracticeReviewList } from './PracticeReviewList';
 import {
@@ -51,11 +53,14 @@ import {
   firstOpenSlotIndex,
   normalizeCode,
   practicePayloadContext,
+  practiceResultState,
+  practiceResultErrorNotice,
   toPracticeSlots,
+  usePracticeResult,
   usePracticeResumeState,
-  usePracticeSubmitSummary,
   type PracticeActionError,
   type PracticeQuestionSlot,
+  type PracticeResultState,
 } from './practice-session-state';
 
 export function PracticeSessionPage() {
@@ -75,12 +80,6 @@ export function PracticeSessionPage() {
     )
   );
 
-  // The score summary exists ONLY on the finish response, so it is mirrored
-  // into the query cache — as component state it vanished on the first
-  // navigation away (audit G05, reachable part).
-  const { summary: submitSummary, save: saveSubmitSummary } =
-    usePracticeSubmitSummary(spaceId, sessionId);
-
   const startSession = useMutation({
     mutationFn: () =>
       api
@@ -96,6 +95,9 @@ export function PracticeSessionPage() {
     },
   });
 
+  // No score is taken from this response: `finish` only says the session
+  // closed, and the result view reads the numbers back from `GET …/result`
+  // (A5.3), so a revisit and this first visit show the same thing.
   const finishSession = useMutation({
     mutationFn: () =>
       api
@@ -104,10 +106,12 @@ export function PracticeSessionPage() {
           requireId(sessionId, 'session id')
         )
         .then(unwrap),
-    onSuccess: (summary) => {
-      saveSubmitSummary(summary ?? null);
+    onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.practiceSession(spaceId, sessionId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.practiceResult(spaceId, sessionId),
       });
     },
   });
@@ -167,7 +171,9 @@ export function PracticeSessionPage() {
 
   const slots = toPracticeSlots(session);
   // The backend's only vocabulary is CREATED -> IN_PROGRESS -> SUBMITTED
-  // (PRACTICE_SESSION_STATUSES is pinned to PracticeSessionService.STATUS_*).
+  // (server/src/main/java/com/aistudy/server/practice/service/
+  // PracticeSessionService.java:58-60, pinned to PRACTICE_SESSION_STATUSES by
+  // lib/backend-vocabulary-contract.test.ts). Anything else is named, not read.
   const status = normalizeCode(session.status);
 
   if (status === PRACTICE_SESSION_STATUSES.CREATED) {
@@ -201,7 +207,6 @@ export function PracticeSessionPage() {
         sessionId={sessionId}
         session={session}
         slots={slots}
-        summary={submitSummary}
         finishError={finishError}
         onRepeatFinish={() => finishSession.mutate()}
         onReload={reloadSession}
@@ -530,7 +535,6 @@ function PracticeResult({
   sessionId,
   session,
   slots,
-  summary,
   finishError,
   onRepeatFinish,
   onReload,
@@ -540,7 +544,6 @@ function PracticeResult({
   sessionId: number;
   session: PracticeSessionDetail;
   slots: PracticeQuestionSlot[];
-  summary: PracticeSubmitSummary | null;
   finishError: PracticeActionError | null;
   onRepeatFinish: () => void;
   onReload: () => void;
@@ -555,8 +558,18 @@ function PracticeResult({
     sessionId,
     slots
   );
+  // THE score source: `GET …/result`, read fresh every time this view mounts.
+  // Nothing here looks at the `finish` response or counts answers locally
+  // (ADR-031), so the numbers below are only ever the server's own statement.
+  const resultQuery = usePracticeResult(spaceId, sessionId);
+  const resultState = practiceResultState(resultQuery.data);
+  const resultErrorNotice = practiceResultErrorNotice(resultQuery.error);
+  const resultQuestionCount =
+    resultState.kind === 'no-payload' ? null : resultState.counts.questionCount;
+  // Both fallbacks are server values (the session detail), never a local count
+  // presented as a total; `slots.length` is last, for a paper the server sent.
   const questionCount =
-    session.questionCount ?? summary?.questionCount ?? slots.length;
+    resultQuestionCount ?? session.questionCount ?? slots.length;
 
   return (
     <div className="page">
@@ -571,31 +584,40 @@ function PracticeResult({
         />
       )}
 
+      <p className="page__note">
+        状态：<StatusBadge status={session.status} /> · 题目数：{questionCount}
+      </p>
+
       <div className="practice-result">
-        {summary ? (
-          <>
-            <p>
-              得分：{summary.score ?? '—'} / {summary.maxScore ?? '—'}
-            </p>
-            <p>
-              已作答：{summary.answeredCount ?? 0} /{' '}
-              {summary.questionCount ?? questionCount}
-            </p>
-            <p>答对：{summary.correctCount ?? 0}</p>
-          </>
-        ) : (
-          /* A session finished in an earlier visit has no readable score:
-             PracticeSessionDetail carries none and the contract exposes no
-             result endpoint (A5.3 / C06). Deriving one here would copy
-             server-side grading (ADR-031), so the gap is stated instead. */
-          <>
-            <p>题目数：{questionCount}</p>
-            <p className="page__note" data-testid="score-unavailable">
-              成绩需后端 result 端点：
-              GET /api/v1/spaces/{'{spaceId}'}/practice-sessions/{'{sessionId}'}/result
-              未出现在当前 openapi 合同（缺口 C06），历史会话无分数可读，因此不显示分数。
-            </p>
-          </>
+        {resultQuery.isPending && (
+          <p className="page__note" role="status" data-testid="result-loading">
+            正在读取后端成绩（GET /practice-sessions/{'{sessionId}'}/result）…
+          </p>
+        )}
+
+        {resultQuery.isError && (
+          <p className="page__note" data-testid="result-error">
+            {resultErrorNotice ? (
+              // The server named the reason in its `code`, so say THAT instead
+              // of a generic read failure — and never the English `detail`.
+              <span data-testid="result-error-notice">{resultErrorNotice}</span>
+            ) : (
+              `无法读取本次练习的成绩（${
+                normalizeApiError(resultQuery.error).message
+              }）：分数只从后端 result 端点读取，本页不会自行计算。`
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void resultQuery.refetch()}
+            >
+              重试读取
+            </Button>
+          </p>
+        )}
+
+        {!resultQuery.isPending && !resultQuery.isError && (
+          <ResultLines state={resultState} questionCount={questionCount} />
         )}
       </div>
 
@@ -610,9 +632,7 @@ function PracticeResult({
             : null
         }
         onRetry={
-          answersQuery.isError
-            ? () => void answersQuery.refetch()
-            : undefined
+          answersQuery.isError ? () => void answersQuery.refetch() : undefined
         }
       />
 
@@ -626,6 +646,82 @@ function PracticeResult({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** A number the server sent, or the honest marker for one it did not. */
+function countValue(value: number | null): string {
+  return value === null ? '后端未返回' : String(value);
+}
+
+/**
+ * One block per server state (see `PracticeResultState`): 得分 renders ONLY
+ * when `score` is a number, so a finished-but-unscored session is never shown
+ * as `0 / 0`, and a status the frontend does not know is named rather than
+ * interpreted.
+ */
+function ResultLines({
+  state,
+  questionCount,
+}: {
+  state: PracticeResultState;
+  questionCount: number;
+}) {
+  if (state.kind === 'no-payload') {
+    return (
+      <p className="page__note" data-testid="result-empty">
+        后端 result 端点没有返回成绩数据（响应体为空），因此这里不显示分数，
+        也不会按 0 分处理。
+      </p>
+    );
+  }
+
+  if (state.kind === 'not-finished') {
+    return (
+      <p className="page__note" data-testid="result-not-finished">
+        后端 result 端点显示本次练习尚未交卷（状态 {state.status}），
+        所以还没有成绩可读。已作答 {countValue(state.counts.answeredCount)} /{' '}
+        {countValue(state.counts.questionCount ?? questionCount)}。
+      </p>
+    );
+  }
+
+  if (state.kind === 'unknown-status') {
+    return (
+      <p className="page__note" data-testid="result-status-unknown">
+        后端 result 端点返回的状态「{state.status || '（空）'}」不在已知词表
+        （CREATED / IN_PROGRESS / SUBMITTED）内，本页不猜测它的含义，也不显示分数。
+      </p>
+    );
+  }
+
+  if (state.kind === 'unscored') {
+    return (
+      <>
+        <p className="page__note" data-testid="result-score-missing">
+          本次练习已交卷，但后端 result 端点没有返回分数，因此这里不显示得分——
+          缺失不会被当作 0 分（逐题判定见下方回顾）。
+        </p>
+        <p>
+          已作答：{countValue(state.counts.answeredCount)} /{' '}
+          {countValue(state.counts.questionCount ?? questionCount)}
+        </p>
+        <p>答对：{countValue(state.counts.correctCount)}</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <p data-testid="result-score">
+        得分：{state.counts.score} / {countValue(state.counts.maxScore)}
+      </p>
+      <p>
+        已作答：{countValue(state.counts.answeredCount)} /{' '}
+        {countValue(state.counts.questionCount ?? questionCount)}
+      </p>
+      <p>答对：{countValue(state.counts.correctCount)}</p>
+    </>
   );
 }
 
