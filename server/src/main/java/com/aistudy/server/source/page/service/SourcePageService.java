@@ -67,6 +67,22 @@ public class SourcePageService {
         this.sourceService = sourceService;
     }
 
+    /**
+     * One page of the caller's space, or {@code null} when it does not exist or
+     * belongs to another space. Exposed so a reader that only has a page id
+     * (AI context chips, note context links) does not have to import this
+     * module's mapper (architecture.md §4).
+     *
+     * <p>The caller must already have proved it owns {@code spaceId}; the page
+     * row itself is checked against that space here.
+     */
+    public SourcePage getMine(String ownerSubject, Long spaceId, Long pageId) {
+        if (pageId == null || spaceId == null) {
+            return null;
+        }
+        return sourcePageMapper.selectByIdAndSpace(pageId, spaceId);
+    }
+
     public List<SourcePage> listMine(String ownerSubject, Long spaceId, Long sourceId) {
         Source source = sourceService.getMine(ownerSubject, spaceId, sourceId);
         if (source == null) {

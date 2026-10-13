@@ -4,15 +4,15 @@ import com.aistudy.server.ai.config.AiProperties;
 import com.aistudy.server.common.problem.ApiErrorCodes;
 import com.aistudy.server.common.problem.ApiException;
 import com.aistudy.server.knowledge.point.entity.KnowledgePoint;
-import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
+import com.aistudy.server.knowledge.point.service.KnowledgePointService;
 import com.aistudy.server.search.dto.SearchPageResponse;
 import com.aistudy.server.search.service.SearchService;
 import com.aistudy.server.source.content.entity.ContentBlock;
-import com.aistudy.server.source.content.mapper.ContentBlockMapper;
+import com.aistudy.server.source.content.service.ContentBlockService;
 import com.aistudy.server.source.entity.Source;
-import com.aistudy.server.source.mapper.SourceMapper;
+import com.aistudy.server.source.service.SourceService;
 import com.aistudy.server.source.page.entity.SourcePage;
-import com.aistudy.server.source.page.mapper.SourcePageMapper;
+import com.aistudy.server.source.page.service.SourcePageService;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -53,23 +53,23 @@ public class AiLearningContextService {
 
     private final SearchService searchService;
     private final AiProperties aiProperties;
-    private final ContentBlockMapper contentBlockMapper;
-    private final SourcePageMapper sourcePageMapper;
-    private final SourceMapper sourceMapper;
-    private final KnowledgePointMapper knowledgePointMapper;
+    private final ContentBlockService contentBlockService;
+    private final SourcePageService sourcePageService;
+    private final SourceService sourceService;
+    private final KnowledgePointService knowledgePointService;
 
     public AiLearningContextService(SearchService searchService,
                                     AiProperties aiProperties,
-                                    ContentBlockMapper contentBlockMapper,
-                                    SourcePageMapper sourcePageMapper,
-                                    SourceMapper sourceMapper,
-                                    KnowledgePointMapper knowledgePointMapper) {
+                                    ContentBlockService contentBlockService,
+                                    SourcePageService sourcePageService,
+                                    SourceService sourceService,
+                                    KnowledgePointService knowledgePointService) {
         this.searchService = searchService;
         this.aiProperties = aiProperties;
-        this.contentBlockMapper = contentBlockMapper;
-        this.sourcePageMapper = sourcePageMapper;
-        this.sourceMapper = sourceMapper;
-        this.knowledgePointMapper = knowledgePointMapper;
+        this.contentBlockService = contentBlockService;
+        this.sourcePageService = sourcePageService;
+        this.sourceService = sourceService;
+        this.knowledgePointService = knowledgePointService;
     }
 
     public List<AiContextItem> assemble(String ownerSubject,
@@ -150,15 +150,15 @@ public class AiLearningContextService {
         Long resolvedPageId = sourcePageId;
 
         if (contentBlockId != null) {
-            ContentBlock block = contentBlockMapper.selectById(contentBlockId);
+            ContentBlock block = contentBlockService.getMine(ownerSubject, spaceId, contentBlockId);
             if (block == null || !spaceId.equals(block.getSpaceId())) {
                 throw unknownContext("contentBlockId");
             }
             resolvedPageId = block.getSourcePageId();
             resolvedSourceId = block.getSourceId();
-            items.add(blockItem(block, resolvedPageId));
+            items.add(blockItem(ownerSubject, spaceId, block, resolvedPageId));
         } else if (resolvedPageId != null) {
-            SourcePage page = sourcePageMapper.selectById(resolvedPageId);
+            SourcePage page = sourcePageService.getMine(ownerSubject, spaceId, resolvedPageId);
             if (page == null || !spaceId.equals(page.getSpaceId())) {
                 throw unknownContext("sourcePageId");
             }
@@ -170,7 +170,7 @@ public class AiLearningContextService {
         }
 
         if (resolvedSourceId != null) {
-            Source source = sourceMapper.selectById(resolvedSourceId);
+            Source source = sourceService.getMine(ownerSubject, spaceId, resolvedSourceId);
             if (source == null || !spaceId.equals(source.getSpaceId())) {
                 throw unknownContext("sourceId");
             }
@@ -183,7 +183,7 @@ public class AiLearningContextService {
         }
 
         if (knowledgePointId != null) {
-            KnowledgePoint point = knowledgePointMapper.selectById(knowledgePointId);
+            KnowledgePoint point = knowledgePointService.getMine(ownerSubject, spaceId, knowledgePointId);
             if (point == null || !spaceId.equals(point.getSpaceId()) || point.getDeletedAt() != null) {
                 throw unknownContext("knowledgePointId");
             }
@@ -218,14 +218,15 @@ public class AiLearningContextService {
         return builder.toString();
     }
 
-    private AiContextItem blockItem(ContentBlock block, Long pageId) {
+    private AiContextItem blockItem(String ownerSubject, Long spaceId,
+                                   ContentBlock block, Long pageId) {
         String text = block.getNormalizedText();
         return new AiContextItem(
                 "CONTENT_BLOCK",
                 block.getId(),
                 previewTitle(text),
                 bounded(text),
-                pageLocator(pageId),
+                pageLocator(ownerSubject, spaceId, pageId),
                 block.getSourceId(),
                 block.getSourcePageId(),
                 block.getId(),
@@ -277,7 +278,7 @@ public class AiLearningContextService {
     private List<AiContextItem> sourceBlockPreview(String ownerSubject, Long spaceId, Source source) {
         List<ContentBlock> blocks;
         try {
-            blocks = contentBlockMapper.selectBySpaceSourceOwner(spaceId, source.getId(), ownerSubject);
+            blocks = contentBlockService.listMine(ownerSubject, spaceId, source.getId(), null);
         } catch (RuntimeException e) {
             log.warn("AI selected-source preview failed: {}", e.getClass().getSimpleName());
             return List.of();
@@ -297,7 +298,7 @@ public class AiLearningContextService {
             }
             Integer pageNumber = pageNumbers.computeIfAbsent(
                     block.getSourcePageId() == null ? -1L : block.getSourcePageId(),
-                    key -> lookupPageNumber(key));
+                    key -> lookupPageNumber(ownerSubject, spaceId, key));
             items.add(new AiContextItem(
                     "CONTENT_BLOCK",
                     block.getId(),
@@ -312,16 +313,16 @@ public class AiLearningContextService {
         return items;
     }
 
-    private Integer lookupPageNumber(Long sourcePageId) {
+    private Integer lookupPageNumber(String ownerSubject, Long spaceId, Long sourcePageId) {
         if (sourcePageId == null || sourcePageId < 0) {
             return null;
         }
-        SourcePage page = sourcePageMapper.selectById(sourcePageId);
+        SourcePage page = sourcePageService.getMine(ownerSubject, spaceId, sourcePageId);
         return page == null ? null : page.getSourcePageNumber();
     }
 
-    private String pageLocator(Long sourcePageId) {
-        Integer pageNumber = lookupPageNumber(sourcePageId);
+    private String pageLocator(String ownerSubject, Long spaceId, Long sourcePageId) {
+        Integer pageNumber = lookupPageNumber(ownerSubject, spaceId, sourcePageId);
         return pageNumber == null ? null : "P" + pageNumber;
     }
 

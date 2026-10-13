@@ -4,17 +4,17 @@ import com.aistudy.server.ai.config.AiProperties;
 import com.aistudy.server.common.problem.ApiErrorCodes;
 import com.aistudy.server.common.problem.ApiException;
 import com.aistudy.server.knowledge.point.entity.KnowledgePoint;
-import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
+import com.aistudy.server.knowledge.point.service.KnowledgePointService;
 import com.aistudy.server.search.dto.SearchPageResponse;
 import com.aistudy.server.search.dto.SearchResult;
 import com.aistudy.server.search.type.SearchEntityType;
 import com.aistudy.server.search.service.SearchService;
 import com.aistudy.server.source.content.entity.ContentBlock;
-import com.aistudy.server.source.content.mapper.ContentBlockMapper;
+import com.aistudy.server.source.content.service.ContentBlockService;
 import com.aistudy.server.source.entity.Source;
-import com.aistudy.server.source.mapper.SourceMapper;
+import com.aistudy.server.source.service.SourceService;
 import com.aistudy.server.source.page.entity.SourcePage;
-import com.aistudy.server.source.page.mapper.SourcePageMapper;
+import com.aistudy.server.source.page.service.SourcePageService;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,23 +48,23 @@ class AiLearningContextServiceTest {
     private static final String OWNER = "owner-sub";
 
     private SearchService searchService;
-    private ContentBlockMapper contentBlockMapper;
-    private SourcePageMapper sourcePageMapper;
-    private SourceMapper sourceMapper;
-    private KnowledgePointMapper knowledgePointMapper;
+    private ContentBlockService contentBlockService;
+    private SourcePageService sourcePageService;
+    private SourceService sourceService;
+    private KnowledgePointService knowledgePointService;
     private AiProperties properties;
     private AiLearningContextService service;
 
     @BeforeEach
     void setUp() {
         searchService = mock(SearchService.class);
-        contentBlockMapper = mock(ContentBlockMapper.class);
-        sourcePageMapper = mock(SourcePageMapper.class);
-        sourceMapper = mock(SourceMapper.class);
-        knowledgePointMapper = mock(KnowledgePointMapper.class);
+        contentBlockService = mock(ContentBlockService.class);
+        sourcePageService = mock(SourcePageService.class);
+        sourceService = mock(SourceService.class);
+        knowledgePointService = mock(KnowledgePointService.class);
         properties = new AiProperties();
         service = new AiLearningContextService(searchService, properties,
-                contentBlockMapper, sourcePageMapper, sourceMapper, knowledgePointMapper);
+                contentBlockService, sourcePageService, sourceService, knowledgePointService);
     }
 
     @Test
@@ -157,9 +157,9 @@ class AiLearningContextServiceTest {
     @Test
     void selectedBlockDerivesPageAndSourceAndBodyText() {
         ContentBlock block = block(7L, SPACE_ID, 10L, 20L, "第二章 索引结构：B+ 树自顶向下查找");
-        when(contentBlockMapper.selectById(7L)).thenReturn(block);
-        when(sourcePageMapper.selectById(20L)).thenReturn(page(20L, SPACE_ID, 10L, 3));
-        when(sourceMapper.selectById(10L)).thenReturn(source(10L, SPACE_ID, "数据库教程"));
+        when(contentBlockService.getMine(OWNER, SPACE_ID, 7L)).thenReturn(block);
+        when(sourcePageService.getMine(OWNER, SPACE_ID, 20L)).thenReturn(page(20L, SPACE_ID, 10L, 3));
+        when(sourceService.getMine(OWNER, SPACE_ID, 10L)).thenReturn(source(10L, SPACE_ID, "数据库教程"));
 
         List<AiContextItem> items = service.resolveSelectedContext(OWNER, SPACE_ID, null, null, 7L, null);
 
@@ -180,8 +180,8 @@ class AiLearningContextServiceTest {
     void selectedPageDerivesSourceAndCarriesExtractedText() {
         SourcePage page = page(20L, SPACE_ID, 10L, 4);
         page.setExtractedText("第四页正文");
-        when(sourcePageMapper.selectById(20L)).thenReturn(page);
-        when(sourceMapper.selectById(10L)).thenReturn(source(10L, SPACE_ID, "数据库教程"));
+        when(sourcePageService.getMine(OWNER, SPACE_ID, 20L)).thenReturn(page);
+        when(sourceService.getMine(OWNER, SPACE_ID, 10L)).thenReturn(source(10L, SPACE_ID, "数据库教程"));
 
         List<AiContextItem> items = service.resolveSelectedContext(OWNER, SPACE_ID, null, 20L, null, null);
 
@@ -196,8 +196,8 @@ class AiLearningContextServiceTest {
 
     @Test
     void selectedSourcePullsBoundedBlockPreviews() {
-        when(sourceMapper.selectById(10L)).thenReturn(source(10L, SPACE_ID, "数据库教程"));
-        when(contentBlockMapper.selectBySpaceSourceOwner(SPACE_ID, 10L, OWNER))
+        when(sourceService.getMine(OWNER, SPACE_ID, 10L)).thenReturn(source(10L, SPACE_ID, "数据库教程"));
+        when(contentBlockService.listMine(OWNER, SPACE_ID, 10L, null))
                 .thenReturn(List.of(
                         block(7L, SPACE_ID, 10L, 20L, "第一段正文"),
                         block(8L, SPACE_ID, 10L, 21L, "第二段正文")));
@@ -220,7 +220,7 @@ class AiLearningContextServiceTest {
         point.setTitle("B+ 树");
         point.setSummary("多层索引");
         point.setContent("插入时分裂节点");
-        when(knowledgePointMapper.selectById(5L)).thenReturn(point);
+        when(knowledgePointService.getMine(OWNER, SPACE_ID, 5L)).thenReturn(point);
 
         List<AiContextItem> items = service.resolveSelectedContext(OWNER, SPACE_ID, null, null, null, 5L);
 
@@ -233,22 +233,22 @@ class AiLearningContextServiceTest {
     /** §12: an ID from another space is a stable validation error, never a leak. */
     @Test
     void contextFromAnotherSpaceIsValidationError() {
-        when(contentBlockMapper.selectById(99L)).thenReturn(block(99L, 999L, 10L, 20L, "foreign"));
+        when(contentBlockService.getMine(OWNER, SPACE_ID, 99L)).thenReturn(block(99L, 999L, 10L, 20L, "foreign"));
         assertValidationError(() -> service.resolveSelectedContext(
                 OWNER, SPACE_ID, null, null, 99L, null), "contentBlockId");
 
-        when(sourcePageMapper.selectById(98L)).thenReturn(page(98L, 999L, 10L, 1));
+        when(sourcePageService.getMine(OWNER, SPACE_ID, 98L)).thenReturn(page(98L, 999L, 10L, 1));
         assertValidationError(() -> service.resolveSelectedContext(
                 OWNER, SPACE_ID, null, 98L, null, null), "sourcePageId");
 
-        when(sourceMapper.selectById(97L)).thenReturn(source(97L, 999L, "foreign"));
+        when(sourceService.getMine(OWNER, SPACE_ID, 97L)).thenReturn(source(97L, 999L, "foreign"));
         assertValidationError(() -> service.resolveSelectedContext(
                 OWNER, SPACE_ID, 97L, null, null, null), "sourceId");
 
         KnowledgePoint foreign = new KnowledgePoint();
         foreign.setId(96L);
         foreign.setSpaceId(999L);
-        when(knowledgePointMapper.selectById(96L)).thenReturn(foreign);
+        when(knowledgePointService.getMine(OWNER, SPACE_ID, 96L)).thenReturn(foreign);
         assertValidationError(() -> service.resolveSelectedContext(
                 OWNER, SPACE_ID, null, null, null, 96L), "knowledgePointId");
 
@@ -263,7 +263,7 @@ class AiLearningContextServiceTest {
         point.setId(5L);
         point.setSpaceId(SPACE_ID);
         point.setDeletedAt(LocalDateTime.now());
-        when(knowledgePointMapper.selectById(5L)).thenReturn(point);
+        when(knowledgePointService.getMine(OWNER, SPACE_ID, 5L)).thenReturn(point);
 
         assertValidationError(() -> service.resolveSelectedContext(
                 OWNER, SPACE_ID, null, null, null, 5L), "knowledgePointId");
@@ -271,7 +271,7 @@ class AiLearningContextServiceTest {
 
     @Test
     void pageMustBelongToTheGivenSource() {
-        when(sourcePageMapper.selectById(20L)).thenReturn(page(20L, SPACE_ID, 11L, 1));
+        when(sourcePageService.getMine(OWNER, SPACE_ID, 20L)).thenReturn(page(20L, SPACE_ID, 11L, 1));
 
         assertValidationError(() -> service.resolveSelectedContext(
                 OWNER, SPACE_ID, 10L, 20L, null, null), "sourceId");
@@ -280,9 +280,9 @@ class AiLearningContextServiceTest {
     /** A block pins its own page, so a stale page ID in the same call is ignored. */
     @Test
     void blockWinsOverThePageAndSourceItWasNotToldAbout() {
-        when(contentBlockMapper.selectById(7L)).thenReturn(block(7L, SPACE_ID, 10L, 20L, "正文"));
-        when(sourcePageMapper.selectById(20L)).thenReturn(page(20L, SPACE_ID, 10L, 2));
-        when(sourceMapper.selectById(10L)).thenReturn(source(10L, SPACE_ID, "教材"));
+        when(contentBlockService.getMine(OWNER, SPACE_ID, 7L)).thenReturn(block(7L, SPACE_ID, 10L, 20L, "正文"));
+        when(sourcePageService.getMine(OWNER, SPACE_ID, 20L)).thenReturn(page(20L, SPACE_ID, 10L, 2));
+        when(sourceService.getMine(OWNER, SPACE_ID, 10L)).thenReturn(source(10L, SPACE_ID, "教材"));
 
         List<AiContextItem> items = service.resolveSelectedContext(
                 OWNER, SPACE_ID, 999L, 998L, 7L, null);
