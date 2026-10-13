@@ -12,7 +12,7 @@
  * forbidden. The gap is stated in the UI instead of being papered over.
  */
 
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
 import { normalizeApiError } from '../../lib/api-error';
@@ -122,6 +122,11 @@ export function QuestionsPage() {
               <option value="">全部</option>
               <option value="DRAFT">草稿</option>
               <option value="PUBLISHED">已发布</option>
+              {/* G09: `POST .../archive` writes status=ARCHIVED, and
+                  `selectBySpaceOwnerFilters` only filters on the status it is
+                  given (QuestionMapper.java:39-56), so an archived question is
+                  reachable by asking for it — it is not hidden or deleted. */}
+              <option value="ARCHIVED">已归档</option>
             </select>
           </div>
           <div className="form__field">
@@ -201,23 +206,44 @@ export function QuestionsPage() {
             </tr>
           </thead>
           <tbody>
-            {items.map((q, idx) => (
-              <tr key={q.id ?? `q-${idx}`}>
-                <td>#{q.id}</td>
-                <td>{questionTypeLabel(q.questionType)}</td>
-                <td>{q.stem?.slice(0, 80) ?? '—'}</td>
-                <td><StatusBadge status={q.status} /></td>
-                <td>{difficultyLabel(q.difficulty)}</td>
-                <td>
-                  <Button
-                    type="button"
-                    onClick={() => spaceId !== null && navigate(`/spaces/${spaceId}/questions/${q.id}`)}
-                  >
-                    查看
-                  </Button>
-                </td>
-              </tr>
-            ))}
+            {items.map((q, idx) => {
+              const archived = (q.status ?? '').trim().toUpperCase() === 'ARCHIVED';
+              return (
+                <tr key={q.id ?? `q-${idx}`}>
+                  <td>#{q.id}</td>
+                  <td>{questionTypeLabel(q.questionType)}</td>
+                  <td>{q.stem?.slice(0, 80) ?? '—'}</td>
+                  <td><StatusBadge status={q.status} /></td>
+                  <td>{difficultyLabel(q.difficulty)}</td>
+                  <td>
+                    <Button
+                      type="button"
+                      onClick={() => spaceId !== null && navigate(`/spaces/${spaceId}/questions/${q.id}`)}
+                    >
+                      查看
+                    </Button>
+                    {/* G04: the row links to the edit form only when the server
+                        would accept the PUT — `update()` answers 404 for an
+                        ARCHIVED question (QuestionService.java:124), so an
+                        archived row routes through 查看 to the restore button. */}
+                    {!archived && q.id !== undefined && (
+                      <Link
+                        to={`/spaces/${spaceId}/questions/${q.id}/edit`}
+                        className="nav-link"
+                        data-testid={`question-edit-${q.id}`}
+                      >
+                        编辑
+                      </Link>
+                    )}
+                    {archived && (
+                      <span className="muted" data-testid={`question-archived-hint-${q.id}`}>
+                        恢复请到详情页
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

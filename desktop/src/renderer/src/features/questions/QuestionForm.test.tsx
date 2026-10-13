@@ -1,11 +1,17 @@
 /**
- * QuestionForm (W09 / G02) — the create-only authoring form.
+ * QuestionForm (W09 / G02 / G09) — the create-only authoring form.
  *
  * The tests below are the rules the endpoint enforces too, so a green form is
  * a request the backend accepts: unique option keys, one correct answer per
  * type, contract-length caps, a real knowledge-point picker instead of a
  * hand-typed comma list of ids, and one POST per click while that POST is in
  * flight (there is no DELETE to undo a duplicate).
+ *
+ * ORDERING and MATCHING are asserted on the WIRE, not on the DOM:
+ * `correctOrder` must be the 1-based permutation the server grades with
+ * (AnswerPayloadView.orderingAnswer items carry `minimum: 1`), and `matches`
+ * must be a JSON string of `left`/`right` objects — `gradeMatching` compares
+ * whole maps, so one extra key silently makes every answer wrong.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -13,7 +19,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QuestionForm } from './QuestionForm';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
-import { QUESTION_FIELD_LIMITS } from '../../lib/format';
+import { CONTRACT_GAP_NOTICES, QUESTION_FIELD_LIMITS } from '../../lib/format';
 
 const ROUTE = '/spaces/:spaceId/questions/new';
 
@@ -84,30 +90,259 @@ describe('QuestionForm — type list follows the contract (G02)', () => {
     }));
   }
 
-  it('offers the five types whose answer the contract can carry', () => {
+  it('offers all seven types, because the contract now carries all seven answers', () => {
     renderForm();
+    // ORDERING / MATCHING became authorable when CreateQuestionRequest grew
+    // correctOrder / matches — nothing is disabled any more, so a disabled
+    // option here would mean the form is hiding a field the server accepts.
     expect(typeOptions()).toEqual([
       { value: 'SINGLE_CHOICE', disabled: false },
       { value: 'MULTIPLE_CHOICE', disabled: false },
       { value: 'TRUE_FALSE', disabled: false },
       { value: 'SHORT_ANSWER', disabled: false },
       { value: 'FILL_BLANK', disabled: false },
-      { value: 'ORDERING', disabled: true },
-      { value: 'MATCHING', disabled: true },
+      { value: 'ORDERING', disabled: false },
+      { value: 'MATCHING', disabled: false },
     ]);
     expect(screen.getByLabelText('题型')).toHaveValue('SINGLE_CHOICE');
+    expect(screen.queryByTestId('authoring-gap-notes')).not.toBeInTheDocument();
   });
 
-  it('shows 排序 and 配对 but keeps them unselectable, naming the missing fields', () => {
+  it('reveals the ordering editor when 排序 is picked and the pair editor for 配对', async () => {
+    const user = userEvent.setup();
     renderForm();
-    expect(screen.getByRole('option', { name: '排序（暂不可创建）' })).toBeDisabled();
-    expect(screen.getByRole('option', { name: '配对（暂不可创建）' })).toBeDisabled();
 
-    const notes = screen.getByTestId('authoring-gap-notes');
-    expect(notes).toHaveTextContent('CreateQuestionRequest');
-    expect(notes).toHaveTextContent('C09');
-    expect(notes).toHaveTextContent('pairs');
-    expect(screen.getByLabelText('题型')).toHaveValue('SINGLE_CHOICE');
+    await pickType(user, 'ORDERING');
+    expect(await screen.findByTestId('ordering-editor')).toBeInTheDocument();
+    expect(screen.queryByTestId('matching-editor')).not.toBeInTheDocument();
+    expect(screen.getByText('排序')).toBeInTheDocument();
+
+    await pickType(user, 'MATCHING');
+    expect(await screen.findByTestId('matching-editor')).toBeInTheDocument();
+    expect(screen.queryByTestId('ordering-editor')).not.toBeInTheDocument();
+  });
+
+  it('states that the order and the pairs cannot be read back, per type', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    // The read side (QuestionAnswerView) has no correctOrder / matchesJson, so
+    // the notice has to name that field rather than imply the author can review
+    // what they set.
+    await pickType(user, 'ORDERING');
+    expect(await screen.findByTestId('ordering-oneway-notice')).toHaveTextContent(
+      CONTRACT_GAP_NOTICES.ORDERING_REVIEW
+    );
+
+    await pickType(user, 'MATCHING');
+    expect(await screen.findByTestId('matching-oneway-notice')).toHaveTextContent(
+      CONTRACT_GAP_NOTICES.MATCHING_REVIEW
+    );
+  });
+});
+
+describe('QuestionForm — ORDERING authoring (G02)', () => {
+  async function fillThreeItems(user: ReturnType<typeof userEvent.setup>) {
+    await fillStem(user, '把下列步骤按顺序排列。');
+    await fillOptions(user, ['第一步', '第二步']);
+    await user.click(screen.getByRole('button', { name: '添加条目' }));
+    await user.type(screen.getByTestId('option-content-2'), '第三步');
+  }
+
+  it('sends correctOrder as 1-based option positions', async () => {
+    const user = userEvent.setup();
+    const api = renderForm();
+    await pickType(user, 'ORDERING');
+    await fillThreeItems(user);
+
+    // The items are entered 第一/第二/第三步; the standard order is 第三步 first,
+    // then 第一步, then 第二步 — which on the wire is the server's own example
+    // (AnswerDataCodec.java:23 `{"correctOrder":[3,1,2]}` for three items).
+    await user.click(screen.getByRole('button', { name: '下移标准顺序第 2 位' }));
+    expect(await screen.findByTestId('correct-order-preview')).toHaveTextContent(
+      'correctOrder = [1, 3, 2]'
+    );
+    await user.click(screen.getByRole('button', { name: '上移标准顺序第 2 位' }));
+    expect(screen.getByTestId('correct-order-preview')).toHaveTextContent(
+      'correctOrder = [3, 1, 2]'
+    );
+
+    await submit(user);
+
+    await waitFor(() => expect(api.createQuestion).toHaveBeenCalled());
+    expect(sentBody(api)).toEqual({
+      questionType: 'ORDERING',
+      stem: '把下列步骤按顺序排列。',
+      options: [
+        { optionKey: 'A', content: '第一步' },
+        { optionKey: 'B', content: '第二步' },
+        { optionKey: 'C', content: '第三步' },
+      ],
+      correctOrder: [3, 1, 2],
+    });
+  });
+
+  it('never puts a 0 in correctOrder, even before the order is touched', async () => {
+    const user = userEvent.setup();
+    const api = renderForm();
+    await pickType(user, 'ORDERING');
+    await fillStem(user, '默认顺序即可。');
+    await fillOptions(user, ['甲', '乙']);
+
+    await submit(user);
+
+    await waitFor(() => expect(api.createQuestion).toHaveBeenCalled());
+    const order = sentBody(api).correctOrder ?? [];
+    expect(order).toEqual([1, 2]);
+    expect(order).not.toContain(0);
+  });
+
+  it('blocks an order that leaves an item out, and says which one', async () => {
+    const user = userEvent.setup();
+    const api = renderForm();
+    await pickType(user, 'ORDERING');
+    await fillThreeItems(user);
+
+    await user.click(screen.getByRole('button', { name: '将标准顺序第 3 位移出' }));
+    expect(
+      await screen.findByTestId('ordering-unplaced')
+    ).toBeInTheDocument();
+
+    await submit(user);
+
+    expect(
+      await screen.findByText('标准顺序里还缺少 1 个条目：第三步。')
+    ).toBeInTheDocument();
+    expect(api.createQuestion).not.toHaveBeenCalled();
+
+    // Placing it back un-blocks the submit without reloading the form.
+    await user.click(screen.getByTestId('ordering-place-2'));
+    await submit(user);
+    await waitFor(() => expect(api.createQuestion).toHaveBeenCalled());
+    expect(sentBody(api).correctOrder).toEqual([1, 2, 3]);
+  });
+
+  it('blocks fewer than two items and a duplicated option key', async () => {
+    const user = userEvent.setup();
+    const api = renderForm();
+    await pickType(user, 'ORDERING');
+    await fillStem(user, '排序题');
+    await fillOptions(user, ['甲', '乙']);
+    await user.clear(screen.getByTestId('option-key-1'));
+    await user.type(screen.getByTestId('option-key-1'), 'A');
+
+    await submit(user);
+
+    expect(await screen.findByText('条目标识不能重复：A。')).toBeInTheDocument();
+    expect(api.createQuestion).not.toHaveBeenCalled();
+  });
+
+  it('caps the item inputs at the option contract limits', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await pickType(user, 'ORDERING');
+
+    expect(await screen.findByTestId('option-key-0')).toHaveAttribute(
+      'maxLength',
+      String(QUESTION_FIELD_LIMITS.optionKey)
+    );
+    expect(screen.getByTestId('option-content-0')).toHaveAttribute(
+      'maxLength',
+      String(QUESTION_FIELD_LIMITS.optionContent)
+    );
+  });
+});
+
+describe('QuestionForm — MATCHING authoring (G02)', () => {
+  async function fillPairs(user: ReturnType<typeof userEvent.setup>) {
+    await fillStem(user, '把城市与所属国家配对。');
+    await user.type(screen.getByTestId('match-left-0'), ' 北京 ');
+    await user.type(screen.getByTestId('match-right-0'), ' 中国 ');
+    await user.type(screen.getByTestId('match-left-1'), '巴黎');
+    await user.type(screen.getByTestId('match-right-1'), '法国');
+  }
+
+  it('sends matches as a JSON string whose pairs carry exactly left and right', async () => {
+    const user = userEvent.setup();
+    const api = renderForm();
+    await pickType(user, 'MATCHING');
+    await fillPairs(user);
+
+    await submit(user);
+
+    await waitFor(() => expect(api.createQuestion).toHaveBeenCalled());
+    const body = sentBody(api);
+    expect(body.questionType).toBe('MATCHING');
+    expect(body.stem).toBe('把城市与所属国家配对。');
+    expect(typeof body.matches).toBe('string');
+    // No option list is invented for a matching question: the pairs are the
+    // answer, and `gradeMatching` compares whole maps, so any extra pair key
+    // (or an options list the grader ignores) would be a lie on the wire.
+    expect(body).not.toHaveProperty('options');
+
+    const parsed = JSON.parse(String(body.matches)) as Array<Record<string, string>>;
+    expect(parsed).toEqual([
+      { left: '北京', right: '中国' },
+      { left: '巴黎', right: '法国' },
+    ]);
+    for (const pair of parsed) {
+      expect(Object.keys(pair).sort()).toEqual(['left', 'right']);
+    }
+  });
+
+  it('blocks a pair with a blank side before the request goes out', async () => {
+    const user = userEvent.setup();
+    const api = renderForm();
+    await pickType(user, 'MATCHING');
+    await fillStem(user, '把城市与所属国家配对。');
+    await user.type(screen.getByTestId('match-left-0'), '北京');
+
+    await submit(user);
+
+    expect(await screen.findByText('第 1 组配对缺少右侧内容。')).toBeInTheDocument();
+    expect(screen.getByText('第 2 组配对缺少左侧内容。')).toBeInTheDocument();
+    expect(api.createQuestion).not.toHaveBeenCalled();
+  });
+
+  it('blocks when every pair has been deleted', async () => {
+    const user = userEvent.setup();
+    const api = renderForm();
+    await pickType(user, 'MATCHING');
+    await fillStem(user, '配对题');
+    await user.click(screen.getByRole('button', { name: '删除配对 1' }));
+    await user.click(screen.getByRole('button', { name: '删除配对 1' }));
+
+    await submit(user);
+
+    expect(await screen.findByText('配对题至少需要 1 组配对。')).toBeInTheDocument();
+    expect(api.createQuestion).not.toHaveBeenCalled();
+  });
+
+  it('shows the serialized length against the contract cap while typing', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await pickType(user, 'MATCHING');
+
+    const counter = await screen.findByTestId('matches-length');
+    expect(counter).toHaveTextContent(
+      `${QUESTION_FIELD_LIMITS.matches} 个字符`
+    );
+    // A blank pair already costs something: the counter is the real payload,
+    // not a count of characters the user typed.
+    expect(counter).toHaveTextContent('提交文本');
+  });
+
+  it('previews the pairs as readable text, not as JSON to type', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await pickType(user, 'MATCHING');
+    await fillPairs(user);
+
+    const preview = await screen.findAllByTestId('matches-preview-item');
+    expect(preview.map((node) => node.textContent)).toEqual([
+      '北京 → 中国',
+      '巴黎 → 法国',
+    ]);
   });
 });
 

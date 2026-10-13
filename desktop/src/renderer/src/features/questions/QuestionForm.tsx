@@ -1,19 +1,23 @@
 /**
- * Question Authoring (A4.4, G02, W09) — create only.
+ * Question Authoring (A4.4, G02, G09, W09) — create only.
  *
- * There is deliberately no edit mode: the contract exposes
- * `POST /questions` and `POST /questions/{id}/publish` but no update
- * endpoint, so a "save" could only ever create a duplicate. See
- * BACKEND-CONTRACT-REQUESTS.md (G04 / G09) for the requested verbs.
+ * The edit verb is a separate page (`QuestionEditPage.tsx`, G04): this form
+ * only creates, because a create form that "saved" twice would create twice
+ * and there is no way to undo the first one.
  *
  * Which types may be created is not a designer's guess — it is whatever
- * `lib/format.ts` can prove the contract supports end to end. ORDERING and
- * MATCHING stay listed (a backend that already has them must not be hidden)
- * but disabled, each with the exact missing field named.
+ * `lib/format.ts` can prove the contract supports, and the contract now carries
+ * `correctOrder` / `matches` on the create side and `orderingAnswer` /
+ * `matchingAnswer` on the answer side, so all seven types are authorable.
+ *
+ * What is still one-way is the stored answer for the two new types:
+ * `QuestionAnswerView` has no `correctOrder` / `matchesJson`, so nothing here
+ * pretends to read them back — the notice under each widget is
+ * `QUESTION_TYPE_DISPLAY_GAP`, the same copy the review surface uses.
  *
  * Every limit below comes from openapi.json (`maxLength` / `maxItems`); the
- * per-type required answers mirror what the create endpoint validates, so a
- * form that passes here cannot 400 for shape.
+ * per-type required answers mirror what `QuestionService.validateStructure()`
+ * enforces, so a form that passes here cannot 400 for shape.
  */
 
 import { useMemo, useState } from 'react';
@@ -34,18 +38,48 @@ import {
   AUTHORABLE_QUESTION_TYPES,
   QUESTION_FIELD_LIMITS,
   QUESTION_TYPES,
+  QUESTION_TYPE_DISPLAY_GAP,
   isAuthorableQuestionType,
   questionTypeGap,
   questionTypeLabel,
   type AuthorableQuestionType,
+  type QuestionType,
 } from '../../lib/format';
 import {
   validateQuestionForm,
   type OptionInput,
 } from './question-form-rules';
+import {
+  initialOrderingSequence,
+  moveInSequence,
+  placeAtEnd,
+  serializeMatches,
+  sequenceAfterAdd,
+  sequenceAfterRemove,
+  toCorrectOrder,
+  unplacedItemIndexes,
+  unplaceAtPosition,
+  validateMatchingAuthoring,
+  validateOrderingAuthoring,
+  type MatchPair,
+} from './question-form-state';
 
 /** The types this form shows but refuses, with the contract gap for each. */
 const BLOCKED_TYPES = QUESTION_TYPES.filter((t) => !isAuthorableQuestionType(t));
+
+/** Types whose items are entered as options (`QuestionOptionInput` rows). */
+const ITEM_TYPES: readonly QuestionType[] = [
+  'SINGLE_CHOICE',
+  'MULTIPLE_CHOICE',
+  'ORDERING',
+];
+
+const EMPTY_PAIR: MatchPair = { left: '', right: '' };
+
+/** The copy that names the read-side gap of the two new types. */
+function oneWayNotice(type: QuestionType): string | null {
+  return QUESTION_TYPE_DISPLAY_GAP[type]?.review ?? questionTypeGap(type);
+}
 
 export function QuestionForm() {
   const api = useApiClient();
@@ -65,6 +99,9 @@ export function QuestionForm() {
   const [correctMultiple, setCorrectMultiple] = useState<string[]>([]);
   const [correctBoolean, setCorrectBoolean] = useState<boolean | null>(null);
   const [referenceAnswer, setReferenceAnswer] = useState('');
+  /** 0-based indexes into `options`, in the standard order. See question-form-state.ts. */
+  const [ordering, setOrdering] = useState<number[]>(() => initialOrderingSequence(2));
+  const [pairs, setPairs] = useState<MatchPair[]>([{ ...EMPTY_PAIR }, { ...EMPTY_PAIR }]);
   const [knowledgePointIds, setKnowledgePointIds] = useState<number[]>([]);
   const [showValidation, setShowValidation] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -109,6 +146,18 @@ export function QuestionForm() {
       } else if (questionType === 'SHORT_ANSWER' || questionType === 'FILL_BLANK') {
         // Same rule for both text types: no options, reference answer only.
         body.referenceAnswer = referenceAnswer.trim();
+      } else if (questionType === 'ORDERING') {
+        // ORDERING IS the option list plus the 1-based standard order of it:
+        // `insertOptions()` stores sortOrder as the array index, so the
+        // position `toCorrectOrder()` emits is exactly what the answer side
+        // will read back from `QuestionOptionResponse.sortOrder` (+1).
+        body.options = options
+          .map((o) => ({ optionKey: o.optionKey.trim(), content: o.content.trim() }));
+        body.correctOrder = toCorrectOrder(ordering);
+      } else if (questionType === 'MATCHING') {
+        // `matches` is a string the server stores verbatim and grades by
+        // whole-map equality, so `serializeMatches` is the only shape allowed.
+        body.matches = serializeMatches(pairs);
       }
       return api
         .createQuestion(requireId(spaceId, 'space id'), body)
@@ -127,19 +176,8 @@ export function QuestionForm() {
     },
   });
 
-  const errors = useMemo(
-    () =>
-      validateQuestionForm({
-        questionType,
-        stem,
-        options,
-        correctSingle,
-        correctMultiple,
-        correctBoolean,
-        referenceAnswer,
-        explanation,
-      }),
-    [
+  const errors = useMemo(() => {
+    const common = validateQuestionForm({
       questionType,
       stem,
       options,
@@ -148,18 +186,48 @@ export function QuestionForm() {
       correctBoolean,
       referenceAnswer,
       explanation,
-    ]
-  );
+    });
+    if (questionType === 'ORDERING') {
+      return [...common, ...validateOrderingAuthoring(options, ordering)];
+    }
+    if (questionType === 'MATCHING') {
+      return [...common, ...validateMatchingAuthoring(pairs)];
+    }
+    return common;
+  }, [
+    questionType,
+    stem,
+    options,
+    correctSingle,
+    correctMultiple,
+    correctBoolean,
+    referenceAnswer,
+    explanation,
+    ordering,
+    pairs,
+  ]);
 
   if (spaceId === null) {
     return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   const busy = create.isPending;
+  const itemNoun = questionType === 'ORDERING' ? '条目' : '选项';
+  /**
+   * ORDERING items are the position space of `correctOrder`, so the contract's
+   * `maxItems: 100` on that array is also the ceiling on the item list.
+   * `CreateQuestionRequest.options` declares no `maxItems` — the only limit the
+   * choice types have is `QuestionService.MAX_OPTIONS` (Java:49,214), which is
+   * not in the contract and so is not invented here.
+   */
+  const itemLimit =
+    questionType === 'ORDERING' ? QUESTION_FIELD_LIMITS.correctOrder : undefined;
 
   function addOption() {
     const nextKey = String.fromCharCode(65 + options.length);
+    const nextIndex = options.length;
     setOptions([...options, { optionKey: nextKey, content: '' }]);
+    setOrdering((prev) => sequenceAfterAdd(prev, nextIndex));
   }
 
   function updateOptionKey(index: number, key: string) {
@@ -176,6 +244,34 @@ export function QuestionForm() {
 
   function removeOption(index: number) {
     setOptions(options.filter((_, i) => i !== index));
+    // The list shifted, so every position that pointed past it moved down.
+    setOrdering((prev) => sequenceAfterRemove(prev, index));
+  }
+
+  function movePlaced(position: number, delta: -1 | 1) {
+    setOrdering((prev) => moveInSequence(prev, position, delta));
+  }
+
+  function unplace(position: number) {
+    setOrdering((prev) => unplaceAtPosition(prev, position));
+  }
+
+  function place(itemIndex: number) {
+    setOrdering((prev) => placeAtEnd(prev, itemIndex));
+  }
+
+  function addPair() {
+    setPairs([...pairs, { ...EMPTY_PAIR }]);
+  }
+
+  function updatePair(index: number, side: keyof MatchPair, value: string) {
+    const next = [...pairs];
+    next[index] = { ...next[index], [side]: value };
+    setPairs(next);
+  }
+
+  function removePair(index: number) {
+    setPairs(pairs.filter((_, i) => i !== index));
   }
 
   function toggleKnowledgePoint(id: number, checked: boolean) {
@@ -210,6 +306,27 @@ export function QuestionForm() {
       points.push({ id: kpId, title: kp.title ?? `知识点 #${kpId}` });
     }
   }
+
+  /** What an ordering row is called in the sequence widget, once trimmed. */
+  function itemLabel(index: number): string {
+    const item = options[index];
+    if (!item) {
+      return '（已删除的条目）';
+    }
+    const content = item.content.trim();
+    const key = item.optionKey.trim();
+    if (content !== '') {
+      return content.length > 40 ? `${content.slice(0, 40)}…` : content;
+    }
+    return key !== '' ? `标识 ${key}` : '（空条目）';
+  }
+
+  const unplaced = unplacedItemIndexes(ordering, options.length);
+  const correctOrderPreview = toCorrectOrder(ordering);
+  const matchesPreview = serializeMatches(pairs);
+  const oneWay = questionType === 'ORDERING' || questionType === 'MATCHING'
+    ? oneWayNotice(questionType)
+    : null;
 
   return (
     <div className="page">
@@ -262,14 +379,14 @@ export function QuestionForm() {
           />
         </div>
 
-        {(questionType === 'SINGLE_CHOICE' || questionType === 'MULTIPLE_CHOICE') && (
+        {ITEM_TYPES.includes(questionType) && (
           <div className="form__field">
-            <label className="form__label">选项</label>
+            <label className="form__label">{itemNoun}</label>
             {options.map((opt, idx) => (
               <div key={idx} className="form__row">
                 <input
                   className="input form__row-key"
-                  aria-label={`选项 ${idx + 1} 标识`}
+                  aria-label={`${itemNoun} ${idx + 1} 标识`}
                   data-testid={`option-key-${idx}`}
                   value={opt.optionKey}
                   onChange={(e) => updateOptionKey(idx, e.target.value)}
@@ -278,11 +395,11 @@ export function QuestionForm() {
                 />
                 <input
                   className="input form__row-main"
-                  aria-label={`选项 ${idx + 1} 内容`}
+                  aria-label={`${itemNoun} ${idx + 1} 内容`}
                   data-testid={`option-content-${idx}`}
                   value={opt.content}
                   onChange={(e) => updateOptionContent(idx, e.target.value)}
-                  placeholder={`选项 ${opt.optionKey}`}
+                  placeholder={`${itemNoun} ${opt.optionKey}`}
                   maxLength={QUESTION_FIELD_LIMITS.optionContent}
                   disabled={busy}
                 />
@@ -300,10 +417,156 @@ export function QuestionForm() {
               type="button"
               variant="secondary"
               onClick={addOption}
-              disabled={busy}
+              disabled={busy || (itemLimit !== undefined && options.length >= itemLimit)}
             >
-              添加选项
+              添加{itemNoun}
             </Button>
+            {itemLimit !== undefined && options.length >= itemLimit && (
+              <p className="field__hint" role="note" data-testid="item-limit-reached">
+                已达 CreateQuestionRequest.correctOrder 的上限 {itemLimit} 项，无法继续添加。
+              </p>
+            )}
+          </div>
+        )}
+
+        {questionType === 'ORDERING' && (
+          <div className="form__field" data-testid="ordering-editor">
+            <span className="form__label" id="q-ordering-label">标准顺序</span>
+            <p className="field__hint">
+              顺序里的编号从 <strong>1</strong> 开始（服务端
+              AnswerPayloadView.orderingAnswer 的 items.minimum 是 1），
+              第 1 个提交的条目就是 1。用「上移 / 下移」调整，或先「移出顺序」再重新加入。
+            </p>
+            <ol className="question-renderer__ordering" data-testid="ordering-sequence">
+              {ordering.map((itemIndex, position) => (
+                <li key={itemIndex} className="question-renderer__ordering-item" data-testid="ordering-sequence-item">
+                  <span className="question-renderer__ordering-rank">{position + 1}</span>
+                  <span className="question-renderer__ordering-text">{itemLabel(itemIndex)}</span>
+                  <span className="question-renderer__ordering-actions">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      aria-label={`上移标准顺序第 ${position + 1} 位`}
+                      disabled={busy || position === 0}
+                      onClick={() => movePlaced(position, -1)}
+                    >
+                      上移
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      aria-label={`下移标准顺序第 ${position + 1} 位`}
+                      disabled={busy || position === ordering.length - 1}
+                      onClick={() => movePlaced(position, 1)}
+                    >
+                      下移
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      aria-label={`将标准顺序第 ${position + 1} 位移出`}
+                      disabled={busy}
+                      onClick={() => unplace(position)}
+                    >
+                      移出顺序
+                    </Button>
+                  </span>
+                </li>
+              ))}
+            </ol>
+            {unplaced.length > 0 && (
+              <div
+                className="form__checkboxes"
+                role="group"
+                aria-labelledby="q-ordering-label"
+                data-testid="ordering-unplaced"
+              >
+                <span className="field__hint">尚未排入标准顺序：</span>
+                {unplaced.map((itemIndex) => (
+                  <Button
+                    key={itemIndex}
+                    type="button"
+                    variant="secondary"
+                    data-testid={`ordering-place-${itemIndex}`}
+                    disabled={busy}
+                    onClick={() => place(itemIndex)}
+                  >
+                    把「{itemLabel(itemIndex)}」加入顺序
+                  </Button>
+                ))}
+              </div>
+            )}
+            <p className="field__hint" data-testid="correct-order-preview">
+              correctOrder = [{correctOrderPreview.join(', ')}]
+            </p>
+            {oneWay && (
+              <p className="form__note" role="note" data-testid="ordering-oneway-notice">
+                {oneWay}
+              </p>
+            )}
+          </div>
+        )}
+
+        {questionType === 'MATCHING' && (
+          <div className="form__field" data-testid="matching-editor">
+            <span className="form__label" id="q-matching-label">配对条目</span>
+            <p className="field__hint">
+              每组只有 <code>left</code> 与 <code>right</code> 两个字段：服务端把这段
+              JSON 原样存成 matchesJson，并按整组比对判分，多一个键都会让正确答案判不出对。
+              这里填的是配对文本本身，不是选项标识。
+            </p>
+            {pairs.map((pair, idx) => (
+              <div key={idx} className="form__row">
+                <input
+                  className="input form__row-main"
+                  aria-label={`配对 ${idx + 1} 左侧`}
+                  data-testid={`match-left-${idx}`}
+                  value={pair.left}
+                  onChange={(e) => updatePair(idx, 'left', e.target.value)}
+                  placeholder={`左侧 ${idx + 1}`}
+                  disabled={busy}
+                />
+                <span className="muted" aria-hidden="true">↔</span>
+                <input
+                  className="input form__row-main"
+                  aria-label={`配对 ${idx + 1} 右侧`}
+                  data-testid={`match-right-${idx}`}
+                  value={pair.right}
+                  onChange={(e) => updatePair(idx, 'right', e.target.value)}
+                  placeholder={`右侧 ${idx + 1}`}
+                  disabled={busy}
+                />
+                <Button
+                  type="button"
+                  variant="danger"
+                  aria-label={`删除配对 ${idx + 1}`}
+                  onClick={() => removePair(idx)}
+                  disabled={busy}
+                >
+                  删除
+                </Button>
+              </div>
+            ))}
+            <Button type="button" variant="secondary" onClick={addPair} disabled={busy}>
+              添加配对
+            </Button>
+            <ul className="point-list" data-testid="matches-preview">
+              {pairs.map((pair, idx) => (
+                <li key={idx} data-testid="matches-preview-item">
+                  {(pair.left.trim() === '' ? '（空）' : pair.left.trim())}
+                  {' → '}
+                  {(pair.right.trim() === '' ? '（空）' : pair.right.trim())}
+                </li>
+              ))}
+            </ul>
+            <p className="field__hint" data-testid="matches-length">
+              提交文本 {matchesPreview.length} / {QUESTION_FIELD_LIMITS.matches} 个字符
+            </p>
+            {oneWay && (
+              <p className="form__note" role="note" data-testid="matching-oneway-notice">
+                {oneWay}
+              </p>
+            )}
           </div>
         )}
 
@@ -496,6 +759,9 @@ export function QuestionForm() {
         )}
 
         <div className="form__actions">
+          {/* Deliberately never disabled for a validation error: the click
+              prints the list above and never reaches the server, so 创建 is
+              always the way to find out why it is refused. */}
           <Button type="submit" variant="primary" disabled={busy}>
             {busy ? '创建中…' : '创建'}
           </Button>
