@@ -248,6 +248,20 @@ export function QuestionRenderer({
 
   const labelOf = (key: string): string => optionByKey.get(key)?.content ?? key;
 
+  /**
+   * A position spoken as the item the learner sees, for the live region below.
+   * `aria-live` is what makes "上移 / 下移" verifiable without looking: moving a
+   * row changes only the DOM order, which assistive tech reports as nothing.
+   */
+  const positionLabel = (position: number): string => {
+    const opt = options[position - 1];
+    if (!opt) {
+      return `选项 ${position}`;
+    }
+    const content = opt.content.trim();
+    return content !== '' ? content : opt.optionKey;
+  };
+
   return (
     <div className="question-renderer" data-testid="question-renderer">
       <p className="question-renderer__stem">{question.stem}</p>
@@ -369,6 +383,20 @@ export function QuestionRenderer({
             );
           })}
         </ol>
+      )}
+
+      {isOrdering && canEditOrdering && (
+        <p
+          className="field__hint"
+          role="status"
+          data-testid="ordering-status"
+        >
+          {orderingComplete
+            ? `已提交顺序：${committedOrdering.map(positionLabel).join('、')}`
+            : `当前排列：${orderingRows
+                .map(positionLabel)
+                .join('、')}（共 ${options.length} 项，尚未确认）`}
+        </p>
       )}
 
       {isOrdering && canEditOrdering && !orderingComplete && (

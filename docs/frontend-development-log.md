@@ -720,3 +720,9 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
   **70 files 971 tests 全绿** / coverage statements 91.39% / build OK（renderer
   889.64 kB）/ 制品 `AIStudy Setup 0.1.0.exe` 111,467,982 字节（01:38，时间戳从
   制品读回）。
+- W17（键盘 / 读屏）补了一处实测可得的东西：排序作答控件里「上移 / 下移」只是 DOM
+  重排，读屏不会播报，而「确认当前顺序」提交后按钮直接消失，用户连自己停在哪都听不到。
+  现在 `<ol>` 外面有 `role="status"` 的实况文本（当前排列 / 已提交顺序），并有测试固定；
+  把这段 live region 摘掉该测试即失败（负向验证做过）。其余 W17 证据（真实读屏器、
+  1024×700 等分辨率）仍属运行期验收，挂在账号后面。门禁重跑：70 files / 972 tests、
+  lint 0、typecheck 0。

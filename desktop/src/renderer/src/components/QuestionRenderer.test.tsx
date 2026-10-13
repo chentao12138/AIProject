@@ -237,6 +237,27 @@ describe('QuestionRenderer — ORDERING (G02 / C09)', () => {
     expect(screen.getByRole('button', { name: '确认当前顺序' })).toBeEnabled();
   });
 
+  it('announces the arrangement, because a moved row is otherwise silent (W17)', async () => {
+    const user = userEvent.setup();
+    render(<AnsweringPage question={question('ORDERING')} />);
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('第一项、第二项、第三项');
+    expect(status).toHaveTextContent('尚未确认');
+
+    // Moving a row only reorders the DOM, which assistive tech does not report
+    // on its own; the live region is what tells a non-visual user where the row
+    // ended up — and that the move also became the answer.
+    await user.click(screen.getByRole('button', { name: '下移第 1 项' }));
+    expect(status).toHaveTextContent('已提交顺序：第二项、第一项、第三项');
+    expect(status).not.toHaveTextContent('尚未确认');
+    // The commit affordance is gone once the order is settled, so the status is
+    // the only thing left saying what happened — that is why it has to say it.
+    expect(
+      screen.queryByRole('button', { name: '确认当前顺序' })
+    ).not.toBeInTheDocument();
+  });
+
   it('emits 1-based positions of the presented options', async () => {
     const user = userEvent.setup();
     const emitted: number[][] = [];
