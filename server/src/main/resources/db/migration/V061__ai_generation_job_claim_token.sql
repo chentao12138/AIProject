@@ -31,10 +31,11 @@ ALTER TABLE ai_generation_job
     ADD COLUMN claim_token VARCHAR(64) NULL AFTER claimed_at;
 
 -- Seed a lease identity for rows that are mid-flight at deploy time.
--- Deterministic (derived from claimed_by) and idempotent: a second run of this
--- statement matches nothing, because claim_token is then already NOT NULL.
+-- Deterministic (derived from claimed_by, truncated to the new column width)
+-- and idempotent: a second run of this statement matches nothing, because
+-- claim_token is then already NOT NULL.
 UPDATE ai_generation_job
-SET claim_token = claimed_by
+SET claim_token = LEFT(claimed_by, 64)
 WHERE status = 'PROCESSING'
   AND claimed_by IS NOT NULL
   AND claim_token IS NULL;

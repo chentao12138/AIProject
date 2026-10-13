@@ -232,6 +232,26 @@ class AiGenerationJobWorkerTest {
     }
 
     @Test
+    void aStepThatLosesItsLeaseHalfwayNeverReachesTheProvider() {
+        AIGenerationJob job = seed(AIGenerationJobWorker.JOB_TYPE_KNOWLEDGE_EXTRACTION);
+        String tokenA = service.claim(job.getId(), workerA.workerId());
+        // The source text assembly is slow: by the time it returns, recovery has
+        // handed the job to B. The provider call must not start.
+        Mockito.when(sourceDiagnosis.extractSourceText(USER, SPACE, 5L)).thenAnswer(invocation -> {
+            table.row(job.getId()).setClaimedAt(LocalDateTime.now().minusMinutes(31));
+            service.recoverStaleJobs();
+            assertNotNull(service.claim(job.getId(), workerB.workerId()));
+            return "chapter one";
+        });
+
+        assertThrows(AiJobFailureException.LeaseLostException.class,
+                () -> workerA.execute(table.row(job.getId()), tokenA));
+
+        // No extraction ran, so no second set of draft knowledge points exists.
+        Mockito.verifyNoInteractions(knowledgeExtraction);
+    }
+
+    @Test
     void anAttemptWhoseLeaseWasStolenMidRunCannotReportAResult() {
         AIGenerationJob job = seed(AIGenerationJobWorker.JOB_TYPE_CONTENT_STRUCTURE);
         final boolean[] stolen = {false};

@@ -227,6 +227,13 @@ public class AIGenerationJobWorker implements GenerationJobDispatcher {
                     throw new AiJobFailureException(AIGenerationJobService.ERROR_NO_OUTPUT,
                             "source text is empty");
                 }
+                // Assembling the whole source is itself slow, so ownership is
+                // re-proved here rather than only at the top of the run: the
+                // provider call below is the expensive step, and starting it
+                // without the lease is what would duplicate the draft points.
+                if (!aiGenerationJobService.renewLease(job.getId(), workerId, claimToken)) {
+                    throw new AiJobFailureException.LeaseLostException(job.getId());
+                }
                 List<?> created = aiKnowledgeExtractionService.extract(
                         job.getRequester(), job.getSpaceId(), text);
                 if (created.isEmpty()) {
