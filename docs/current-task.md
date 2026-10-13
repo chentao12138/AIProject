@@ -178,20 +178,43 @@ Work was built in parallel lanes (search / source lifecycle / asset-folder-RAW /
 - Never source `AISTUDY_BOOTSTRAP_ADMIN_ENABLED` into a test run: `BootstrapAdminRunner` is a `@Component` gated on it,
   and with the `test` profile's mocked mappers it fails the context ("Bootstrap admin account was created but could not
   be loaded"), which shows up as ~129 "ApplicationContext failure threshold exceeded" errors, not as one real bug.
+- Do not run the suite while the `:8080` dev server is up. MySQL caps connections at 151 by default and the container
+  inherits it; the running app's Hikari pool plus one cached Spring context per IT class per connection blows past it
+  and the failures come back as `Too many connections` / `Unable to obtain connection` on unrelated classes
+  (`FlywayMigrationIntegrationTest`, `SpikeRecordMapperIntegrationTest`). Stop the listener first, then restart it.
 
 ### Not done yet
-- F-18 (AI content structuring still overwrites live published ContentBlocks; it must land in a draft revision),
-  F-24 (blueprint distribution is only a candidate filter then `subList`), F-06/F-07 (ORDER/OUTLINE low-confidence
-  issue producers, automatic outline suggestion), F-11 (real revision-to-revision diff), F-30 (error-code sweep
-  outside exam: practice/asset/folder conflicts still surface generic `CONFLICT`).
-- Frontend: C09 (typed ORDERING/MATCHING pairs, `questionType`/`status` as real enums — `orderingAnswer: number[]`
-  and `matchingAnswer: string(JSON)` already ship and grade by array order), the `explanation` hardcoded null on
-  `GET .../practice-sessions/{id}/answers`, and practice-module conflict codes.
-- The variant fixes F-16/F-17 have no dedicated test yet; C06's open-session 409 path is untested.
+- F-07: automatic outline suggestion — AI structuring still updates block type/structured JSON only, no proposed
+  `SourceOutlineNode` tree marked `NEEDS_REVIEW`.
+- F-30 tail: 8 classes still answer 409 with the generic `code:"CONFLICT"`, pinned as a shrink-only baseline in
+  `ErrorCodeRatchetTest` (admin/internal paths: `ai.explain`, `ai.service.AiConversationService`, `config.service`,
+  `exam.service.ExamDiagnosisService`, `knowledge.point...RelationService`, `mastery...CalibrationConfigService`,
+  `source.outline...SourceOutlineNodeService`, `studyplan.service.StudyPlanService`).
+- MATCHING pairs are still a JSON string on the wire (validated at authoring, parsed by the same parser grading
+  uses); a typed pair structure was offered to the frontend and not yet requested.
 - Gates not executed: T-16 real textbook E2E, T-17 OCR on Windows+Docker, T-18 real StepFun/BYOK, T-21 container E2E,
   T-22 (tracked worktree is clean, nothing is pushed).
 - `login.json` / `spec-live.json` sit untracked in the repo root from someone's probe — not created by this round,
   left in place; check them before any commit that includes the repo root.
+
+## Round 2026-10-14 (later) — F-24, F-11, F-06 + the frontend's second ask list
+Full suite on real MySQL: **1046 tests, 0 failures, 0 errors, 2 skipped**. Backend restarted on `:8080` at this code;
+`packages/api-client` regenerated from the running server (198 paths) and its typecheck passes.
+- F-24 blueprint distributions are enforced quotas (scarcest-first cell fill, exact total, 409
+  `EXAM_BLUEPRINT_UNSATISFIED`, 400 for contradictory quotas at create, `scoreByDifficulty` honoured, distribution
+  sizes the paper when `totalQuestionCount` is omitted) + 8 DB-free unit tests + 6 real-MySQL ITs.
+- F-11 version compare keys pages on page number, blocks on page+position, outline on title path; `updatedContentBlocks`
+  is now filled (bounded to 200) and outline counts are real. New IT `SourceVersionCompareIntegrationTest`.
+- F-06 `ORDER_LOW_CONFIDENCE` / `OUTLINE_LOW_CONFIDENCE` producers wired into the pipeline behind
+  `aistudy.ingestion.review.*`; new IT `IngestionIssueProducerIntegrationTest`, which also pins the fix for
+  `IngestionIssueController` parsing the JWT subject as `resolved_by` (every real login 500'd on resolve/ignore).
+- Frontend asks delivered: C05 DRAFT-only edit gate as `QUESTION_NOT_EDITABLE` + operation description, C09b
+  `correctOrder`/`matches` read-back, C-Ordering-space 1-based permutation checks, C12 conflict codes published in
+  the document (asserted), C-Paging ordering documented, C06 `explanation` fix, Notes archive tab + restore +
+  entity filters + 404 link ids, `questionType`/`status` published as schema enums.
+- Sent to the frontend session: the delivered list, the two behaviour breaks (PUBLISHED questions no longer editable;
+  ORDERING now requires `options` + a full permutation) and three open questions (their ORDERING payload, whether
+  they need `/knowledge-points/{id}/notes` as a subresource, when the verification window ends).
 
 
 
