@@ -74,7 +74,6 @@ public class AIGenerationJobService {
     /** Persisted in {@code error_code}; never raw provider text. */
     public static final String ERROR_NO_OUTPUT = "AI_JOB_NO_OUTPUT";
     public static final String ERROR_UNSUPPORTED_TYPE = "AI_JOB_TYPE_UNSUPPORTED";
-    public static final String ERROR_LEASE_LOST = "AI_JOB_LEASE_LOST";
     public static final String ERROR_PROCESSING = "AI_PROCESSING_ERROR";
 
     /**
