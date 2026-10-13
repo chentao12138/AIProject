@@ -81,7 +81,7 @@ renderer 经 `window.aistudyConfig.getApiBaseUrl()`（只读 IPC 通道）读取
   `http://127.0.0.1:9090/api`，CSP 为 `connect-src 'self' http://127.0.0.1:9090`。
 - 外壳 header 显示当前 API target；`config.json` 只认 `apiBaseUrl` 一个键。
 
-## 契约漂移门禁（ADR-052）
+## 契约漂移门禁（ADR-052 / ADR-053）
 
 ```powershell
 npm run api:check   # openapi.json ↔ api.d.ts ↔ manifest.json 必须一致

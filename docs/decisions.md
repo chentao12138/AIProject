@@ -985,6 +985,20 @@ Desktop file/folder selection
 
 ---
 
+## ADR-053：契约快照必须可与运行中的服务器对账
+
+- **背景**：ADR-052 的三件套门禁只能证明 `openapi.json`、`api.d.ts`、`manifest.json` **彼此**一致，证不出这份快照仍等于服务器当下发布的东西。2026-10-14 实测：提交快照 67 条路径，真实服务 195 条；更关键的是 `CreateExamRequest` 在旧快照里写着 `durationMinutes`，服务端实际绑 `timeLimitMinutes`——快照、生成类型、manifest 三者完全自洽，`api:check` 与 `tsc` 双双通过，于是每张考试都以"没设时长"落库，依赖 `deadlineAt` 的倒计时也无从倒计时。同一时期 `packages/api-client/src/client.ts` 里还有 28 处 `(client as any)`：路径不在旧快照里就用 any 绕过，这些调用**永远不会**被类型系统检查，正是这类改名能上线的原因。
+- **决策**：增加"快照 ↔ 运行中服务器"的对账门禁 `api:live`，并把 wrapper 禁止绕过生成类型写进规范。
+- **规范**：
+  - `node packages/api-client/scripts/check-api.mjs --live`（npm 脚本 `api:live`）在 `api:check` 通过后，再抓取 `OPENAPI_URL`（默认 `http://localhost:8080/v3/api-docs`）并与已提交快照做**规范化内容比对**：递归排序对象键、去空白后取 sha256。字节比对不可用（生成器格式化过、springdoc 键序可变），而"零路径变化的纯字段改名"恰恰是必须测出来的那一类漂移。
+  - 比对前先验证 AIStudy 锚点（文档里必须同时存在 `/api/v1/spaces` 与 `/api/v1/auth/login`），否则直接失败退出——不拿别的项目的文档来判定本仓库漂移（`api:generate` 侧有同样的锚点校验）。
+  - 后端可达时，任何接口相关改动**先跑 `api:live`**；不绿就先 `api:generate` + `npm run typecheck`，由派生类型报告改名/新增字段。它不进入 `npm run build`（构建必须能在离线环境完成），但属于发布验收步骤（见 `desktop/docs/SMOKE-INSTRUCTIONS.md`）。
+  - `client.ts` 的包装方法体必须是 `client.METHOD('/api/v1/...', …)`，禁止 `(client as any).METHOD(…)`；路径缺失是快照落后，处理方式只有重新生成，没有用 any 顶替的余地。本 ADR 接受时该文件已 0 处 `as any`。
+- **状态**：`Accepted`
+- **关系**：补足 ADR-052 未覆盖的维度——快照与现实的差距，而非快照内部的一致性。
+
+---
+
 # 7. 最终技术 + 业务基线摘要
 
 正式主干：
