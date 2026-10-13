@@ -455,13 +455,17 @@ function ChatPanel({
         )}
         {hasMoreMessages && (
           <div className="ai-history-load">
+            {/* Deliberately not "更早的": whether page 0 is the oldest or the
+                newest batch is the server's ordering decision, and the contract
+                does not state it. Ask for the rest of the history by count
+                until that is pinned in OpenAPI. */}
             <Button
               type="button"
               variant="secondary"
               onClick={() => setPagesToLoad((count) => count + 1)}
               disabled={messagesQuery.isFetching}
             >
-              加载更早的消息
+              加载更多历史消息
             </Button>
             <p className="muted" data-testid="ai-message-count">
               已加载 {messages.length} / {total}

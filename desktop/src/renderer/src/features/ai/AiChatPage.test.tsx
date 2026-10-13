@@ -236,7 +236,7 @@ describe('AI Chat — paged history (W11)', () => {
       '已加载 1 / 2'
     );
 
-    await user.click(screen.getByRole('button', { name: '加载更早的消息' }));
+    await user.click(screen.getByRole('button', { name: '加载更多历史消息' }));
 
     expect(await screen.findByText('PAGE-1')).toBeInTheDocument();
     expect(listMessages).toHaveBeenCalledWith(7, 1, { page: 1, size: 50 });
