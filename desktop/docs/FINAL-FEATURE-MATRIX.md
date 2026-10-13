@@ -126,6 +126,32 @@ happens to exist:
 | `getExamDiagnosis` | Its summary is a backend-composed English string — `ExamDiagnosisService.java:79` does `setSummary("Exam score " + resultScore + "/" + resultMaxScore)` — which cannot be shown in this UI; the structured-fields request is outstanding. The graded result page does not depend on it. |
 | `GET /wrong-questions` | No wrong-question list is in A1–A11; a wrong-question *search hit* still opens its question via `SearchResult.questionId`. |
 
+The 2026-10-14 regeneration (67 → 195 paths) added a second wave of endpoints
+that no A-item asks for. They are listed here for the same reason — existing is
+not the same as requested:
+
+| Endpoint group | Why it is not wired |
+|----------------|---------------------|
+| `/spaces/{id}/archive`, `/restore`, `/rename` | A1–A11 asks for space create/list/detail only (A1/A9). Space lifecycle is not in this round. |
+| `/knowledge-points/{id}/archive`, `/restore`, `/reject`, `/relations`, `/mastery` | Knowledge curation lifecycle was requested for **questions** (A4.4/G09), not for knowledge points. Symmetry is an argument, not a requirement — see "awaiting an A/B decision" below. |
+| `/statistics/*` (9 endpoints) | B12.17 excludes an independent dashboard / recommendation feed. |
+| `/study-plan/*`, `/review-tasks/*`, `/mastery/calibration/*`, `/ai/usage`, `/exam-blueprints/*` | No A-item names a study-plan, review-queue, calibration, usage-meter or blueprint surface. |
+| `POST /practice-sessions/{id}/questions/{id}/variant` | Variant generation is an AI-produces-new-question feature; A5 asks for answer/progress/resume/finish, not derivation. |
+| `/admin/**` (~25 endpoints) | B12.7 — the admin web is a separate project; the desktop client must not become it. |
+| `/auth/me/password`, `/admin/users/{subject}/reset-password` | B12.8 — self-service password reset / registration is excluded. |
+| `/sources/{id}/folder-sync/*`, `/versions/compare`, `/outline/*`, `/revisions` | Ingestion authoring surfaces belong to the admin/ingestion lane; A2.3 asks the client to verify upload → pages → blocks for the five supported formats, which it does. |
+
+### Awaiting an A/B decision
+
+Two rows are neither closed as A nor excluded as B, and I am not deciding them
+unilaterally:
+
+1. Whether an **image source** should show the uploaded image itself (named in
+   neither A1–A11 nor B12.1/B12.3).
+2. Whether **knowledge-point archive/restore/reject** should join the question
+   curation surface the audit already demands (A4.4), or be excluded alongside
+   the other admin-side curation flows.
+
 If the product owner promotes any of these to A, it becomes this round's work —
 the row is here so the omission is a decision that can be reversed, not a gap
 nobody noticed.
