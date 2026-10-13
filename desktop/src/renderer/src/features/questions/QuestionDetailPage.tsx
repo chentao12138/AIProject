@@ -172,9 +172,22 @@ export function QuestionDetailPage() {
             {q.knowledgePointIds.map((kpId) => (
               <li key={kpId}>
                   {isPositiveId(kpId) && spaceId !== null ? (
-                    <Link to={`/spaces/${spaceId}/knowledge/${kpId}`} className="nav-link">
-                      知识点 #{kpId}
-                    </Link>
+                    <>
+                      <Link to={`/spaces/${spaceId}/knowledge/${kpId}`} className="nav-link">
+                        知识点 #{kpId}
+                      </Link>
+                      {/* W16/A9.2: the practice page reads this query key, so a
+                          learner standing on a question can drill its knowledge
+                          point without retyping an id. */}
+                      <Link
+                        to={`/spaces/${spaceId}/practice?${new URLSearchParams({
+                          knowledgePointId: String(kpId),
+                        }).toString()}`}
+                        className="nav-link"
+                      >
+                        练习该知识点
+                      </Link>
+                    </>
                   ) : (
                     <span className="muted">#{kpId}</span>
                   )}

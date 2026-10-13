@@ -113,6 +113,11 @@ export type PracticeQuestionSlot = NonNullable<
   PracticeSessionDetail['questions']
 >[number];
 
+/** Body the practice start endpoint accepts, inferred from its parameters. */
+export type CreatePracticeSessionBody = NonNullable<
+  Parameters<ApiClient['createPracticeSession']>[1]
+>;
+
 /**
  * Practice score summary. NOTE: only `finishPracticeSession` returns this —
  * the session detail does NOT carry score/answered/correct counts, so a

@@ -46,6 +46,19 @@ const choiceOptions = [
   { optionKey: 'B', content: '第二项' },
 ];
 
+describe('QuestionDetailPage — practice entry per knowledge point (W16)', () => {
+  it('hands its knowledge point id to the practice start page', async () => {
+    renderDetail({
+      questionType: 'SINGLE_CHOICE',
+      stem: '题干',
+      knowledgePointIds: [12],
+    });
+
+    const link = await screen.findByRole('link', { name: '练习该知识点' });
+    expect(link).toHaveAttribute('href', '/spaces/7/practice?knowledgePointId=12');
+  });
+});
+
 describe('QuestionDetailPage — FILL_BLANK review (G02)', () => {
   it('shows the reference answer the author stored', async () => {
     renderDetail({

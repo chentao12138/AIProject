@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
 import {
@@ -20,10 +20,7 @@ import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { parseOptionalPositiveId } from '../../lib/ids';
 import { formatDateTime } from '../../lib/format';
-import type { components } from '@aistudy/api-client';
-
-type CreatePracticeSessionRequest =
-  components['schemas']['CreatePracticeSessionRequest'];
+import type { CreatePracticeSessionBody } from '../../lib/types';
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
@@ -34,9 +31,23 @@ export function PracticePage() {
   const api = useApiClient();
   const navigate = useNavigate();
   const spaceId = useSpaceId();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [count, setCount] = useState(10);
-  const [knowledgePointId, setKnowledgePointId] = useState('');
+  // W16/A9.2: arriving from a question or knowledge point passes the id in the
+  // URL, so it is the source of truth for the selector instead of component
+  // state that a link could never reach.
+  const knowledgePointId = searchParams.get('knowledgePointId') ?? '';
+
+  function setKnowledgePointId(value: string) {
+    const next = new URLSearchParams(searchParams);
+    if (value) {
+      next.set('knowledgePointId', value);
+    } else {
+      next.delete('knowledgePointId');
+    }
+    setSearchParams(next);
+  }
 
   const kpQuery = useQuery(
     spaceQuery(spaceId, queryKeys.knowledgePoints(spaceId), (id) =>
@@ -47,7 +58,7 @@ export function PracticePage() {
   const start = useMutation({
     mutationFn: () => {
       const kpId = parseOptionalPositiveId(knowledgePointId);
-      const body: CreatePracticeSessionRequest = {
+      const body: CreatePracticeSessionBody = {
         count,
         knowledgePointId: kpId,
       };

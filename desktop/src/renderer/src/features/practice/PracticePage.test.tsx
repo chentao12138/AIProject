@@ -27,6 +27,33 @@ describe('PracticePage', () => {
     expect(await screen.findByText('还没有练习记录。')).toBeInTheDocument();
   });
 
+  it('preselects the knowledge point handed to it in the URL (W16)', async () => {
+    renderWithProviders(<PracticePage />, {
+      apiClient: mockApiClient({
+        listPracticeSessions: vi.fn(async () => ({
+          data: [],
+          response: { status: 200 },
+        })),
+        listKnowledgePoints: vi.fn(async () => ({
+          data: [
+            { id: 3, title: '牛顿第二定律' },
+            { id: 9, title: '动能定理' },
+          ],
+          response: { status: 200 },
+        })),
+      }),
+      initialEntries: ['/spaces/7/practice?knowledgePointId=9'],
+      routePath: '/spaces/:spaceId/practice',
+    });
+
+    // The selector can only hold the id once the server's knowledge-point list
+    // has arrived, so wait for the option before asserting the selection.
+    await screen.findByRole('option', { name: '动能定理' });
+    // Arriving from a question or knowledge point must not require typing the
+    // id again: the URL selects the option the server list offers.
+    expect(screen.getByLabelText('限定知识点（可选）')).toHaveValue('9');
+  });
+
   it('starts a practice session and navigates to the session page', async () => {
     const createPracticeSession = vi.fn(async () => ({
       data: { id: 101, status: 'IN_PROGRESS', questionCount: 5 },

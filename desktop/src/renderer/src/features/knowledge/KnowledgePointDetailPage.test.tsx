@@ -76,6 +76,14 @@ describe('KnowledgePointDetailPage', () => {
       'href',
       '/spaces/3/questions?knowledgePointId=5'
     );
+
+    const practiceLink = screen.getByRole('link', {
+      name: '就此知识点开始练习',
+    });
+    expect(practiceLink).toHaveAttribute(
+      'href',
+      '/spaces/3/practice?knowledgePointId=5'
+    );
   });
 
   it('shows no active publish CTA for a PUBLISHED point (K1.10)', async () => {

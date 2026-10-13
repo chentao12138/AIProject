@@ -225,6 +225,16 @@ export function KnowledgePointDetailPage() {
               在题库中查看相关题目
             </Link>
           </li>
+          <li>
+            <Link
+              className="nav-link"
+              to={`/spaces/${spaceId}/practice?${new URLSearchParams({
+                knowledgePointId: String(knowledgePointId),
+              }).toString()}`}
+            >
+              就此知识点开始练习
+            </Link>
+          </li>
         </ul>
       </section>
 
