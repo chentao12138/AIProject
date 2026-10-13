@@ -285,6 +285,7 @@ export function QuestionRenderer({
             }
             disabled={disabled || isReview}
             onClick={() => onBooleanAnswerChange?.(true)}
+            aria-pressed={booleanAnswer === true}
           >
             正确
           </Button>
@@ -299,6 +300,7 @@ export function QuestionRenderer({
             }
             disabled={disabled || isReview}
             onClick={() => onBooleanAnswerChange?.(false)}
+            aria-pressed={booleanAnswer === false}
           >
             错误
           </Button>
@@ -547,6 +549,12 @@ export function QuestionRenderer({
                     disabled={disabled || isReview}
                     onClick={() => toggleKey(opt.optionKey)}
                     className="question-renderer__option"
+                    aria-pressed={selected}
+                    aria-label={
+                      isReview && opt.isCorrect
+                        ? `${opt.content}（标准答案）`
+                        : undefined
+                    }
                   >
                     {opt.content}
                   </Button>

@@ -202,7 +202,13 @@ describe('QuestionDetailPage — edit is a real route (G04)', () => {
       answer: { correctOptionKey: 'A' },
     });
 
-    expect(await screen.findByRole('button', { name: '第一项' })).toBeDisabled();
+    // The standard answer is named in the accessible name, not only coloured:
+    // `第一项（标准答案）` is what a screen reader reads for the same row that
+    // the eye sees as a green button.
+    expect(
+      await screen.findByRole('button', { name: '第一项（标准答案）' })
+    ).toBeDisabled();
+    expect(screen.getByRole('button', { name: '第二项' })).toBeDisabled();
   });
 });
 

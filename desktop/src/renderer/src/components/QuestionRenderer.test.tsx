@@ -659,3 +659,87 @@ describe('QuestionRenderer — existing call sites keep working', () => {
     expect(screen.queryByTestId('contract-gap-notice')).not.toBeInTheDocument();
   });
 });
+
+describe('QuestionRenderer — selected state is spoken, not only coloured (W17)', () => {
+  it('exposes which choice the learner picked through aria-pressed', async () => {
+    const user = userEvent.setup();
+    render(<AnsweringPage question={question('SINGLE_CHOICE')} />);
+
+    expect(
+      screen.getByRole('button', { name: '第一项' })
+    ).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(screen.getByRole('button', { name: '第二项' }));
+
+    // Colour is the only other signal the button carries, so without this a
+    // screen reader cannot tell a picked option from an unpicked one.
+    expect(
+      screen.getByRole('button', { name: '第二项' })
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.getByRole('button', { name: '第一项' })
+    ).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('marks the standard answer by name in review, not only by colour', () => {
+    render(
+      <QuestionRenderer
+        question={{
+          questionType: 'SINGLE_CHOICE',
+          stem: '题干内容',
+          options: [
+            { optionKey: 'A', content: '第一项', isCorrect: true },
+            { optionKey: 'B', content: '第二项' },
+          ],
+        }}
+        mode="review"
+        selectedOptionKeys={['B']}
+        answer={{ correctOptionKey: 'A', isCorrect: false }}
+      />
+    );
+
+    // The learner's choice is `pressed`; the standard answer is named as such,
+    // so the two colour roles (danger / primary) have a spoken equivalent.
+    expect(
+      screen.getByRole('button', { name: '第一项（标准答案）' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '第二项' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('marks the boolean choice the learner made', async () => {
+    const user = userEvent.setup();
+    const onBooleanAnswerChange = vi.fn();
+    const { rerender } = render(
+      <QuestionRenderer
+        question={{ questionType: 'TRUE_FALSE', stem: '题干内容', options: [] }}
+        mode="answer"
+        onBooleanAnswerChange={onBooleanAnswerChange}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: '正确' }));
+    expect(onBooleanAnswerChange).toHaveBeenCalledWith(true);
+
+    // The renderer is controlled, so the pressed state follows the prop the page
+    // holds — which is exactly the link that used to exist only as a colour.
+    rerender(
+      <QuestionRenderer
+        question={{ questionType: 'TRUE_FALSE', stem: '题干内容', options: [] }}
+        mode="answer"
+        booleanAnswer
+        onBooleanAnswerChange={onBooleanAnswerChange}
+      />
+    );
+    expect(screen.getByRole('button', { name: '正确' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: '错误' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+});
