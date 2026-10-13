@@ -67,6 +67,14 @@ What this does **not** prove, and remains open A-class work:
 
 - The installer was produced, not installed. R02/A11.1 (install → launch →
   shortcut → uninstall → user-data policy) is unverified.
+- **What has been launched:** `dist/win-unpacked/AIStudy.exe` (the unpacked
+  build, not the installed app) starts, creates the `AIStudy` window, and the
+  renderer paints. With the backend down it lands on the documented bootstrap
+  failure state — "无法连接到后端服务。请确认服务已启动后重试。" with a 重试
+  action and a "用其他账号登录" escape — rather than a blank window or a crash,
+  which also exercises the `app://` load path and the production CSP.
+  This is not the R02 pass criterion: the NSIS install/uninstall cycle and the
+  signed-in journeys are still unrun.
 - R03 installed-app auth (login → restart → restore → logout → anonymous
   restart) needs a running backend plus a test account, as do the R04/R05
   end-to-end journeys; every contract-gated row above is still gated.
