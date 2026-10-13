@@ -11,7 +11,10 @@
  * initialized once and never revisited — is exactly what used to break that.
  *
  * W13: the result-type filter is built from the contract enum (see
- * `searchContract.ts`) and its selection is written back to the URL.
+ * `searchContract.ts`) and its selection is written back to the URL. Nothing
+ * checked is not "nothing searched": the endpoint treats an absent `types` as
+ * every type, so an empty filter sends no `types` at all rather than a
+ * client-invented default.
  */
 
 import { useState } from 'react';
@@ -123,18 +126,27 @@ export function SearchPage() {
     commitUrl({ q: draftQuery.trim(), types: typesParam, page: 0 });
   }
 
-  function toggleType(type: SearchResultType) {
-    const picked = selectedTypes.includes(type)
-      ? selectedTypes.filter((t) => t !== type)
-      : [...selectedTypes, type];
+  /**
+   * Write a type selection into the URL, and the request, the checkboxes and
+   * the pager follow it.
+   */
+  function commitTypes(picked: readonly SearchResultType[]) {
     // Re-canonicalize so a click never leaves the URL holding a permutation of
     // what the next click produces, and restart at page 0 — page 3 of a
     // narrower result set is usually nothing at all.
     commitUrl({
       q: rawQuery,
-      types: SEARCH_RESULT_TYPES.filter((t) => picked.includes(t)).join(','),
+      types: SEARCH_RESULT_TYPES.filter((type) => picked.includes(type)).join(','),
       page: 0,
     });
+  }
+
+  function toggleType(type: SearchResultType) {
+    commitTypes(
+      selectedTypes.includes(type)
+        ? selectedTypes.filter((t) => t !== type)
+        : [...selectedTypes, type]
+    );
   }
 
   function goPage(nextPage: number) {
@@ -178,6 +190,22 @@ export function SearchPage() {
                 </label>
               ))}
             </div>
+            {/* A7.2: this is the endpoint's own default, not a client-side one —
+                with no `types` on the wire every UNION branch runs
+                (`MySqlSearchService.normalizedTypes()` -> empty list ->
+                `types.isEmpty() || types.contains(...)` in SearchMapper.xml), so
+                an empty filter means "all types" and is said that way instead
+                of looking like a search that can return nothing. */}
+            <p className="field__hint" data-testid="types-filter-hint">
+              {selectedTypes.length === 0
+                ? '未勾选任何类型：搜索全部类型（请求不带 types）'
+                : `只搜索已勾选的 ${selectedTypes.length} 种类型`}
+            </p>
+            {selectedTypes.length > 0 && (
+              <Button type="button" variant="ghost" onClick={() => commitTypes([])}>
+                全部类型
+              </Button>
+            )}
           </fieldset>
           <div className="form__actions">
             <Button type="submit" variant="primary">搜索</Button>
