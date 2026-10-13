@@ -118,6 +118,43 @@ public class QuestionService {
         return questionMapper.selectByIdSpaceOwner(questionId, spaceId, ownerSubject);
     }
 
+    /**
+     * One page of the caller's questions plus the total that the same filter
+     * matches (C-Paging). Kept separate from
+     * {@link #listMine(String, Long, String, String, Long)} so the paged path
+     * can never be swapped back into a full-table read by accident.
+     *
+     * @param page  0-based page index; negative values are clamped to 0
+     * @param size  rows per page, clamped to {@code 1..100} by the caller
+     * @return the page and its total, or {@code null} when the space is not the
+     *         caller's (rendered as 404, same as the unfiltered list)
+     */
+    public QuestionPage pageOfMine(String ownerSubject, Long spaceId,
+                                   String status, String questionType, Long knowledgePointId,
+                                   int page, int size) {
+        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
+            return null;
+        }
+        int safePage = Math.max(page, 0);
+        long total = questionMapper.countBySpaceOwnerFilters(
+                spaceId, ownerSubject, status, questionType, knowledgePointId);
+        List<Question> items = questionMapper.selectPageBySpaceOwnerFilters(
+                spaceId, ownerSubject, status, questionType, knowledgePointId,
+                size, safePage * size);
+        return new QuestionPage(items, total, safePage, size);
+    }
+
+    /**
+     * A page of questions with the total behind it.
+     *
+     * @param items the rows of this page, in {@code created_at DESC, id DESC}
+     * @param total every row matching the same filter, not just this page
+     * @param page  the 0-based index that was served
+     * @param size  the page size that was served
+     */
+    public record QuestionPage(List<Question> items, long total, int page, int size) {
+    }
+
     @Transactional
     public Question update(String ownerSubject, Long spaceId, Long questionId, UpdateQuestionRequest request) {
         Question existing = getMine(ownerSubject, spaceId, questionId);

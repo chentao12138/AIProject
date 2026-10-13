@@ -2,6 +2,7 @@ package com.aistudy.server.question.controller;
 
 import com.aistudy.server.question.dto.CreateQuestionRequest;
 import com.aistudy.server.question.dto.QuestionAuthoringResponse;
+import com.aistudy.server.question.dto.QuestionPageResponse;
 import com.aistudy.server.question.dto.UpdateQuestionRequest;
 import com.aistudy.server.question.entity.Question;
 import com.aistudy.server.question.service.QuestionService;
@@ -40,17 +41,28 @@ public class QuestionController {
     }
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public List<QuestionAuthoringResponse> list(@PathVariable Long spaceId,
-                                                @RequestParam(required = false) String status,
-                                                @RequestParam(required = false) String questionType,
-                                                @RequestParam(required = false) Long knowledgePointId,
-                                                Authentication authentication) {
-        List<Question> questions = questionService.listMine(
-                authentication.getName(), spaceId, status, questionType, knowledgePointId);
-        if (questions == null) {
+    public QuestionPageResponse list(@PathVariable Long spaceId,
+                                     @RequestParam(required = false) String status,
+                                     @RequestParam(required = false) String questionType,
+                                     @RequestParam(required = false) Long knowledgePointId,
+                                     @RequestParam(defaultValue = "0") int page,
+                                     @RequestParam(defaultValue = "20") int size,
+                                     Authentication authentication) {
+        // C-Paging: the envelope replaced the bare array. Paging is resolved in
+        // SQL; serving `size` rows out of a full read would still download the
+        // whole table on every keystroke, which is what A4.2 forbids.
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        QuestionService.QuestionPage result = questionService.pageOfMine(
+                authentication.getName(), spaceId, status, questionType, knowledgePointId,
+                safePage, safeSize);
+        if (result == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "LearningSpace not found");
         }
-        return questions.stream().map(this::toAuthoring).toList();
+        int totalPages = (int) ((result.total() + safeSize - 1) / safeSize);
+        return new QuestionPageResponse(
+                result.items().stream().map(this::toAuthoring).toList(),
+                safePage, safeSize, result.total(), totalPages);
     }
 
     @GetMapping(value = "/{questionId}", produces = MediaType.APPLICATION_JSON_VALUE)

@@ -366,15 +366,19 @@ class QuestionVerticalSliceIntegrationTest {
                         .param("questionType", "SINGLE_CHOICE")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(q1));
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.pageSize").value(20))
+                .andExpect(jsonPath("$.items[0].id").value(q1));
 
         mockMvc.perform(get(QUESTIONS, spaceId)
                         .param("status", "DRAFT")
                         .param("knowledgePointId", String.valueOf(kpId))
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1));
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.totalItems").value(1));
 
         // other owner cannot list this space
         mockMvc.perform(get(QUESTIONS, spaceId)
@@ -451,7 +455,50 @@ class QuestionVerticalSliceIntegrationTest {
         mockMvc.perform(get(QUESTIONS, spaceId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.totalItems").value(0))
+                .andExpect(jsonPath("$.totalPages").value(0));
+    }
+
+    /**
+     * (16b) C-Paging: {@code page}/{@code size} are resolved in SQL, the total
+     * describes the whole filter rather than the page, and the offset actually
+     * advances — a third page past the end is empty instead of repeating rows.
+     */
+    @Test
+    void listPagesAdvanceAndTotalCountsEveryMatchingRow() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        String token = tokenFor("biz-e2e-user-1");
+        for (int i = 0; i < 3; i++) {
+            createQuestion(token, spaceId,
+                    "{\"questionType\":\"TRUE_FALSE\",\"stem\":\"tf-" + i
+                            + "\",\"correctBoolean\":false}");
+        }
+
+        mockMvc.perform(get(QUESTIONS, spaceId)
+                        .param("page", "0").param("size", "2")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.pageSize").value(2))
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.totalItems").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2));
+
+        mockMvc.perform(get(QUESTIONS, spaceId)
+                        .param("page", "1").param("size", "2")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.totalItems").value(3));
+
+        // A page past the end is empty, not a wrap-around to the first rows.
+        mockMvc.perform(get(QUESTIONS, spaceId)
+                        .param("page", "2").param("size", "2")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.totalItems").value(3));
     }
 
     /** (17) option row correctness is never stored — only in answer_data_json. */

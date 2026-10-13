@@ -212,15 +212,25 @@ class QuestionPracticeOpenApiContractTest {
                         .value("boolean"));
     }
 
-    /** (4) list GET → array of the typed authoring response. */
+    /**
+     * (4) list GET → the paged envelope (C-Paging), whose {@code items} are the
+     * typed authoring response. Pinned as a {@code $ref} so a client can bind
+     * to one schema instead of an inline array.
+     */
     @Test
-    void listReturnsArrayOfAuthoringResponse() throws Exception {
+    void listReturnsPagedEnvelopeOfAuthoringResponse() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.paths['" + QUESTIONS + "'].get.responses['200'].content['application/json'].schema.type")
-                        .value("array"))
-                .andExpect(jsonPath("$.paths['" + QUESTIONS + "'].get.responses['200'].content['application/json'].schema.items.$ref")
-                        .value("#/components/schemas/QuestionAuthoringResponse"));
+                .andExpect(jsonPath("$.paths['" + QUESTIONS + "'].get.responses['200'].content['application/json'].schema.$ref")
+                        .value("#/components/schemas/QuestionPageResponse"))
+                .andExpect(jsonPath("$.components.schemas.QuestionPageResponse.properties.items.items.$ref")
+                        .value("#/components/schemas/QuestionAuthoringResponse"))
+                .andExpect(jsonPath("$.components.schemas.QuestionPageResponse.properties.totalItems.type")
+                        .value("integer"))
+                .andExpect(jsonPath("$.paths['" + QUESTIONS + "'].get.parameters[?(@.name == 'page')].schema.type")
+                        .value("integer"))
+                .andExpect(jsonPath("$.paths['" + QUESTIONS + "'].get.parameters[?(@.name == 'size')].schema.type")
+                        .value("integer"));
     }
 
     /** (5) list filters declared as query params. */

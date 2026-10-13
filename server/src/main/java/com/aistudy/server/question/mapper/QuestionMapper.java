@@ -55,6 +55,61 @@ public interface QuestionMapper extends BaseMapper<Question> {
                                              @Param("questionType") String questionType,
                                              @Param("knowledgePointId") Long knowledgePointId);
 
+    /**
+     * Page-bound variant of {@link #selectBySpaceOwnerFilters}: the filter
+     * block is byte-for-byte the same and paging happens in SQL, because the
+     * Desktop question list must not load every row to page locally
+     * (checklist A4.2 / contract request C-Paging).
+     *
+     * <p>{@code ORDER BY q.created_at DESC, q.id DESC} is a total order — the
+     * id tiebreaker is what makes two consecutive pages unable to overlap or
+     * drop a row created during the scan.
+     */
+    @Select("<script>"
+            + "SELECT q.* FROM question q "
+            + "JOIN learning_space ls ON ls.id = q.space_id "
+            + "WHERE q.space_id = #{spaceId} AND ls.owner_subject = #{ownerSubject} "
+            + "  AND q.deleted_at IS NULL "
+            + "<if test='status != null'> AND q.status = #{status} </if>"
+            + "<if test='questionType != null'> AND q.question_type = #{questionType} </if>"
+            + "<if test='knowledgePointId != null'> AND EXISTS ("
+            + "  SELECT 1 FROM question_knowledge_point qkp "
+            + "  WHERE qkp.question_id = q.id AND qkp.knowledge_point_id = #{knowledgePointId})"
+            + "</if>"
+            + "ORDER BY q.created_at DESC, q.id DESC "
+            + "LIMIT #{limit} OFFSET #{offset}"
+            + "</script>")
+    List<Question> selectPageBySpaceOwnerFilters(@Param("spaceId") Long spaceId,
+                                                 @Param("ownerSubject") String ownerSubject,
+                                                 @Param("status") String status,
+                                                 @Param("questionType") String questionType,
+                                                 @Param("knowledgePointId") Long knowledgePointId,
+                                                 @Param("limit") int limit,
+                                                 @Param("offset") int offset);
+
+    /**
+     * Total rows matching the same filter block as
+     * {@link #selectPageBySpaceOwnerFilters}, so {@code totalElements} and the
+     * page content can never disagree.
+     */
+    @Select("<script>"
+            + "SELECT COUNT(*) FROM question q "
+            + "JOIN learning_space ls ON ls.id = q.space_id "
+            + "WHERE q.space_id = #{spaceId} AND ls.owner_subject = #{ownerSubject} "
+            + "  AND q.deleted_at IS NULL "
+            + "<if test='status != null'> AND q.status = #{status} </if>"
+            + "<if test='questionType != null'> AND q.question_type = #{questionType} </if>"
+            + "<if test='knowledgePointId != null'> AND EXISTS ("
+            + "  SELECT 1 FROM question_knowledge_point qkp "
+            + "  WHERE qkp.question_id = q.id AND qkp.knowledge_point_id = #{knowledgePointId})"
+            + "</if>"
+            + "</script>")
+    long countBySpaceOwnerFilters(@Param("spaceId") Long spaceId,
+                                  @Param("ownerSubject") String ownerSubject,
+                                  @Param("status") String status,
+                                  @Param("questionType") String questionType,
+                                  @Param("knowledgePointId") Long knowledgePointId);
+
     @Select("SELECT q.* FROM question q "
             + "JOIN learning_space ls ON ls.id = q.space_id "
             + "WHERE q.space_id = #{spaceId} AND ls.owner_subject = #{ownerSubject} "
