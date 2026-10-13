@@ -1,5 +1,6 @@
 package com.aistudy.server.admin.source.service;
 
+import com.aistudy.server.admin.source.dto.CreateManualSourceRequest;
 import com.aistudy.server.common.problem.ApiErrorCodes;
 import com.aistudy.server.common.problem.ApiException;
 import com.aistudy.server.ingestion.issue.entity.IngestionIssue;
@@ -13,9 +14,13 @@ import com.aistudy.server.source.asset.entity.SourceAsset;
 import com.aistudy.server.source.asset.mapper.SourceAssetMapper;
 import com.aistudy.server.source.content.entity.ContentBlock;
 import com.aistudy.server.source.content.mapper.ContentBlockMapper;
+import com.aistudy.server.source.content.service.ContentBlockService;
+import com.aistudy.server.source.content.service.PublishedRevisionRule;
+import com.aistudy.server.source.entity.Source;
 import com.aistudy.server.source.mapper.SourceMapper;
 import com.aistudy.server.source.page.entity.SourcePage;
 import com.aistudy.server.source.page.mapper.SourcePageMapper;
+import com.aistudy.server.source.service.SourceService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +54,7 @@ public class AdminSourceIngestionService {
     private final SourcePageMapper sourcePageMapper;
     private final ContentBlockMapper contentBlockMapper;
     private final SourceAssetMapper sourceAssetMapper;
+    private final SourceService sourceService;
 
     public AdminSourceIngestionService(SourceMapper sourceMapper,
                                        IngestionJobMapper ingestionJobMapper,
@@ -57,7 +63,8 @@ public class AdminSourceIngestionService {
                                        IngestionIssueMapper ingestionIssueMapper,
                                        SourcePageMapper sourcePageMapper,
                                        ContentBlockMapper contentBlockMapper,
-                                       SourceAssetMapper sourceAssetMapper) {
+                                       SourceAssetMapper sourceAssetMapper,
+                                       SourceService sourceService) {
         this.sourceMapper = sourceMapper;
         this.ingestionJobMapper = ingestionJobMapper;
         this.ingestionJobService = ingestionJobService;
@@ -66,6 +73,35 @@ public class AdminSourceIngestionService {
         this.sourcePageMapper = sourcePageMapper;
         this.contentBlockMapper = contentBlockMapper;
         this.sourceAssetMapper = sourceAssetMapper;
+        this.sourceService = sourceService;
+    }
+
+    /**
+     * ADMIN_MANUAL source with a real body (F-04 / D-01 / G-02).
+     *
+     * <p>Transport reaches persistence only through the owning
+     * {@link SourceService}, which writes the source row, the extraction
+     * revision and the page/block rows in one transaction; the ADMIN lane adds
+     * nothing here except the space-not-found shape, so the governance endpoint
+     * and any future owner-facing manual endpoint share one set of rules.
+     *
+     * @param adminSubject authenticated ADMIN subject (also the audit creator)
+     * @param spaceId      target space, which the admin must own
+     * @param request      validated title / body / format
+     * @return the persisted source, current revision pointer included
+     * @throws ApiException 404 when the space is not addressable, 400 for a
+     *         blank body, 413 when the body exceeds the text ingestion limit
+     */
+    @Transactional
+    public Source createManualSource(String adminSubject, Long spaceId,
+                                     CreateManualSourceRequest request) {
+        Source created = sourceService.createManual(adminSubject, spaceId,
+                request.title(), request.content(), request.markdown());
+        if (created == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCodes.SPACE_NOT_FOUND,
+                    "学习空间不存在。");
+        }
+        return created;
     }
 
     public List<Map<String, Object>> listSources(String query, Long spaceId, int page, int size) {
@@ -140,12 +176,28 @@ public class AdminSourceIngestionService {
      * Governance correction of extracted content. Both fields are optional and
      * applied in a single statement, so a request cannot leave a half-applied
      * edit behind.
+     *
+     * <p>Governance crosses owners, but it does not cross the
+     * published-content rule (F-26): a block that IS the content its source is
+     * currently serving while {@code PUBLISHED} is refused with 409, because an
+     * in-place rewrite there would change text that Search/AI answers and
+     * KnowledgePointSource provenance already cite, without a new revision or
+     * a re-review. Correcting live content means re-extracting into a new
+     * revision; blocks of a draft or under-review revision stay editable here.
      */
     @Transactional
     public Map<String, Object> editBlock(Long blockId, Long spaceId, String normalizedText,
                                          String blockType) {
-        if (contentBlockMapper.selectByIdAndSpace(blockId, spaceId) == null) {
+        ContentBlock current = contentBlockMapper.selectByIdAndSpace(blockId, spaceId);
+        if (current == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCodes.NOT_FOUND, "内容块不存在。");
+        }
+        Source blockSource = current.getSourceId() == null ? null
+                : sourceMapper.selectByIdAndSpace(current.getSourceId(), spaceId);
+        if (PublishedRevisionRule.isLivePublishedContent(blockSource, current.getExtractionRevisionId())) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    ContentBlockService.ERROR_PUBLISHED_REVISION_READONLY,
+                    "该内容块属于已发布版本，请重新抽取后在新版本中修订。");
         }
         contentBlockMapper.updateTextAndTypeByIdAndSpace(
                 blockId, spaceId, normalizedText, blockType, LocalDateTime.now());

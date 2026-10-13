@@ -57,6 +57,19 @@ public class IngestionIssueService {
     }
 
     /**
+     * Append-only addition for the Source publish gate, reached through
+     * {@code SourceExtractionGateway} because the source module may not import
+     * this one (see {@code ModuleBoundaryTest}).
+     *
+     * @return number of unresolved blocker rows (severity HIGH, status OPEN)
+     *         raised against one source inside one space; {@code 0} means the
+     *         source may be published
+     */
+    public int countUnresolvedBlockers(Long spaceId, Long sourceId) {
+        return ingestionIssueMapper.countOpenBlockersBySource(spaceId, sourceId);
+    }
+
+    /**
      * Pipeline producer for automatic issues (C-5.10).
      * Low OCR confidence → OCR_LOW_CONFIDENCE; partial extraction → EXTRACTION_PARTIAL_FAILURE.
      */
