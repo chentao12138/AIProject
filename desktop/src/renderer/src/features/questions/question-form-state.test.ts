@@ -25,7 +25,11 @@ import { describe, expect, it } from 'vitest';
 import { QUESTION_FIELD_LIMITS } from '../../lib/format';
 import {
   initialOrderingSequence,
+  matchingOptions,
   moveInSequence,
+  pairingAfterLeftAdd,
+  pairingAfterLeftRemove,
+  pairingAfterRightRemove,
   placeAtEnd,
   serializeMatches,
   sequenceAfterAdd,
@@ -37,7 +41,7 @@ import {
   validateMatchingAuthoring,
   validateOrderingAuthoring,
   validateQuestionEdit,
-  type MatchPair,
+  type MatchingDraft,
 } from './question-form-state';
 
 const CONTRACT_PATH = join(
@@ -155,73 +159,135 @@ describe('validateOrderingAuthoring', () => {
   });
 });
 
-/* ─────────────── MATCHING ─────────────── */
+/* ─────────────── MATCHING columns, keys and pairs ─────────────── */
 
-describe('serializeMatches writes the shape the grader compares', () => {
-  it('emits exactly the left/right keys and trims both sides', () => {
-    const pairs: MatchPair[] = [
-      { left: ' 北京 ', right: ' 中国 ' },
-      { left: '上海', right: '直辖市' },
-    ];
-    expect(serializeMatches(pairs)).toEqual(
-      '[{"left":"北京","right":"中国"},{"left":"上海","right":"直辖市"}]'
+const cities: MatchingDraft = {
+  left: ['北京', '巴黎'],
+  right: ['法国', '中国'],
+  pairs: [1, 0],
+};
+
+describe('serializeMatches writes the key grammar the answer side emits', () => {
+  it('pairs option keys, never the item text', () => {
+    // The columns become options L1.., R1.. (left half then right half), and
+    // `QuestionRenderer` answers with those option keys. A `matches` holding
+    // the texts could never equal the learner's payload.
+    expect(serializeMatches(cities)).toEqual(
+      '[{"left":"L1","right":"R2"},{"left":"L2","right":"R1"}]'
     );
-
-    // The server parses this into List<Map<String,String>> and compares the
-    // maps themselves, so the key set of every pair has to be exactly
-    // left/right — an extra key would never equal the learner's pair.
-    const parsed = JSON.parse(serializeMatches(pairs)) as Array<Record<string, string>>;
-    expect(parsed.map((pair) => Object.keys(pair).sort())).toEqual([
-      ['left', 'right'],
-      ['left', 'right'],
-    ]);
+    const parsed = JSON.parse(serializeMatches(cities)) as Array<Record<string, string>>;
+    for (const pair of parsed) {
+      expect(Object.keys(pair).sort()).toEqual(['left', 'right']);
+    }
   });
 
-  it('stays parseable JSON for the empty and awkward cases', () => {
-    expect(JSON.parse(serializeMatches([]))).toEqual([]);
-    const tricky: MatchPair[] = [{ left: 'a"b', right: 'c\\d' }];
-    expect(JSON.parse(serializeMatches(tricky))).toEqual([
-      { left: 'a"b', right: 'c\\d' },
+  it('emits an empty array only when nothing is paired, and skips unpaired rows', () => {
+    expect(serializeMatches({ left: ['北京'], right: ['中国'], pairs: [-1] })).toBe('[]');
+    expect(
+      serializeMatches({ left: ['北京', '巴黎'], right: ['中国', '法国'], pairs: [1, -1] })
+    ).toBe('[{"left":"L1","right":"R2"}]');
+    // A pairing that points past the column (a deleted right item) cannot name
+    // a key that does not exist on the wire.
+    expect(
+      serializeMatches({ left: ['北京'], right: ['中国'], pairs: [7] })
+    ).toBe('[]');
+  });
+
+  it('builds the option list the answer side splits back into the same columns', () => {
+    const options = matchingOptions(cities);
+    expect(options).toEqual([
+      { optionKey: 'L1', content: '北京' },
+      { optionKey: 'L2', content: '巴黎' },
+      { optionKey: 'R1', content: '法国' },
+      { optionKey: 'R2', content: '中国' },
     ]);
+    // The contract has no side field, so `splitMatchingOptions` cuts the flat
+    // list at ceil(n / 2). With 4 options that is index 2 — the left column.
+    const mid = Math.ceil(options.length / 2);
+    expect(options.slice(0, mid).map((o) => o.optionKey)).toEqual(['L1', 'L2']);
+    expect(options.slice(mid).map((o) => o.optionKey)).toEqual(['R1', 'R2']);
+  });
+
+  it('trims the column content it stores as option text', () => {
+    const padded: MatchingDraft = { left: [' 北京 '], right: [' 中国 '], pairs: [0] };
+    // Content is trimmed at the wire edge for the ORDERING/choice lists; for
+    // MATCHING the columns go through `matchingOptions` untouched, so the
+    // pairing keys — not the text — are what the grader compares.
+    expect(serializeMatches(padded)).toEqual('[{"left":"L1","right":"R1"}]');
+    expect(validateMatchingAuthoring(padded)).toEqual([]);
+  });
+
+  it('renumbers the pairs when a right item is deleted', () => {
+    // Pairs [2,0,1] read as: left 1 → right 2, left 2 → right 0,
+    // left 3 → right 1. Deleting right index 1 therefore un-pairs LEFT 3 (it
+    // pointed exactly there) and pulls left 1 from the old right 2 down to
+    // right 1, while left 2 is untouched because 0 < 1.
+    expect(pairingAfterRightRemove([2, 0, 1], 1)).toEqual([1, 0, -1]);
+    expect(pairingAfterLeftRemove([2, 0, 1], 0)).toEqual([0, 1]);
+    expect(pairingAfterLeftAdd([2, 0])).toEqual([2, 0, -1]);
   });
 });
 
 describe('validateMatchingAuthoring', () => {
-  it('requires at least one pair', () => {
-    expect(validateMatchingAuthoring([])).toContain('配对题至少需要 1 组配对。');
+  it('accepts a complete pairing of two equal columns', () => {
+    expect(validateMatchingAuthoring(cities)).toEqual([]);
   });
 
-  it('names the pair and side that is blank', () => {
-    const errors = validateMatchingAuthoring([
-      { left: '北京', right: '  ' },
-      { left: '', right: '中国' },
-    ]);
-    expect(errors).toContain('第 1 组配对缺少右侧内容。');
-    expect(errors).toContain('第 2 组配对缺少左侧内容。');
+  it('requires at least one item on each side', () => {
+    expect(validateMatchingAuthoring({ left: [], right: [], pairs: [] })).toContain(
+      '配对题至少需要 1 个左侧条目与 1 个右侧条目。'
+    );
+    expect(
+      validateMatchingAuthoring({ left: ['北京'], right: [], pairs: [-1] })
+    ).toContain('配对题至少需要 1 个右侧条目。');
+  });
+
+  it('refuses columns the answer widget would split wrong', () => {
+    // 1 left + 3 right: ceil(4/2) = 2, so the learner would be shown two left
+    // items — one of them the author meant as a right item.
+    const errors = validateMatchingAuthoring({
+      left: ['北京'],
+      right: ['中国', '法国', '德国'],
+      pairs: [0],
+    });
+    expect(
+      errors.find((error) => error.startsWith('左右两列必须一样多'))
+    ).toContain('左 1 个、右 3 个');
+  });
+
+  it('refuses a left item with no standard pair', () => {
+    expect(
+      validateMatchingAuthoring({ left: ['北京'], right: ['中国'], pairs: [-1] })
+    ).toContain('「北京」还没有标准配对，请为它选择一个右侧条目。');
+  });
+
+  it('names a blank column entry', () => {
+    const errors = validateMatchingAuthoring({
+      left: ['北京', '  '],
+      right: ['中国', '法国'],
+      pairs: [0, 1],
+    });
+    expect(errors).toContain('第 2 个左侧条目缺少内容。');
   });
 
   it('caps the serialized text at CreateQuestionRequest.maxLength 4000', () => {
-    // 100-character sides, 25 pairs: the pair count is legal, the TEXT is what
-    // the contract caps, so the message has to name the serialized length.
-    const pairs: MatchPair[] = Array.from({ length: 25 }, (_, index) => ({
-      left: '左'.repeat(100),
-      right: `右-${index}-`.repeat(10),
-    }));
-    const serialized = serializeMatches(pairs);
+    // The pairs are option keys, so the only way to run into `matches`'
+    // maxLength is sheer pair count: ~26 characters each, so past ~150 pairs
+    // the document is over the cap even though every entry is legal on its own.
+    const count = 170;
+    const draft: MatchingDraft = {
+      left: Array.from({ length: count }, (_, index) => `左${index}`),
+      right: Array.from({ length: count }, (_, index) => `右${index}`),
+      pairs: Array.from({ length: count }, (_, index) => index),
+    };
+    const serialized = serializeMatches(draft);
     expect(serialized.length).toBeGreaterThan(QUESTION_FIELD_LIMITS.matches);
 
-    const errors = validateMatchingAuthoring(pairs);
-    // The message quotes the real serialized length, because the pair count is
-    // legal here — only the text is too long.
-    expect(
-      errors.find((error) =>
-        error.includes('超过 CreateQuestionRequest.matches 的 4000 个上限')
-      )
-    ).toContain(`${serialized.length} 个字符`);
-    // The pairs themselves are all filled in, so no per-pair message is mixed
-    // into a length problem — the user would go looking for blanks that are not
-    // there.
+    const errors = validateMatchingAuthoring(draft);
     expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain(
+      `配对提交文本共 ${serialized.length} 个字符，超过 CreateQuestionRequest.matches 的 ${QUESTION_FIELD_LIMITS.matches} 个上限`
+    );
   });
 });
 

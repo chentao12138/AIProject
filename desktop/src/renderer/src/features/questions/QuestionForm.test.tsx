@@ -254,7 +254,7 @@ describe('QuestionForm — ORDERING authoring (G02)', () => {
 });
 
 describe('QuestionForm — MATCHING authoring (G02)', () => {
-  async function fillPairs(user: ReturnType<typeof userEvent.setup>) {
+  async function fillColumns(user: ReturnType<typeof userEvent.setup>) {
     await fillStem(user, '把城市与所属国家配对。');
     await user.type(screen.getByTestId('match-left-0'), ' 北京 ');
     await user.type(screen.getByTestId('match-right-0'), ' 中国 ');
@@ -262,11 +262,21 @@ describe('QuestionForm — MATCHING authoring (G02)', () => {
     await user.type(screen.getByTestId('match-right-1'), '法国');
   }
 
-  it('sends matches as a JSON string whose pairs carry exactly left and right', async () => {
+  function pairRow(leftIndex: number) {
+    return screen.getByTestId(`match-pair-${leftIndex}`);
+  }
+
+  async function pairAll(user: ReturnType<typeof userEvent.setup>) {
+    await user.selectOptions(pairRow(0), '0');
+    await user.selectOptions(pairRow(1), '1');
+  }
+
+  it('sends the columns as options and the standard pairs as key references', async () => {
     const user = userEvent.setup();
     const api = renderForm();
     await pickType(user, 'MATCHING');
-    await fillPairs(user);
+    await fillColumns(user);
+    await pairAll(user);
 
     await submit(user);
 
@@ -274,23 +284,30 @@ describe('QuestionForm — MATCHING authoring (G02)', () => {
     const body = sentBody(api);
     expect(body.questionType).toBe('MATCHING');
     expect(body.stem).toBe('把城市与所属国家配对。');
+    // The learner's widget rebuilds the two columns by cutting the flat option
+    // list in half (`splitMatchingOptions`), so the columns must be stored
+    // left-first — and `matches` has to name the option keys, because that is
+    // what the answer payload sends. Pairs of text would grade nothing.
+    expect(body.options).toEqual([
+      { optionKey: 'L1', content: ' 北京 ' },
+      { optionKey: 'L2', content: '巴黎' },
+      { optionKey: 'R1', content: ' 中国 ' },
+      { optionKey: 'R2', content: '法国' },
+    ]);
     expect(typeof body.matches).toBe('string');
-    // No option list is invented for a matching question: the pairs are the
-    // answer, and `gradeMatching` compares whole maps, so any extra pair key
-    // (or an options list the grader ignores) would be a lie on the wire.
-    expect(body).not.toHaveProperty('options');
-
     const parsed = JSON.parse(String(body.matches)) as Array<Record<string, string>>;
     expect(parsed).toEqual([
-      { left: '北京', right: '中国' },
-      { left: '巴黎', right: '法国' },
+      { left: 'L1', right: 'R1' },
+      { left: 'L2', right: 'R2' },
     ]);
     for (const pair of parsed) {
+      // `gradeMatching` compares whole maps, so a stray or renamed key is a
+      // pair that can never match.
       expect(Object.keys(pair).sort()).toEqual(['left', 'right']);
     }
   });
 
-  it('blocks a pair with a blank side before the request goes out', async () => {
+  it('blocks a blank column entry and an unpaired left item before the request goes out', async () => {
     const user = userEvent.setup();
     const api = renderForm();
     await pickType(user, 'MATCHING');
@@ -299,44 +316,55 @@ describe('QuestionForm — MATCHING authoring (G02)', () => {
 
     await submit(user);
 
-    expect(await screen.findByText('第 1 组配对缺少右侧内容。')).toBeInTheDocument();
-    expect(screen.getByText('第 2 组配对缺少左侧内容。')).toBeInTheDocument();
+    expect(await screen.findByText('第 1 个右侧条目缺少内容。')).toBeInTheDocument();
+    expect(screen.getByText('「北京」还没有标准配对，请为它选择一个右侧条目。')).toBeInTheDocument();
     expect(api.createQuestion).not.toHaveBeenCalled();
   });
 
-  it('blocks when every pair has been deleted', async () => {
+  it('blocks when a column has nothing left in it', async () => {
     const user = userEvent.setup();
     const api = renderForm();
     await pickType(user, 'MATCHING');
     await fillStem(user, '配对题');
-    await user.click(screen.getByRole('button', { name: '删除配对 1' }));
-    await user.click(screen.getByRole('button', { name: '删除配对 1' }));
+
+    await user.click(screen.getByRole('button', { name: '删除左侧条目 1' }));
+    await user.click(screen.getByRole('button', { name: '删除左侧条目 1' }));
 
     await submit(user);
 
-    expect(await screen.findByText('配对题至少需要 1 组配对。')).toBeInTheDocument();
+    expect(await screen.findByText('配对题至少需要 1 个左侧条目。')).toBeInTheDocument();
     expect(api.createQuestion).not.toHaveBeenCalled();
   });
 
-  it('shows the serialized length against the contract cap while typing', async () => {
+  it('shows the real serialized payload against the contract cap', async () => {
     const user = userEvent.setup();
     renderForm();
     await pickType(user, 'MATCHING');
 
-    const counter = await screen.findByTestId('matches-length');
-    expect(counter).toHaveTextContent(
-      `${QUESTION_FIELD_LIMITS.matches} 个字符`
-    );
-    // A blank pair already costs something: the counter is the real payload,
-    // not a count of characters the user typed.
-    expect(counter).toHaveTextContent('提交文本');
+    // Two unpaired rows serialize to `[]`: the counter reports the payload the
+    // server would receive, not the characters typed.
+    const wire = await screen.findByTestId('matches-wire');
+    expect(wire).toHaveTextContent('matches = []');
+    expect(wire).toHaveTextContent(`${QUESTION_FIELD_LIMITS.matches} 字符`);
+
+    await fillColumns(user);
+    await pairAll(user);
+    expect(screen.getByTestId('matches-wire')).toHaveTextContent('"left":"L1","right":"R1"');
   });
 
   it('previews the pairs as readable text, not as JSON to type', async () => {
     const user = userEvent.setup();
     renderForm();
     await pickType(user, 'MATCHING');
-    await fillPairs(user);
+    await fillColumns(user);
+
+    // Before pairing anything: the author is owed the unpaired state, not a
+    // silently optimistic preview.
+    expect(
+      screen.getAllByTestId('matches-preview-item').map((node) => node.textContent)
+    ).toEqual(['北京 → （未配对）', '巴黎 → （未配对）']);
+
+    await pairAll(user);
 
     const preview = await screen.findAllByTestId('matches-preview-item');
     expect(preview.map((node) => node.textContent)).toEqual([
@@ -344,6 +372,7 @@ describe('QuestionForm — MATCHING authoring (G02)', () => {
       '巴黎 → 法国',
     ]);
   });
+
 });
 
 describe('QuestionForm — required answer per type (W09)', () => {

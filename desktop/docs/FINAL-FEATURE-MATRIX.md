@@ -86,20 +86,30 @@ being carried into version control.
 
 What this does **not** prove, and remains open A-class work:
 
-- The installer was produced, not installed. R02/A11.1 (install → launch →
-  shortcut → uninstall → user-data policy) is unverified.
-- **What has been launched:** `dist/win-unpacked/AIStudy.exe` (the unpacked
-  build, not the installed app) starts, creates the `AIStudy` window, and the
-  renderer paints. With the backend down it lands on the documented bootstrap
-  failure state — "无法连接到后端服务。请确认服务已启动后重试。" with a 重试
-  action and a "用其他账号登录" escape — rather than a blank window or a crash,
-  which also exercises the `app://` load path and the production CSP.
-  This is not the R02 pass criterion: the NSIS install/uninstall cycle and the
-  signed-in journeys are still unrun.
+- **R02 install → launch → shortcuts → uninstall: RUN, 2026-10-14, and it passed.**
+  `dist/AIStudy Setup 0.1.0.exe` (111,466,790 bytes, timestamp matching this
+  commit) installed per-user silently (exit 0): `%LOCALAPPDATA%\Programs\AIStudy\AIStudy.exe`
+  246,201,856 bytes with `productVersion 0.1.0.0`, start-menu and desktop
+  shortcuts created, `Uninstall AIStudy.exe` present. Launching the installed
+  binary created a window titled `AIStudy` with 4 processes and no crash, and
+  `%APPDATA%\AIStudy` was created. Silent uninstall removed the install directory,
+  both shortcuts and the `HKCU\...\Uninstall` entry while **keeping**
+  `%APPDATA%\AIStudy\config.json`, which is exactly the
+  `deleteAppDataOnUninstall: false` policy.
+  One finding for whoever runs this by hand: the NSIS uninstaller is
+  **asynchronous** — its process returned before anything was deleted, so
+  checking the exit code (or the files, seconds later) reads as a failed
+  uninstall. Wait for the directory to disappear.
+- **Not proven by that run:** that the installed renderer *paints the app*, and
+  that a configured backend origin is actually used. Anonymous by design, the app
+  issues **zero** requests before login (there is no health probe, per PHASE 7),
+  so neither could be observed without credentials — and the packaged build has
+  DevTools disabled (ADR-037), so there is no console to read. That is what R03
+  still needs: a desktop test account.
 - R03 installed-app auth (login → restart → restore → logout → anonymous
-  restart) needs a running backend plus a test account, as do the R04/R05
-  end-to-end journeys; every contract-gated row above is still gated.
-- 755 passing tests cover renderer behaviour against mocked client responses.
+  restart) and the R04/R05 end-to-end journeys are gated on that same account;
+  the contract-gated rows in the Blocked table above are gated on backend fields.
+- 951 passing tests cover renderer behaviour against mocked client responses.
   They cannot detect a contract that does not exist, so no E2E PASS is claimed
   from this table (see `docs/SMOKE-INSTRUCTIONS.md`).
 

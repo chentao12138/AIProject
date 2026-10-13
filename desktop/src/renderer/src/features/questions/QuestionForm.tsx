@@ -50,8 +50,16 @@ import {
   type OptionInput,
 } from './question-form-rules';
 import {
+  emptyMatchingDraft,
   initialOrderingSequence,
+  matchingLeftKey,
+  matchingOptions,
+  matchingPreviewRows,
+  matchingRightKey,
   moveInSequence,
+  pairingAfterLeftAdd,
+  pairingAfterLeftRemove,
+  pairingAfterRightRemove,
   placeAtEnd,
   serializeMatches,
   sequenceAfterAdd,
@@ -61,7 +69,7 @@ import {
   unplaceAtPosition,
   validateMatchingAuthoring,
   validateOrderingAuthoring,
-  type MatchPair,
+  type MatchingDraft,
 } from './question-form-state';
 
 /** The types this form shows but refuses, with the contract gap for each. */
@@ -73,8 +81,6 @@ const ITEM_TYPES: readonly QuestionType[] = [
   'MULTIPLE_CHOICE',
   'ORDERING',
 ];
-
-const EMPTY_PAIR: MatchPair = { left: '', right: '' };
 
 /** The copy that names the read-side gap of the two new types. */
 function oneWayNotice(type: QuestionType): string | null {
@@ -101,7 +107,8 @@ export function QuestionForm() {
   const [referenceAnswer, setReferenceAnswer] = useState('');
   /** 0-based indexes into `options`, in the standard order. See question-form-state.ts. */
   const [ordering, setOrdering] = useState<number[]>(() => initialOrderingSequence(2));
-  const [pairs, setPairs] = useState<MatchPair[]>([{ ...EMPTY_PAIR }, { ...EMPTY_PAIR }]);
+  /** Two columns plus the standard pairing — see `MatchingDraft` in question-form-state.ts. */
+  const [matching, setMatching] = useState<MatchingDraft>(() => emptyMatchingDraft());
   const [knowledgePointIds, setKnowledgePointIds] = useState<number[]>([]);
   const [showValidation, setShowValidation] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -155,9 +162,17 @@ export function QuestionForm() {
           .map((o) => ({ optionKey: o.optionKey.trim(), content: o.content.trim() }));
         body.correctOrder = toCorrectOrder(ordering);
       } else if (questionType === 'MATCHING') {
-        // `matches` is a string the server stores verbatim and grades by
-        // whole-map equality, so `serializeMatches` is the only shape allowed.
-        body.matches = serializeMatches(pairs);
+        // A matching question IS its two columns plus the key between them:
+        // `QuestionRenderer` splits `options` at ceil(n/2) into the left and
+        // right columns and answers with their OPTION KEYS
+        // (answer-grammar.ts:73-78, QuestionRenderer.tsx:193-221), and
+        // `gradeMatching` compares that set of maps with the stored
+        // `matchesJson`. So the columns go up as options AND the pairs go up as
+        // `matches`, with the same generated keys in both — a `matches` alone
+        // would be a key nobody can answer against, and free text in it could
+        // never equal an option key.
+        body.options = matchingOptions(matching);
+        body.matches = serializeMatches(matching);
       }
       return api
         .createQuestion(requireId(spaceId, 'space id'), body)
@@ -191,7 +206,7 @@ export function QuestionForm() {
       return [...common, ...validateOrderingAuthoring(options, ordering)];
     }
     if (questionType === 'MATCHING') {
-      return [...common, ...validateMatchingAuthoring(pairs)];
+      return [...common, ...validateMatchingAuthoring(matching)];
     }
     return common;
   }, [
@@ -204,7 +219,7 @@ export function QuestionForm() {
     referenceAnswer,
     explanation,
     ordering,
-    pairs,
+    matching,
   ]);
 
   if (spaceId === null) {
@@ -260,18 +275,63 @@ export function QuestionForm() {
     setOrdering((prev) => placeAtEnd(prev, itemIndex));
   }
 
-  function addPair() {
-    setPairs([...pairs, { ...EMPTY_PAIR }]);
+  function updateLeft(index: number, content: string) {
+    setMatching((prev) => {
+      const left = [...prev.left];
+      left[index] = content;
+      return { ...prev, left };
+    });
   }
 
-  function updatePair(index: number, side: keyof MatchPair, value: string) {
-    const next = [...pairs];
-    next[index] = { ...next[index], [side]: value };
-    setPairs(next);
+  function addLeft() {
+    setMatching((prev) => ({
+      ...prev,
+      left: [...prev.left, ''],
+      pairs: pairingAfterLeftAdd(prev.pairs),
+    }));
   }
 
-  function removePair(index: number) {
-    setPairs(pairs.filter((_, i) => i !== index));
+  function removeLeft(index: number) {
+    setMatching((prev) => ({
+      ...prev,
+      left: prev.left.filter((_, i) => i !== index),
+      pairs: pairingAfterLeftRemove(prev.pairs, index),
+    }));
+  }
+
+  function updateRight(index: number, content: string) {
+    setMatching((prev) => {
+      const right = [...prev.right];
+      right[index] = content;
+      return { ...prev, right };
+    });
+  }
+
+  function addRight() {
+    setMatching((prev) => ({ ...prev, right: [...prev.right, ''] }));
+  }
+
+  /**
+   * Deleting a right item also un-pairs every left that pointed at it —
+   * renumbering silently instead would retarget those pairs onto the neighbour.
+   */
+  function removeRight(index: number) {
+    setMatching((prev) => ({
+      ...prev,
+      right: prev.right.filter((_, i) => i !== index),
+      pairs: pairingAfterRightRemove(prev.pairs, index),
+    }));
+  }
+
+  function setPair(leftIndex: number, rightIndex: number) {
+    setMatching((prev) => {
+      const pairs = [...prev.pairs];
+      while (pairs.length <= leftIndex) {
+        pairs.push(-1);
+      }
+      pairs[leftIndex] = rightIndex;
+      return { ...prev, pairs };
+    });
   }
 
   function toggleKnowledgePoint(id: number, checked: boolean) {
@@ -323,7 +383,8 @@ export function QuestionForm() {
 
   const unplaced = unplacedItemIndexes(ordering, options.length);
   const correctOrderPreview = toCorrectOrder(ordering);
-  const matchesPreview = serializeMatches(pairs);
+  const matchesPreviewText = serializeMatches(matching);
+  const matchingPreview = matchingPreviewRows(matching);
   const oneWay = questionType === 'ORDERING' || questionType === 'MATCHING'
     ? oneWayNotice(questionType)
     : null;
@@ -511,56 +572,139 @@ export function QuestionForm() {
           <div className="form__field" data-testid="matching-editor">
             <span className="form__label" id="q-matching-label">配对条目</span>
             <p className="field__hint">
-              每组只有 <code>left</code> 与 <code>right</code> 两个字段：服务端把这段
-              JSON 原样存成 matchesJson，并按整组比对判分，多一个键都会让正确答案判不出对。
-              这里填的是配对文本本身，不是选项标识。
+              左右两列就是这道题的选项（依次存成 L1…、R1…），
+              标准配对提交为 CreateQuestionRequest.matches 一个字符串，形如{' '}
+              <code>{'[{"left":"L1","right":"R2"}]'}</code>
+              ：服务端原样存成 matchesJson，判分时按整组 left / right
+              比对，多一个键或值对不上就永远判不出对。
+              答题控件读的是选项标识，所以这里排的是「哪个左项配哪个右项」，
+              而不是把文本再抄一遍。
             </p>
-            {pairs.map((pair, idx) => (
-              <div key={idx} className="form__row">
-                <input
-                  className="input form__row-main"
-                  aria-label={`配对 ${idx + 1} 左侧`}
-                  data-testid={`match-left-${idx}`}
-                  value={pair.left}
-                  onChange={(e) => updatePair(idx, 'left', e.target.value)}
-                  placeholder={`左侧 ${idx + 1}`}
-                  disabled={busy}
-                />
-                <span className="muted" aria-hidden="true">↔</span>
-                <input
-                  className="input form__row-main"
-                  aria-label={`配对 ${idx + 1} 右侧`}
-                  data-testid={`match-right-${idx}`}
-                  value={pair.right}
-                  onChange={(e) => updatePair(idx, 'right', e.target.value)}
-                  placeholder={`右侧 ${idx + 1}`}
-                  disabled={busy}
-                />
+
+            <div className="form__row">
+              <div className="form__row-main">
+                <span className="form__label">左列</span>
+                {matching.left.map((content, idx) => (
+                  <div key={idx} className="form__row">
+                    <span className="muted" aria-hidden="true">
+                      {matchingLeftKey(idx)}
+                    </span>
+                    <input
+                      className="input form__row-main"
+                      aria-label={`左侧条目 ${idx + 1}`}
+                      data-testid={`match-left-${idx}`}
+                      value={content}
+                      onChange={(e) => updateLeft(idx, e.target.value)}
+                      placeholder={`左侧 ${idx + 1}`}
+                      maxLength={QUESTION_FIELD_LIMITS.optionContent}
+                      disabled={busy}
+                    />
+                    <Button
+                      type="button"
+                      variant="danger"
+                      aria-label={`删除左侧条目 ${idx + 1}`}
+                      onClick={() => removeLeft(idx)}
+                      disabled={busy}
+                    >
+                      删除
+                    </Button>
+                  </div>
+                ))}
                 <Button
                   type="button"
-                  variant="danger"
-                  aria-label={`删除配对 ${idx + 1}`}
-                  onClick={() => removePair(idx)}
+                  variant="secondary"
+                  onClick={addLeft}
                   disabled={busy}
+                  data-testid="match-add-left"
                 >
-                  删除
+                  添加左列
                 </Button>
               </div>
-            ))}
-            <Button type="button" variant="secondary" onClick={addPair} disabled={busy}>
-              添加配对
-            </Button>
+
+              <div className="form__row-main">
+                <span className="form__label">右列</span>
+                {matching.right.map((content, idx) => (
+                  <div key={idx} className="form__row">
+                    <span className="muted" aria-hidden="true">
+                      {matchingRightKey(idx)}
+                    </span>
+                    <input
+                      className="input form__row-main"
+                      aria-label={`右侧条目 ${idx + 1}`}
+                      data-testid={`match-right-${idx}`}
+                      value={content}
+                      onChange={(e) => updateRight(idx, e.target.value)}
+                      placeholder={`右侧 ${idx + 1}`}
+                      maxLength={QUESTION_FIELD_LIMITS.optionContent}
+                      disabled={busy}
+                    />
+                    <Button
+                      type="button"
+                      variant="danger"
+                      aria-label={`删除右侧条目 ${idx + 1}`}
+                      onClick={() => removeRight(idx)}
+                      disabled={busy}
+                    >
+                      删除
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={addRight}
+                  disabled={busy}
+                  data-testid="match-add-right"
+                >
+                  添加右列
+                </Button>
+              </div>
+            </div>
+
+            <div className="form__field" data-testid="matching-pairing">
+              <span className="form__label">标准配对</span>
+              {matching.left.map((content, leftIndex) => (
+                <div key={leftIndex} className="form__row">
+                  <span className="input form__row-main" aria-hidden="true">
+                    {content.trim() === '' ? `左侧 ${leftIndex + 1}` : content.trim()}
+                  </span>
+                  <select
+                    className="select"
+                    aria-label={`左侧 ${matchingLeftKey(leftIndex)} 的标准配对`}
+                    data-testid={`match-pair-${leftIndex}`}
+                    value={
+                      matching.pairs[leftIndex] >= 0 &&
+                      matching.pairs[leftIndex] < matching.right.length
+                        ? String(matching.pairs[leftIndex])
+                        : ''
+                    }
+                    onChange={(e) => setPair(leftIndex, Number(e.target.value))}
+                    disabled={busy}
+                  >
+                    <option value="">—</option>
+                    {matching.right.map((right, rightIndex) => (
+                      <option key={rightIndex} value={String(rightIndex)}>
+                        {matchingRightKey(rightIndex)}:{' '}
+                        {right.trim() === '' ? `右侧 ${rightIndex + 1}` : right.trim()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+
             <ul className="point-list" data-testid="matches-preview">
-              {pairs.map((pair, idx) => (
-                <li key={idx} data-testid="matches-preview-item">
-                  {(pair.left.trim() === '' ? '（空）' : pair.left.trim())}
+              {matchingPreview.map((row) => (
+                <li key={row.left} data-testid="matches-preview-item">
+                  {row.left}
                   {' → '}
-                  {(pair.right.trim() === '' ? '（空）' : pair.right.trim())}
+                  {row.right}
                 </li>
               ))}
             </ul>
-            <p className="field__hint" data-testid="matches-length">
-              提交文本 {matchesPreview.length} / {QUESTION_FIELD_LIMITS.matches} 个字符
+            <p className="field__hint" data-testid="matches-wire">
+              matches = {matchesPreviewText}（{matchesPreviewText.length} /{' '}
+              {QUESTION_FIELD_LIMITS.matches} 字符）
             </p>
             {oneWay && (
               <p className="form__note" role="note" data-testid="matching-oneway-notice">

@@ -24,7 +24,9 @@
  *    grades by whole-map set equality
  *    (`QuestionAnswerEvaluator.gradeMatching`, lines 152-181). A pair carrying
  *    any key besides `left` / `right` therefore never equals the learner's pair,
- *    so `serializeMatches` is the only place pairs become wire text.
+ *    so `serializeMatches` is the only place pairs become wire text — and the
+ *    values in it are OPTION KEYS, because that is what the answer side puts in
+ *    `matchingAnswer` (see {@link MatchingDraft}).
  *  - neither type's stored answer can be read back: `QuestionAnswerView` has no
  *    `correctOrder` / `matchesJson`. Authoring is one-way on purpose; the
  *    review copy in `lib/format.ts` says so and nothing here fakes it.
@@ -34,10 +36,10 @@ import { QUESTION_FIELD_LIMITS } from '../../lib/format';
 import type { OptionInput } from './question-form-rules';
 
 /**
- * One authoring pair. Exactly the two keys the server's grader compares —
- * never add a third (an `id`, a `sortOrder`, a note) without renaming this
- * shape, because the extra key travels into `matches` and silently breaks
- * grading for every answer to the question.
+ * One pair as it travels on the wire. Exactly the two keys the server's grader
+ * compares — never add a third (an `id`, a `sortOrder`, a note), because the
+ * extra key lands in `matchesJson` and silently breaks grading for every
+ * answer to the question. The values are option keys, not item text.
  */
 export interface MatchPair {
   left: string;
@@ -149,23 +151,164 @@ export function toCorrectOrder(sequence: number[]): number[] {
   return sequence.map((index) => index + 1);
 }
 
-/* ─────────────── MATCHING serialization ─────────────── */
+/* ─────────────── MATCHING columns, keys and pairs ─────────────── */
 
 /**
- * `matches` as the server wants it: a JSON array of `{"left":…,"right":…}`.
+ * The authoring model for a MATCHING question.
+ *
+ * NOT a list of `{left,right}` texts. `QuestionRenderer` builds the learner's
+ * answer out of the question's OPTIONS
+ * (`components/answer-grammar.ts:73-78` + `QuestionRenderer.tsx:193-221`):
+ * `splitMatchingOptions` takes the first half of the option list as the left
+ * column, and the pair it serializes into `matchingAnswer` is
+ * `{left: leftOptionKey, right: rightOptionKey}`. `gradeMatching`
+ * (QuestionAnswerEvaluator.java:169-176) then compares that set of maps with
+ * the stored `matchesJson` for equality. So the pairs an author writes only
+ * grade correctly when their `left` / `right` values are the very option keys
+ * the answer side will emit — free text would be a pair nobody can produce.
+ *
+ * Hence: two columns of content, plus the standard pairing as
+ * leftIndex → rightIndex, and everything on the wire derived from those.
+ */
+export interface MatchingDraft {
+  /** Left column, in the order the learner will see it. */
+  left: string[];
+  /** Right column, in the order the learner will see it. */
+  right: string[];
+  /**
+   * `pairs[i]` is the index into `right` that item `left[i]` belongs to, or -1
+   * when it is not paired yet. Indexes rather than keys so that removing a
+   * right item can renumber them in one place.
+   */
+  pairs: number[];
+}
+
+/** Option keys that stay readable in the review list and never collide. */
+export function matchingLeftKey(index: number): string {
+  return `L${index + 1}`;
+}
+
+export function matchingRightKey(index: number): string {
+  return `R${index + 1}`;
+}
+
+/**
+ * The option list the question is stored with: the whole left column first,
+ * then the whole right column. That is what makes `splitMatchingOptions` cut
+ * the list back into the same two columns — see {@link matchingColumnProblem}.
+ */
+export function matchingOptions(draft: MatchingDraft): OptionInput[] {
+  return [
+    ...draft.left.map((content, index) => ({
+      optionKey: matchingLeftKey(index),
+      content,
+    })),
+    ...draft.right.map((content, index) => ({
+      optionKey: matchingRightKey(index),
+      content,
+    })),
+  ];
+}
+
+/** A new left item starts unpaired; a new right item joins nothing yet. */
+export function emptyMatchingDraft(): MatchingDraft {
+  return { left: ['', ''], right: ['', ''], pairs: [-1, -1] };
+}
+
+export function pairingAfterLeftAdd(pairs: readonly number[]): number[] {
+  return [...pairs, -1];
+}
+
+/**
+ * Removing a left item removes its pairing row. The right indexes inside the
+ * other rows are untouched — they point into `right`, which did not change.
+ */
+export function pairingAfterLeftRemove(
+  pairs: readonly number[],
+  removedIndex: number
+): number[] {
+  return pairs.filter((_, left) => left !== removedIndex);
+}
+
+/**
+ * Deleting a right item removes it from every pair that pointed at it and
+ * shifts the ones after it down — otherwise a pair would silently name the
+ * neighbour of the item the author meant.
+ */
+export function pairingAfterRightRemove(
+  pairs: readonly number[],
+  removedIndex: number
+): number[] {
+  return pairs.map((right) => {
+    if (right === removedIndex) {
+      return -1;
+    }
+    return right > removedIndex ? right - 1 : right;
+  });
+}
+
+/**
+ * `matches` as the server wants it: a JSON array whose objects have exactly
+ * `left` and `right`, holding the option keys of the paired items.
  *
  * The object literal is written key-first on purpose — `JSON.stringify` emits
- * the keys in insertion order, and a pair built from a spread of user state
- * could grow a stray key. Trimming happens here too, because the grader
- * compares the strings exactly and a trailing space is a different string.
+ * keys in insertion order, and a pair assembled from spread state could grow a
+ * stray key, which `gradeMatching` can never match. Unpaired left items are
+ * skipped here and refused by {@link validateMatchingAuthoring}, so a body that
+ * reaches the wire is always the complete key.
  */
-export function serializeMatches(pairs: readonly MatchPair[]): string {
-  return JSON.stringify(
-    pairs.map((pair) => ({
-      left: pair.left.trim(),
-      right: pair.right.trim(),
-    }))
-  );
+export function serializeMatches(draft: MatchingDraft): string {
+  const pairs: MatchPair[] = [];
+  draft.left.forEach((_, leftIndex) => {
+    const rightIndex = draft.pairs[leftIndex] ?? -1;
+    if (rightIndex < 0 || rightIndex >= draft.right.length) {
+      return;
+    }
+    pairs.push({
+      left: matchingLeftKey(leftIndex),
+      right: matchingRightKey(rightIndex),
+    });
+  });
+  return JSON.stringify(pairs);
+}
+
+/** The pair a review of this draft would show: `北京 → 中国`, by content. */
+export function matchingPreviewRows(
+  draft: MatchingDraft
+): Array<{ left: string; right: string; paired: boolean }> {
+  return draft.left.map((left, index) => {
+    const rightIndex = draft.pairs[index] ?? -1;
+    const paired = rightIndex >= 0 && rightIndex < draft.right.length;
+    return {
+      left: left.trim() === '' ? `左侧 ${index + 1}` : left.trim(),
+      right: paired ? (draft.right[rightIndex] ?? '').trim() : '（未配对）',
+      paired,
+    };
+  });
+}
+
+/**
+ * Why the two columns must be the same size: the answer side splits a flat
+ * option list at `Math.ceil(length / 2)` and calls the front the left column.
+ * With `left` longer than `right` by more than one the cut lands inside what
+ * this form considered the left column, and the learner is shown a different
+ * question than the author paired.
+ */
+export function matchingColumnProblem(draft: MatchingDraft): string | null {
+  const total = draft.left.length + draft.right.length;
+  if (total === 0) {
+    return '配对题至少需要 1 个左侧条目与 1 个右侧条目。';
+  }
+  if (draft.left.length === 0) {
+    return '配对题至少需要 1 个左侧条目。';
+  }
+  if (draft.right.length === 0) {
+    return '配对题至少需要 1 个右侧条目。';
+  }
+  if (Math.ceil(total / 2) !== draft.left.length) {
+    return `左右两列必须一样多（当前左 ${draft.left.length} 个、右 ${draft.right.length} 个）：答题控件按「前一半是左列」切分选项（answer-grammar.ts:73-78），数量不齐时学员看到的列与你排的就不是同一份。`;
+  }
+  return null;
 }
 
 /* ─────────────── validation ─────────────── */
@@ -249,29 +392,50 @@ export function validateOrderingAuthoring(
 }
 
 /**
- * MATCHING rules: at least one pair, both sides non-blank (the server 400s an
- * empty `matches`, and a blank side is a pair nobody can match), and the
- * serialized text inside `maxLength: 4000`.
+ * MATCHING rules, all of them consequences of how the answer side and the
+ * grader read this question:
+ *
+ *  - both columns non-empty and equally long ({@link matchingColumnProblem});
+ *  - every left item paired, because an unpaired left item is a row the
+ *    learner can answer but the stored key cannot match;
+ *  - every content non-blank and inside `QuestionOptionInput.content`
+ *    maxLength, because the columns ARE the option rows on the wire;
+ *  - the serialized `matches` inside its own maxLength 4000.
  */
-export function validateMatchingAuthoring(
-  pairs: readonly MatchPair[]
-): string[] {
+export function validateMatchingAuthoring(draft: MatchingDraft): string[] {
   const errors: string[] = [];
 
-  if (pairs.length === 0) {
-    errors.push('配对题至少需要 1 组配对。');
+  const columnProblem = matchingColumnProblem(draft);
+  if (columnProblem) {
+    errors.push(columnProblem);
   }
 
-  pairs.forEach((pair, index) => {
-    if (pair.left.trim() === '') {
-      errors.push(`第 ${index + 1} 组配对缺少左侧内容。`);
-    }
-    if (pair.right.trim() === '') {
-      errors.push(`第 ${index + 1} 组配对缺少右侧内容。`);
+  const columns: Array<[side: string, values: string[]]> = [
+    ['左侧', draft.left],
+    ['右侧', draft.right],
+  ];
+  for (const [side, values] of columns) {
+    values.forEach((value, index) => {
+      const content = value.trim();
+      if (content === '') {
+        errors.push(`第 ${index + 1} 个${side}条目缺少内容。`);
+      } else if (content.length > QUESTION_FIELD_LIMITS.optionContent) {
+        errors.push(
+          `${side}条目「${content.slice(0, 12)}…」超过 ${QUESTION_FIELD_LIMITS.optionContent} 个字符。`
+        );
+      }
+    });
+  }
+
+  draft.left.forEach((left, index) => {
+    const rightIndex = draft.pairs[index] ?? -1;
+    if (rightIndex < 0 || rightIndex >= draft.right.length) {
+      const label = left.trim() === '' ? `左侧 ${index + 1}` : left.trim();
+      errors.push(`「${label}」还没有标准配对，请为它选择一个右侧条目。`);
     }
   });
 
-  const serialized = serializeMatches(pairs);
+  const serialized = serializeMatches(draft);
   if (serialized.length > QUESTION_FIELD_LIMITS.matches) {
     errors.push(
       `配对提交文本共 ${serialized.length} 个字符，超过 CreateQuestionRequest.matches 的 ${QUESTION_FIELD_LIMITS.matches} 个上限。请精简条目内容或减少配对数量。`

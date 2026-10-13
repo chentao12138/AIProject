@@ -44,28 +44,27 @@ declaring `FRONTEND V1 FUNCTIONALLY COMPLETE`.
    parser used to discard the whole file over it, silently falling back to the
    packaged default. `parseRuntimeConfig` now strips a leading BOM, pinned by a
    test in `src/main/runtime-config.test.ts`.)
-3. Launch AIStudy from Start Menu.
-4. Verify Electron boot:
+4. Launch AIStudy from Start Menu.
+5. Verify Electron boot:
    - Window title = `AIStudy`
    - No startup crash / uncaught exception
-5. Login:
+6. Login:
    - Enter test username/password
    - Click Login
    - Verify redirect to `/spaces`
-6. Close app (window X or system tray close).
-7. Reopen app from Start Menu.
-8. Verify session restore:
+7. Close app (window X or system tray close).
+8. Reopen app from Start Menu.
+9. Verify session restore:
    - App returns to `/spaces` automatically (refresh token restore + `/auth/me`)
    - No manual re-login required
-9. Logout:
+10. Logout:
    - Click User / Logout in AppShell
    - Verify redirect to `/login`
-10. Reopen app:
+11. Reopen app:
     - App shows `/login` (anonymous)
-11. Shutdown / uninstall:
+12. Shutdown / uninstall:
     - `Add or Remove Programs` → AIStudy → Uninstall
-    - Verify `%APPDATA%\AIStudy` (or equivalent Electron userData) is removed or acceptable
-
+    - `%APPDATA\AIStudy` is expected to SURVIVE: `build.nsis.deleteAppDataOnUninstall` is false, so notes and settings are not destroyed by an uninstall. Verify the directory is still there.
 ### Pass criteria
 
 - Login → close → reopen → authenticated

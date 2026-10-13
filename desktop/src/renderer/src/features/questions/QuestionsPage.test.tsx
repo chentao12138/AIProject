@@ -308,3 +308,58 @@ describe('QuestionsPage — knowledge point list failure', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('QuestionsPage — archived questions are reachable, not vanished (G09)', () => {
+  it('offers 已归档 as a status filter and asks the server for it', async () => {
+    const user = userEvent.setup();
+    const listQuestions = vi.fn(async () => ({
+      data: [],
+      response: { status: 200 },
+    }));
+    renderWithUrl(knowledgePointsApi({ listQuestions }), ['/spaces/7/questions']);
+
+    // `archive` writes status=ARCHIVED and nothing else, and
+    // selectBySpaceOwnerFilters only filters on the status it is given, so an
+    // archived question is findable — asking for it is the only honest way to
+    // list it.
+    const filter = await screen.findByLabelText('状态');
+    expect(screen.getByRole('option', { name: '已归档' })).toBeInTheDocument();
+
+    await user.selectOptions(filter, 'ARCHIVED');
+    await waitFor(() =>
+      expect(listQuestions).toHaveBeenCalledWith(7, {
+        status: 'ARCHIVED',
+        questionType: undefined,
+        knowledgePointId: undefined,
+      })
+    );
+    expect(urlParams()).toEqual({ status: 'ARCHIVED' });
+  });
+
+  it('links a live row to the edit form and routes an archived row to the detail page', async () => {
+    renderWithProviders(<QuestionsPage />, {
+      apiClient: mockApiClient({
+        listQuestions: vi.fn(async () => ({
+          data: [
+            { id: 1, questionType: 'SINGLE_CHOICE', stem: '可编辑', status: 'DRAFT' },
+            { id: 2, questionType: 'SINGLE_CHOICE', stem: '已归档', status: 'ARCHIVED' },
+          ],
+          response: { status: 200 },
+        })),
+      }),
+      initialEntries: ['/spaces/7/questions'],
+      routePath: '/spaces/:spaceId/questions',
+    });
+
+    // PUT refuses an ARCHIVED question (QuestionService.java:124 -> 404), so an
+    // archived row must not offer a form that cannot save.
+    expect(await screen.findByTestId('question-edit-1')).toHaveAttribute(
+      'href',
+      '/spaces/7/questions/1/edit'
+    );
+    expect(screen.queryByTestId('question-edit-2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('question-archived-hint-2')).toHaveTextContent(
+      '恢复请到详情页'
+    );
+  });
+});
