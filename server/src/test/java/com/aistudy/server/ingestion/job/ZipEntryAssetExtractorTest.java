@@ -2,7 +2,7 @@ package com.aistudy.server.ingestion.job;
 
 import com.aistudy.server.ingestion.job.service.ZipEntryAssetExtractor;
 import com.aistudy.server.source.asset.entity.SourceAsset;
-import com.aistudy.server.source.asset.mapper.SourceAssetMapper;
+import com.aistudy.server.source.asset.service.SourceAssetService;
 import com.aistudy.server.storage.StorageMetadata;
 import com.aistudy.server.storage.StorageResult;
 import com.aistudy.server.storage.StorageService;
@@ -55,13 +55,13 @@ import static org.mockito.Mockito.when;
 class ZipEntryAssetExtractorTest {
 
     private FakeStorage storage;
-    private SourceAssetMapper mapper;
+    private SourceAssetService mapper;
     private ZipEntryAssetExtractor extractor;
 
     @BeforeEach
     void setUp() {
         storage = new FakeStorage();
-        mapper = mock(SourceAssetMapper.class);
+        mapper = mock(SourceAssetService.class);
         extractor = new ZipEntryAssetExtractor(storage, mapper);
     }
 
@@ -154,28 +154,28 @@ class ZipEntryAssetExtractorTest {
     @Test
     void firstRunInsertsVersionOneRows() throws Exception {
         SourceAsset zip = zipAsset(zip(twoTextEntries()));
-        when(mapper.selectBySpaceSourcePathAndSha(anyLong(), anyLong(), anyString(), anyString()))
+        when(mapper.findExtractedEntry(anyLong(), anyLong(), anyString(), anyString()))
                 .thenReturn(null);
-        when(mapper.selectBySpaceSourceAndPath(anyLong(), anyLong(), anyString()))
+        when(mapper.listEntryVersions(anyLong(), anyLong(), anyString()))
                 .thenReturn(List.of());
-        when(mapper.insert(any(SourceAsset.class))).thenAnswer(inv -> {
+        when(mapper.registerExtractedEntry(any(SourceAsset.class))).thenAnswer(inv -> {
             SourceAsset a = inv.getArgument(0);
             a.setId((long) storage.objects.size());
-            return 1;
+            return a;
         });
 
         List<SourceAsset> result = extractor.extractEntries(zip);
 
         assertEquals(2, result.size());
         ArgumentCaptor<SourceAsset> captor = ArgumentCaptor.forClass(SourceAsset.class);
-        verify(mapper, times(2)).insert(captor.capture());
+        verify(mapper, times(2)).registerExtractedEntry(captor.capture());
         for (SourceAsset inserted : captor.getAllValues()) {
             assertEquals(1, inserted.getAssetVersion());
             assertNotNull(inserted.getOriginalRelativePath());
             assertNull(inserted.getSupersededAt());
             assertNotNull(inserted.getSha256());
         }
-        verify(mapper, never()).markSuperseded(anyLong(), any());
+        verify(mapper, never()).markEntrySuperseded(anyLong(), any());
         // First run stores real bytes: nothing may be deleted.
         assertTrue(storage.deleteCalls.isEmpty(),
                 "first run must not compensate-delete anything");
@@ -200,15 +200,15 @@ class ZipEntryAssetExtractorTest {
         storage.objects.put(existingB.getStorageKey(), manifest.get("docs/b.md"));
         int objectsBeforeRetry = storage.objects.size();
 
-        when(mapper.selectBySpaceSourcePathAndSha(eq(10L), eq(20L), eq("docs/a.txt"), anyString()))
+        when(mapper.findExtractedEntry(eq(10L), eq(20L), eq("docs/a.txt"), anyString()))
                 .thenReturn(existingA);
-        when(mapper.selectBySpaceSourcePathAndSha(eq(10L), eq(20L), eq("docs/b.md"), anyString()))
+        when(mapper.findExtractedEntry(eq(10L), eq(20L), eq("docs/b.md"), anyString()))
                 .thenReturn(existingB);
 
         List<SourceAsset> result = extractor.extractEntries(zip);
 
         // (a) zero new rows on retry
-        verify(mapper, never()).insert(any(SourceAsset.class));
+        verify(mapper, never()).registerExtractedEntry(any(SourceAsset.class));
         // (b) the returned assets ARE the pre-existing rows — same ids
         //     and same storage keys, i.e. the RAW bytes are reused.
         assertEquals(List.of(100L, 200L), result.stream().map(SourceAsset::getId).toList());
@@ -235,26 +235,26 @@ class ZipEntryAssetExtractorTest {
                 "v1 content".getBytes(StandardCharsets.UTF_8), 1, "fake/old-v1");
         storage.objects.put("fake/old-v1", "v1 content".getBytes(StandardCharsets.UTF_8));
 
-        when(mapper.selectBySpaceSourcePathAndSha(eq(10L), eq(20L), eq("docs/a.txt"), anyString()))
+        when(mapper.findExtractedEntry(eq(10L), eq(20L), eq("docs/a.txt"), anyString()))
                 .thenReturn(null);
-        when(mapper.selectBySpaceSourceAndPath(10L, 20L, "docs/a.txt"))
+        when(mapper.listEntryVersions(10L, 20L, "docs/a.txt"))
                 .thenReturn(List.of(old));
-        when(mapper.insert(any(SourceAsset.class))).thenAnswer(inv -> {
+        when(mapper.registerExtractedEntry(any(SourceAsset.class))).thenAnswer(inv -> {
             SourceAsset a = inv.getArgument(0);
             a.setId(101L);
-            return 1;
+            return a;
         });
 
         List<SourceAsset> result = extractor.extractEntries(zip);
 
         assertEquals(1, result.size());
         ArgumentCaptor<SourceAsset> captor = ArgumentCaptor.forClass(SourceAsset.class);
-        verify(mapper).insert(captor.capture());
+        verify(mapper).registerExtractedEntry(captor.capture());
         assertEquals(2, captor.getValue().getAssetVersion(),
                 "same path with different bytes must be an explicit version 2, not a silent duplicate");
         assertEquals("docs/a.txt", captor.getValue().getOriginalRelativePath());
         // supersede-and-retain: the old row is stamped, never deleted.
-        verify(mapper).markSuperseded(eq(100L), any());
+        verify(mapper).markEntrySuperseded(eq(100L), any());
         assertTrue(storage.objects.containsKey("fake/old-v1"),
                 "the superseded RAW bytes stay (provenance rows may reference the old asset)");
         assertTrue(storage.deleteCalls.isEmpty());
@@ -272,24 +272,24 @@ class ZipEntryAssetExtractorTest {
                 "fake/v2-old");
         v1.setSupersededAt(java.time.LocalDateTime.now());
 
-        when(mapper.selectBySpaceSourcePathAndSha(anyLong(), anyLong(), anyString(), anyString()))
+        when(mapper.findExtractedEntry(anyLong(), anyLong(), anyString(), anyString()))
                 .thenReturn(null);
-        when(mapper.selectBySpaceSourceAndPath(10L, 20L, "docs/a.txt"))
+        when(mapper.listEntryVersions(10L, 20L, "docs/a.txt"))
                 .thenReturn(List.of(v1, v2));
-        when(mapper.insert(any(SourceAsset.class))).thenAnswer(inv -> {
+        when(mapper.registerExtractedEntry(any(SourceAsset.class))).thenAnswer(inv -> {
             SourceAsset a = inv.getArgument(0);
             a.setId(102L);
-            return 1;
+            return a;
         });
 
         extractor.extractEntries(zip);
 
         ArgumentCaptor<SourceAsset> captor = ArgumentCaptor.forClass(SourceAsset.class);
-        verify(mapper).insert(captor.capture());
+        verify(mapper).registerExtractedEntry(captor.capture());
         assertEquals(3, captor.getValue().getAssetVersion());
         // only the ACTIVE head (v2, superseded_at null) gets superseded — v1 already was
-        verify(mapper).markSuperseded(eq(101L), any());
-        verify(mapper, never()).markSuperseded(eq(100L), any());
+        verify(mapper).markEntrySuperseded(eq(101L), any());
+        verify(mapper, never()).markEntrySuperseded(eq(100L), any());
     }
 
     // ==================== compensation ====================
@@ -300,11 +300,11 @@ class ZipEntryAssetExtractorTest {
         manifest.put("docs/a.txt", "alpha".getBytes(StandardCharsets.UTF_8));
         SourceAsset zip = zipAsset(zip(manifest));
 
-        when(mapper.selectBySpaceSourcePathAndSha(anyLong(), anyLong(), anyString(), anyString()))
+        when(mapper.findExtractedEntry(anyLong(), anyLong(), anyString(), anyString()))
                 .thenReturn(null);
-        when(mapper.selectBySpaceSourceAndPath(anyLong(), anyLong(), anyString()))
+        when(mapper.listEntryVersions(anyLong(), anyLong(), anyString()))
                 .thenReturn(List.of());
-        when(mapper.insert(any(SourceAsset.class))).thenThrow(new RuntimeException("db down"));
+        when(mapper.registerExtractedEntry(any(SourceAsset.class))).thenThrow(new RuntimeException("db down"));
 
         assertThrows(RuntimeException.class, () -> extractor.extractEntries(zip));
 

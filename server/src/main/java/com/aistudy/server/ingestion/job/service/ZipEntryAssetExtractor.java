@@ -5,7 +5,6 @@ import com.aistudy.server.ingestion.zip.ZipInspectionResult;
 import com.aistudy.server.ingestion.zip.ZipSafetyException;
 import com.aistudy.server.ingestion.zip.ZipSafetyLimits;
 import com.aistudy.server.source.asset.entity.SourceAsset;
-import com.aistudy.server.source.asset.mapper.SourceAssetMapper;
 import com.aistudy.server.source.asset.service.SourceAssetService;
 import com.aistudy.server.storage.StorageMetadata;
 import com.aistudy.server.storage.StorageResult;
@@ -51,7 +50,7 @@ import java.util.zip.ZipFile;
  * produced duplicate (path, sha) rows on live data — deleting them to
  * make an index buildable would break FK references. See the V059
  * migration header for the full rationale; the guard is the service
- * probe {@link SourceAssetMapper#selectBySpaceSourcePathAndSha}.
+ * probe {@link SourceAssetService#findExtractedEntry}.
  *
  * <h3>Failure / compensation semantics</h3>
  *
@@ -79,12 +78,12 @@ public class ZipEntryAssetExtractor {
     private static final Logger log = LoggerFactory.getLogger(ZipEntryAssetExtractor.class);
 
     private final StorageService storageService;
-    private final SourceAssetMapper sourceAssetMapper;
+    private final SourceAssetService sourceAssetService;
 
     public ZipEntryAssetExtractor(StorageService storageService,
-                                  SourceAssetMapper sourceAssetMapper) {
+                                  SourceAssetService sourceAssetService) {
         this.storageService = storageService;
-        this.sourceAssetMapper = sourceAssetMapper;
+        this.sourceAssetService = sourceAssetService;
     }
 
     /**
@@ -161,14 +160,14 @@ public class ZipEntryAssetExtractor {
         // is the compensation window; it never survives this method.
         StorageResult stored = storageService.store(entryIn, new StorageMetadata());
         try {
-            SourceAsset existingSameBytes = sourceAssetMapper.selectBySpaceSourcePathAndSha(
+            SourceAsset existingSameBytes = sourceAssetService.findExtractedEntry(
                     zipAsset.getSpaceId(), zipAsset.getSourceId(), entryPath, stored.sha256());
             if (existingSameBytes != null) {
                 compensate(stored.storageKey());
                 return existingSameBytes;
             }
 
-            List<SourceAsset> versions = sourceAssetMapper.selectBySpaceSourceAndPath(
+            List<SourceAsset> versions = sourceAssetService.listEntryVersions(
                     zipAsset.getSpaceId(), zipAsset.getSourceId(), entryPath);
             int nextVersion = 1;
             SourceAsset previousHead = null;
@@ -194,13 +193,13 @@ public class ZipEntryAssetExtractor {
             entryAsset.setSha256(stored.sha256());
             entryAsset.setAssetVersion(nextVersion);
             entryAsset.setCreatedAt(now);
-            sourceAssetMapper.insert(entryAsset);
+            sourceAssetService.registerExtractedEntry(entryAsset);
 
             if (previousHead != null && previousHead.getId() != null) {
                 // Supersede AFTER the new row exists: if this UPDATE
                 // fails the new version is still complete and the old
                 // head merely stays active — never a lost version.
-                sourceAssetMapper.markSuperseded(previousHead.getId(), now);
+                sourceAssetService.markEntrySuperseded(previousHead.getId(), now);
             }
             return entryAsset;
         } catch (RuntimeException e) {

@@ -583,4 +583,44 @@ public class SourceAssetService {
     public static boolean isAllowedExtension(String ext) {
         return ALLOWED_MIME_BY_EXTENSION.containsKey(ext.toLowerCase(Locale.ROOT));
     }
+
+    /**
+     * Finds the asset already registered for one extracted ZIP entry with the
+     * same relative path and bytes (audit F-12). Exposed here so the ingestion
+     * worker can reuse an entry without importing this module's mapper
+     * (architecture.md §4).
+     *
+     * @return the existing row, or {@code null} when nothing matches
+     */
+    public SourceAsset findExtractedEntry(Long spaceId, Long sourceId,
+                                          String relativePath, String sha256) {
+        return sourceAssetMapper.selectBySpaceSourcePathAndSha(
+                spaceId, sourceId, relativePath, sha256);
+    }
+
+    /**
+     * Every version registered for {@code relativePath}, oldest version first.
+     */
+    public java.util.List<SourceAsset> listEntryVersions(Long spaceId, Long sourceId,
+                                                         String relativePath) {
+        return sourceAssetMapper.selectBySpaceSourceAndPath(spaceId, sourceId, relativePath);
+    }
+
+    /**
+     * Registers one extracted entry. The caller owns the transaction boundary;
+     * this only performs the insert and returns the row with its generated id.
+     */
+    public SourceAsset registerExtractedEntry(SourceAsset asset) {
+        sourceAssetMapper.insert(asset);
+        return asset;
+    }
+
+    /**
+     * Marks a superseded version inactive while keeping the row, so provenance
+     * that already points at it still resolves.
+     */
+    public void markEntrySuperseded(Long assetId, java.time.LocalDateTime supersededAt) {
+        sourceAssetMapper.markSuperseded(assetId, supersededAt);
+    }
+
 }
