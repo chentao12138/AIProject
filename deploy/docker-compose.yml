@@ -55,6 +55,22 @@ services:
       AISTUDY_AI_MODEL: "${AISTUDY_AI_MODEL:-}"
       AISTUDY_AI_API_KEY: "${AISTUDY_AI_API_KEY:-}"
       AISTUDY_AI_SECRET_KEY: "${AISTUDY_AI_SECRET_KEY:-}"
+      # --- OCR (F-10 / I-15) -------------------------------------------------
+      # Off unless the ocr profile is enabled, so `docker compose up -d` on a
+      # small host still boots a working backend whose PDFs use their text
+      # layer. Turn it on with AISTUDY_OCR_ENABLED=true AND --profile ocr.
+      # Failure path when OCR is unavailable: on-failure=fail means the job
+      # stops with OCR_UNAVAILABLE / OCR_TIMEOUT / OCR_OUTPUT_TOO_LARGE in its
+      # errorCode + safe message instead of publishing textless pages, and it
+      # is bounded by AISTUDY_OCR_TIMEOUT rather than hanging a worker.
+      AISTUDY_OCR_ENABLED: "${AISTUDY_OCR_ENABLED:-false}"
+      AISTUDY_OCR_ENGINE: "${AISTUDY_OCR_ENGINE:-http}"
+      AISTUDY_OCR_HTTP_BASE_URL: "${AISTUDY_OCR_HTTP_BASE_URL:-http://ocr:8891}"
+      AISTUDY_OCR_HTTP_TOKEN: "${AISTUDY_OCR_HTTP_TOKEN:-}"
+      AISTUDY_OCR_TIMEOUT: "${AISTUDY_OCR_TIMEOUT:-PT2M}"
+      AISTUDY_OCR_ON_FAILURE: "${AISTUDY_OCR_ON_FAILURE:-fail}"
+      AISTUDY_OCR_CONFIDENCE_THRESHOLD: "${AISTUDY_OCR_CONFIDENCE_THRESHOLD:-0.7}"
+      AISTUDY_OCR_HEALTH_STRICT: "${AISTUDY_OCR_HEALTH_STRICT:-false}"
     volumes:
       - aistudy_resources:/var/lib/aistudy/resources
     networks:
@@ -64,11 +80,71 @@ services:
     # ports:
     #   - "127.0.0.1:8080:8080"
 
+  # OCR sidecar (F-10 / I-15). Opt-in profile so a host without the 3-5 GB
+  # paddle image can still deploy the text-only backend:
+  #   docker compose --profile ocr up -d --build
+  # No `depends_on` from backend: the backend must come up when OCR is still
+  # loading its models, and it reports that as the `ocr` health detail
+  # (DEGRADED, never DOWN) instead of being restarted by its own healthcheck.
+  ocr:
+    profiles: ["ocr"]
+    build:
+      context: ./ocr
+      dockerfile: Dockerfile
+    image: aistudy-ocr:${AISTUDY_OCR_TAG:-latest}
+    container_name: aistudy-ocr
+    restart: unless-stopped
+    environment:
+      OCR_LANG: "${AISTUDY_OCR_LANG:-ch}"
+      OCR_DEVICE: "${AISTUDY_OCR_DEVICE:-cpu}"
+      # One prediction at a time: the paddle predictor is not thread-safe and
+      # concurrent inferences on a capped container is how OCR gets OOM-killed.
+      OCR_THREADS: "${AISTUDY_OCR_THREADS:-1}"
+      OCR_QUEUE_DEPTH: "${AISTUDY_OCR_QUEUE_DEPTH:-8}"
+      OCR_MAX_IMAGE_BYTES: "${AISTUDY_OCR_MAX_IMAGE_BYTES:-33554432}"
+      OCR_MAX_TEXT_CHARS: "${AISTUDY_OCR_MAX_TEXT_CHARS:-2000000}"
+      OCR_TOKEN: "${AISTUDY_OCR_HTTP_TOKEN:-}"
+    volumes:
+      # Model cache: survives redeploys, and is the directory an air-gapped
+      # host must pre-seed (see docs/operations-ocr-docker.md).
+      - aistudy_ocr_models:/home/aistudy-ocr/.paddleocr
+    deploy:
+      resources:
+        limits:
+          cpus: "${AISTUDY_OCR_CPUS:-2.0}"
+          memory: "${AISTUDY_OCR_MEMORY:-4G}"
+          # Hard ceiling on process/thread count: paddle spawns native worker
+          # threads, and unbounded fan-out inside one container takes the whole
+          # host down. Set inside deploy because compose rejects a top-level
+          # pids_limit alongside deploy resource limits.
+          pids: 256
+        reservations:
+          memory: "${AISTUDY_OCR_MEMORY_RESERVATION:-1G}"
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      # /healthz only returns 200 after the models have actually loaded, so
+      # "healthy" here means "OCR can serve a request", not "the port is open".
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8891/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 90s
+    networks:
+      - aistudy_net
+
 volumes:
   aistudy_mysql_data:
     name: aistudy_mysql_data
   aistudy_resources:
     name: aistudy_resources
+  aistudy_ocr_models:
+    name: aistudy_ocr_models
 
 networks:
   aistudy_net:

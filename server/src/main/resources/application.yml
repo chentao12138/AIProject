@@ -66,6 +66,46 @@ aistudy:
       max-width: ${AISTUDY_INGESTION_IMAGE_MAX_WIDTH:10000}
       max-height: ${AISTUDY_INGESTION_IMAGE_MAX_HEIGHT:10000}
       max-pixels: ${AISTUDY_INGESTION_IMAGE_MAX_PIXELS:100000000}
+  # OCR (F-09 / F-10 / F-28). Disabled by default: the plain app image ships no
+  # PaddleOCR runtime, and "attempt and swallow the error" was how a missing
+  # binary used to turn into silently textless pages.
+  #
+  # engine = none | process | http
+  #   process: local executable, protocol documented on PaddleOcrProcessEngine
+  #   http:    the deploy/ocr sidecar, protocol documented on HttpOcrEngine
+  ocr:
+    enabled: ${AISTUDY_OCR_ENABLED:false}
+    engine: ${AISTUDY_OCR_ENGINE:none}
+    # Wall-clock deadline for one OCR run (process or HTTP). Past it the child
+    # is destroyed and the stage fails with OCR_TIMEOUT — an unbounded wait used
+    # to occupy an ingestion worker until the job claim went stale.
+    timeout: ${AISTUDY_OCR_TIMEOUT:PT2M}
+    # Patience between SIGTERM and SIGKILL after a timeout.
+    kill-grace: ${AISTUDY_OCR_KILL_GRACE:PT5S}
+    # Ceilings: stdout is still drained to EOF past the cap so the child can
+    # never block on a full pipe; the run then fails with OCR_OUTPUT_TOO_LARGE.
+    max-stdout-bytes: ${AISTUDY_OCR_MAX_STDOUT_BYTES:262144}
+    max-output-bytes: ${AISTUDY_OCR_MAX_OUTPUT_BYTES:8MB}
+    max-diagnostics-chars: ${AISTUDY_OCR_MAX_DIAGNOSTICS_CHARS:2000}
+    # Below this the source goes to human review (OCR_LOW_CONFIDENCE issue).
+    confidence-threshold: ${AISTUDY_OCR_CONFIDENCE_THRESHOLD:0.7}
+    # review = keep partial results and flag for review (backward compatible),
+    # fail = publish FAILED / PARTIAL_FAILED with a diagnosable code.
+    on-failure: ${AISTUDY_OCR_ON_FAILURE:review}
+    paddle-ocr-command: ${AISTUDY_OCR_PADDLE_OCR_COMMAND:paddleocr}
+    temp-dir: ${AISTUDY_OCR_TEMP_DIR:${java.io.tmpdir}/aistudy/ocr}
+    # Health detail id is `ocr`. Non-strict on purpose: a DEGRADED custom status
+    # can never become the composite, so a cold OCR sidecar cannot make the
+    # backend fail its container health check and restart-loop.
+    health-strict: ${AISTUDY_OCR_HEALTH_STRICT:false}
+    health-probe-timeout: ${AISTUDY_OCR_HEALTH_PROBE_TIMEOUT:PT2S}
+    http:
+      base-url: ${AISTUDY_OCR_HTTP_BASE_URL:}
+      path: ${AISTUDY_OCR_HTTP_PATH:/ocr}
+      token: ${AISTUDY_OCR_HTTP_TOKEN:}
+      connect-timeout: ${AISTUDY_OCR_HTTP_CONNECT_TIMEOUT:PT5S}
+      max-response-bytes: ${AISTUDY_OCR_HTTP_MAX_RESPONSE_BYTES:8MB}
+      max-image-bytes: ${AISTUDY_OCR_HTTP_MAX_IMAGE_BYTES:20MB}
   ai:
     # AI is disabled by default. Enable only with a configured provider.
     enabled: ${AISTUDY_AI_ENABLED:false}
@@ -97,6 +137,13 @@ management:
           include: livenessState
         readiness:
           include: readinessState,db,storage
+          # The `ocr` detail (ingestion/ocr/OcrHealthIndicator) is NOT in
+          # readiness by default: an OCR sidecar that is cold or down must not
+          # take the whole API out of rotation, since only image/scanned-PDF
+          # ingestion depends on it. Operators who want that coupling add it:
+          #   include: readinessState,db,storage,ocr
+          # and set AISTUDY_OCR_HEALTH_STRICT=true so the indicator reports DOWN
+          # instead of DEGRADED. See docs/operations-ocr-docker.md.
     prometheus:
       enabled: true
   endpoints:

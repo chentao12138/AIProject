@@ -27,6 +27,27 @@ RUN ./mvnw -DskipTests package
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
+# -----------------------------------------------------------
+# OCR is deliberately NOT part of this image (F-10 / I-15).
+#
+# A PaddleOCR runtime plus its detection/recognition models is 3-5 GB, needs
+# its own CPU / memory / process limits, and can take a minute to become
+# usable. Shipping it inside the backend image would make every backend
+# deploy that size and would put the OCR cold start on the critical path of
+# the app's own health check.
+#
+# It therefore runs as a sidecar: deploy/ocr (Dockerfile + adapter) and the
+# `ocr` profile in deploy/docker-compose.yml. The backend reaches it over the
+# documented HTTP contract in ingestion/ocr/HttpOcrEngine.java. Without that
+# service the app still starts and serves: PDFs use their text layer, image
+# assets ingest with no text, and /actuator/health reports the `ocr` detail as
+# DEGRADED. Operator steps: docs/operations-ocr-docker.md.
+#
+# To opt in at runtime (no rebuild):
+#   AISTUDY_OCR_ENABLED=true AISTUDY_OCR_ENGINE=http \
+#   AISTUDY_OCR_HTTP_BASE_URL=http://ocr:8891
+# -----------------------------------------------------------
+
 # Create non-root runtime user/group with fixed uid/gid so bind-
 # mounted persistent volumes are owned consistently on Linux.
 RUN groupadd -g 1001 aistudy && \
