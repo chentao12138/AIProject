@@ -15,6 +15,7 @@ import com.aistudy.server.source.service.SourceService;
 import com.aistudy.server.space.entity.LearningSpace;
 import com.aistudy.server.space.service.LearningSpaceService;
 import org.junit.jupiter.api.BeforeEach;
+import com.aistudy.server.common.problem.ApiException;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -308,11 +309,13 @@ class FolderImportServiceTest {
         uploaded.setSha256(SHA_B);
         when(sourceAssetMapper.selectByIdSpaceSource(300L, SPACE, SOURCE)).thenReturn(uploaded);
 
-        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+        ApiException error = assertThrows(ApiException.class,
                 () -> service.bindEntries(OWNER, SPACE, SOURCE, 1L,
                         List.of(new FolderEntryBinding("pending.txt", 300L))));
-        assertEquals(409, error.getStatusCode().value(),
+        assertEquals(409, error.status().value(),
                 "manifest hash must equal the uploaded bytes' server-computed hash");
+        assertEquals("FOLDER_ENTRY_CHECKSUM_MISMATCH", error.code(),
+                "the desktop retry flow branches on the code, not on the sentence");
     }
 
     @Test
@@ -335,10 +338,11 @@ class FolderImportServiceTest {
         FolderImportSnapshot snapshot = newDraft(1L);
         snapshot.setStatus(FolderImportService.STATUS_COMPLETED);
 
-        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+        ApiException error = assertThrows(ApiException.class,
                 () -> service.bindEntries(OWNER, SPACE, SOURCE, 1L,
                         List.of(new FolderEntryBinding("a.txt", 5L))));
-        assertEquals(409, error.getStatusCode().value());
+        assertEquals(409, error.status().value());
+        assertEquals("FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS", error.code());
     }
 
     // ==================== complete ====================
@@ -413,8 +417,9 @@ class FolderImportServiceTest {
     void resubmitToProcessedSnapshotIsConflict() {
         FolderImportSnapshot snapshot = newDraft(1L);
         snapshot.setStatus(FolderImportService.STATUS_COMPLETED);
-        assertThrows(ResponseStatusException.class,
+        ApiException error = assertThrows(ApiException.class,
                 () -> service.submitEntries(OWNER, SPACE, SOURCE, 1L, manifest("a.txt", SHA_A)));
+        assertEquals("FOLDER_SNAPSHOT_ALREADY_PROCESSED", error.code());
     }
 
     private static FolderImportEntry find(List<FolderImportEntry> entries, String path) {
