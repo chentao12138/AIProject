@@ -2,19 +2,15 @@
  * One practice question: answer controls + the server's verdict.
  *
  * WHY THIS WRAPS `QuestionRenderer` INSTEAD OF REPLACING IT
- * `QuestionRenderer` renders an answer control only for SHORT_ANSWER,
- * TRUE_FALSE and option-bearing types. A FILL_BLANK question therefore
- * showed its stem and nothing else, beside a submit button that stayed
- * disabled forever (its gate reads `selectedOptionKeys`). FILL_BLANK is
- * answered with `textAnswer` exactly like SHORT_ANSWER, so this card draws
- * that one control itself. The clean fix is a shared text branch inside
- * QuestionRenderer (the exam answer flow needs it too) — that file is owned
- * outside the practice feature, so it is reported rather than edited here.
+ * `QuestionRenderer` owns every answer control — options, the true/false pair,
+ * the shared text box (SHORT_ANSWER and FILL_BLANK), the ORDERING sequence and
+ * the MATCHING pair editor. A card that kept its own copy of one of them is how
+ * FILL_BLANK once rendered a control the renderer did not know about, so this
+ * component wires the draft to the renderer's callbacks and adds nothing.
  *
- * ORDERING / MATCHING are answered with `orderingAnswer` / `matchingAnswer`,
- * fields `AnswerPayloadView` does not declare (audit C09). Any other payload
- * for them is a guaranteed 400, so those two types state the contract gap
- * instead of offering a control that cannot work.
+ * ORDERING / MATCHING became answerable when the contract grew
+ * `AnswerPayloadView.orderingAnswer` / `.matchingAnswer`; the card forwards
+ * those fields verbatim, so what the renderer edited IS what gets sent.
  *
  * The submit button belongs to this card (no `onSubmit` passed to
  * QuestionRenderer) because enabled/label state is PER QUESTION: a shared
@@ -28,8 +24,8 @@ import {
   buildAnswerPayload,
   describeServerVerdict,
   describeSubmittedAnswer,
-  normalizeCode,
-  PRACTICE_UNANSWERABLE_TYPES,
+  practicePayloadContext,
+  unanswerableTypeNotice,
   type PracticeActionError,
   type PracticeAnswerDraft,
   type PracticeQuestionSlot,
@@ -63,9 +59,14 @@ export function PracticeQuestionCard({
   onDraftChange,
   onSubmit,
 }: PracticeQuestionCardProps) {
-  const type = normalizeCode(slot.questionType);
-  const unanswerable = PRACTICE_UNANSWERABLE_TYPES[type];
-  const payload = buildAnswerPayload(slot.questionType, draft);
+  const unanswerable = unanswerableTypeNotice(slot.questionType);
+  // ORDERING has to place every option and MATCHING has to pair every left
+  // item, so the gate is checked against the paper, not just the drafted array.
+  const payload = buildAnswerPayload(
+    slot.questionType,
+    draft,
+    practicePayloadContext(slot)
+  );
   const editable = canAnswer && !submitted && !pending;
   const question: QuestionPayload = {
     questionType: slot.questionType,
@@ -94,6 +95,8 @@ export function PracticeQuestionCard({
         selectedOptionKeys={draft?.selectedOptionKeys}
         booleanAnswer={draft?.booleanAnswer}
         textAnswer={draft?.textAnswer}
+        orderingAnswer={draft?.orderingAnswer}
+        matchingAnswer={draft?.matchingAnswer}
         onSelectedOptionKeysChange={
           editable ? (keys) => onDraftChange({ selectedOptionKeys: keys }) : undefined
         }
@@ -105,6 +108,14 @@ export function PracticeQuestionCard({
         // behaviour, so this card must not keep a second copy of it.
         onTextAnswerChange={
           editable ? (value) => onDraftChange({ textAnswer: value }) : undefined
+        }
+        // The renderer emits the wire shapes ({orderingAnswer: number[]},
+        // {matchingAnswer: JSON}), so the draft IS the payload.
+        onOrderingAnswerChange={
+          editable ? (value) => onDraftChange({ orderingAnswer: value }) : undefined
+        }
+        onMatchingAnswerChange={
+          editable ? (value) => onDraftChange({ matchingAnswer: value }) : undefined
         }
         onTextEnterSubmit={onSubmit}
         disabled={!editable}
@@ -162,6 +173,7 @@ export function PracticeAnswerFeedback({
       className="practice-answer-feedback"
       data-tone={verdict.tone}
       data-testid="answer-feedback"
+      data-source={submitted.source ?? 'submitted'}
     >
       <p className="practice-answer-feedback__verdict">
         <strong>{verdict.label}</strong>
@@ -172,9 +184,19 @@ export function PracticeAnswerFeedback({
           <span className="muted"> · {formatDateTime(submitted.view.answeredAt)}</span>
         )}
       </p>
-      <p className="muted">
-        我的作答：{describeSubmittedAnswer(slot.questionType, submitted.answer)}
-      </p>
+      {submitted.answer ? (
+        <p className="muted">
+          我的作答：{describeSubmittedAnswer(slot.questionType, submitted.answer)}
+        </p>
+      ) : (
+        // Read back from GET .../answers: that view has no answer field, so the
+        // verdict is all the server tells us. Showing anything else here would
+        // be a fabricated copy of an answer this client never sent.
+        <p className="muted" data-testid="answer-content-unavailable">
+          本题已在服务端作答（由后端的答案记录读取）。接口的 PracticeAnswerView
+          只返回判定，不返回作答内容，因此此处不显示当时提交的答案。
+        </p>
+      )}
       {submitted.view.correctAnswer && (
         <p>正确答案：{submitted.view.correctAnswer}</p>
       )}

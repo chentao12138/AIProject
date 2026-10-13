@@ -2,13 +2,17 @@
  * QuestionRenderer — the three types G02 added (FILL_BLANK / ORDERING /
  * MATCHING), plus the behavior the exams and practice pages already depend on.
  *
- * ORDERING is the interesting one for a component test: it is a *controlled*
- * order. The component never mutates `selectedOptionKeys` silently — it emits
- * the reordered array and lets the page own the state — and the order travels
- * in the one contract field that has an order.
+ * ORDERING and MATCHING are asserted by the WIRE VALUE they emit, because that
+ * is what the backend grades: `orderingAnswer` is an array of 1-based option
+ * positions (`QuestionAnswerEvaluator.gradeOrdering` compares it with the
+ * stored order for exact list equality and 400s on an empty one), and
+ * `matchingAnswer` is a JSON string of `{left,right}` maps compared as a SET by
+ * `gradeMatching`. An incomplete sequence or an unpaired left item therefore has
+ * to be impossible to submit, not merely discouraged.
  *
- * MATCHING is asserted by what it must NOT do: no invented pair widgets, no
- * submit button for a payload the contract cannot carry.
+ * The component is fully controlled: it emits the new value and the page owns
+ * the state, which is what lets the practice card label one question's save
+ * state without a shared flag.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -17,6 +21,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   QuestionRenderer,
+  parseMatchingPairs,
+  splitMatchingOptions,
   type QuestionPayload,
 } from './QuestionRenderer';
 
@@ -29,22 +35,39 @@ function AnsweringPage({
   question,
   onSubmit = () => {},
   submitLabel,
+  onPayload = () => {},
 }: {
   question: QuestionPayload;
   onSubmit?: () => void;
   submitLabel?: string;
+  /** What the page would send, so a test can read the payload back. */
+  onPayload?: (payload: { orderingAnswer?: number[]; matchingAnswer?: string }) => void;
 }) {
   const [selectedOptionKeys, setSelectedOptionKeys] = useState<string[]>([]);
   const [textAnswer, setTextAnswer] = useState('');
+  const [orderingAnswer, setOrderingAnswer] = useState<number[] | undefined>();
+  const [matchingAnswer, setMatchingAnswer] = useState<string | undefined>();
   return (
     <QuestionRenderer
       question={question}
       mode="answer"
       selectedOptionKeys={selectedOptionKeys}
       textAnswer={textAnswer}
+      orderingAnswer={orderingAnswer}
+      matchingAnswer={matchingAnswer}
       onSelectedOptionKeysChange={setSelectedOptionKeys}
       onTextAnswerChange={setTextAnswer}
-      onSubmit={onSubmit}
+      onOrderingAnswerChange={(value) => {
+        setOrderingAnswer(value);
+        onPayload({ orderingAnswer: value });
+      }}
+      onMatchingAnswerChange={(value) => {
+        setMatchingAnswer(value);
+        onPayload({ matchingAnswer: value });
+      }}
+      onSubmit={() =>
+        onSubmit()
+      }
       submitLabel={submitLabel}
     />
   );
@@ -56,8 +79,19 @@ const choiceOptions = [
   { optionKey: 'C', content: '第三项' },
 ];
 
+const matchingOptions = [
+  { optionKey: 'A', content: '巴黎' },
+  { optionKey: 'B', content: '东京' },
+  { optionKey: '1', content: '法国' },
+  { optionKey: '2', content: '日本' },
+];
+
 function question(questionType: string): QuestionPayload {
   return { questionType, stem: '题干内容', options: choiceOptions };
+}
+
+function matchingQuestion(): QuestionPayload {
+  return { questionType: 'MATCHING', stem: '把城市与国家配对', options: matchingOptions };
 }
 
 /** The order the component is showing, read off the rows. */
@@ -178,15 +212,16 @@ describe('QuestionRenderer — keyboard submit without a second button', () => {
   });
 });
 
-describe('QuestionRenderer — ORDERING (G02)', () => {
-  it('renders the items as a keyboard-operable ordered list', () => {
-    const onSelectedOptionKeysChange = vi.fn();
+describe('QuestionRenderer — ORDERING (G02 / C09)', () => {
+  it('renders a keyboard-operable sequence and refuses to submit an uncommitted one', () => {
+    const onOrderingAnswerChange = vi.fn();
+    const onSubmit = vi.fn();
     render(
       <QuestionRenderer
         question={question('ORDERING')}
         mode="answer"
-        onSelectedOptionKeysChange={onSelectedOptionKeysChange}
-        onSubmit={vi.fn()}
+        onOrderingAnswerChange={onOrderingAnswerChange}
+        onSubmit={onSubmit}
       />
     );
 
@@ -200,53 +235,100 @@ describe('QuestionRenderer — ORDERING (G02)', () => {
     expect(screen.getByRole('button', { name: '上移第 2 项' })).toBeEnabled();
     // No drag-only affordance: every move is a real focusable button.
     expect(screen.queryByTestId('ordering-drag')).not.toBeInTheDocument();
-    // Submit waits for an explicit order instead of sending an empty one.
+    // Nothing committed yet -> submit stays disabled instead of POSTing [].
     expect(screen.getByRole('button', { name: '提交' })).toBeDisabled();
+    // The presented order is still a legal answer, via an explicit commit.
+    expect(screen.getByRole('button', { name: '确认当前顺序' })).toBeEnabled();
   });
 
-  it('emits the swapped order through selectedOptionKeys', async () => {
+  it('emits 1-based positions of the presented options', async () => {
     const user = userEvent.setup();
-    const onSelectedOptionKeysChange = vi.fn();
+    const emitted: number[][] = [];
+    render(
+      <AnsweringPage
+        question={question('ORDERING')}
+        onPayload={(payload) => emitted.push(payload.orderingAnswer ?? [])}
+      />
+    );
+
+    // Row 1 down = option 2 in front of option 1: positions, not option keys.
+    await user.click(screen.getByRole('button', { name: '下移第 1 项' }));
+    expect(emitted).toEqual([[2, 1, 3]]);
+
+    const submit = screen.getByRole('button', { name: '提交' });
+    // Any committed permutation is complete, so submit is unlocked.
+    expect(submit).toBeEnabled();
+    // The rows track the emitted state, and no position is ever 0.
+    expect(orderingKeys()).toEqual(['B', 'A', 'C']);
+    expect(emitted.flatMap((value) => value).every((p) => p >= 1)).toBe(true);
+  });
+
+  it('builds the exact sequence [3,1,2] from a committed identity order', async () => {
+    const user = userEvent.setup();
+    const onOrderingAnswerChange = vi.fn();
     const { rerender } = render(
       <QuestionRenderer
         question={question('ORDERING')}
         mode="answer"
-        onSelectedOptionKeysChange={onSelectedOptionKeysChange}
+        orderingAnswer={[1, 2, 3]}
+        onOrderingAnswerChange={onOrderingAnswerChange}
       />
     );
 
-    await user.click(screen.getByRole('button', { name: '下移第 1 项' }));
-    expect(onSelectedOptionKeysChange).toHaveBeenCalledWith(['B', 'A', 'C']);
+    await user.click(screen.getByRole('button', { name: '上移第 3 项' }));
+    expect(onOrderingAnswerChange).toHaveBeenLastCalledWith([1, 3, 2]);
 
-    // Controlled: the page owns the order, so the next swap is applied to the
-    // array it stored rather than to the rendered default.
     rerender(
       <QuestionRenderer
         question={question('ORDERING')}
         mode="answer"
-        selectedOptionKeys={['B', 'A', 'C']}
-        onSelectedOptionKeysChange={onSelectedOptionKeysChange}
+        orderingAnswer={[1, 3, 2]}
+        onOrderingAnswerChange={onOrderingAnswerChange}
       />
     );
-    await user.click(screen.getByRole('button', { name: '上移第 3 项' }));
-    expect(onSelectedOptionKeysChange).toHaveBeenLastCalledWith(['B', 'C', 'A']);
+    await user.click(screen.getByRole('button', { name: '上移第 2 项' }));
+    expect(onOrderingAnswerChange).toHaveBeenLastCalledWith([3, 1, 2]);
+  });
+
+  it('commits the presented order when the user confirms it', async () => {
+    const user = userEvent.setup();
+    const emitted: number[][] = [];
+    const onSubmit = vi.fn();
+    render(
+      <AnsweringPage
+        question={question('ORDERING')}
+        onPayload={(payload) => emitted.push(payload.orderingAnswer ?? [])}
+        onSubmit={onSubmit}
+      />
+    );
+
+    // Without a commit the answer cannot be sent at all.
+    await user.click(screen.getByRole('button', { name: '提交' }));
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: '确认当前顺序' }));
+    expect(emitted).toEqual([[1, 2, 3]]);
+    expect(screen.getByRole('button', { name: '提交' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: '确认当前顺序' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '提交' }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
   it('moves an item with the keyboard alone', async () => {
     const user = userEvent.setup();
-    const onSelectedOptionKeysChange = vi.fn();
+    const onOrderingAnswerChange = vi.fn();
     render(
       <QuestionRenderer
         question={question('ORDERING')}
         mode="answer"
-        onSelectedOptionKeysChange={onSelectedOptionKeysChange}
+        onOrderingAnswerChange={onOrderingAnswerChange}
       />
     );
 
     await user.tab(); // first enabled control = 下移第 1 项
     expect(screen.getByRole('button', { name: '下移第 1 项' })).toHaveFocus();
     await user.keyboard('{Enter}');
-    expect(onSelectedOptionKeysChange).toHaveBeenCalledWith(['B', 'A', 'C']);
+    expect(onOrderingAnswerChange).toHaveBeenCalledWith([2, 1, 3]);
   });
 
   it('honours the order the page already holds', () => {
@@ -254,8 +336,8 @@ describe('QuestionRenderer — ORDERING (G02)', () => {
       <QuestionRenderer
         question={question('ORDERING')}
         mode="answer"
-        selectedOptionKeys={['C', 'A', 'B']}
-        onSelectedOptionKeysChange={vi.fn()}
+        orderingAnswer={[3, 1, 2]}
+        onOrderingAnswerChange={vi.fn()}
         onSubmit={vi.fn()}
       />
     );
@@ -265,13 +347,56 @@ describe('QuestionRenderer — ORDERING (G02)', () => {
     expect(screen.getByRole('button', { name: '提交' })).toBeEnabled();
   });
 
+  it('refuses an incomplete ordering and repairs a drafted 0 instead of sending it', async () => {
+    const user = userEvent.setup();
+    const onOrderingAnswerChange = vi.fn();
+    const onSubmit = vi.fn();
+    render(
+      <QuestionRenderer
+        question={question('ORDERING')}
+        mode="answer"
+        // A half-drafted sequence (and a 0, which the contract forbids with
+        // `minimum: 1`): not an answer yet, so submit must stay dark.
+        orderingAnswer={[0, 2]}
+        onOrderingAnswerChange={onOrderingAnswerChange}
+        onSubmit={onSubmit}
+      />
+    );
+
+    const submit = screen.getByRole('button', { name: '提交' });
+    expect(submit).toBeDisabled();
+    await user.click(submit);
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText('请先确定每个选项的位置。')).toBeInTheDocument();
+
+    // The 0 is dropped rather than displayed or emitted and the missing
+    // position is appended, so the rows read [2,1,3] and the next move produces
+    // a legal 1-based permutation.
+    expect(orderingKeys()).toEqual(['B', 'A', 'C']);
+    await user.click(screen.getByRole('button', { name: '下移第 1 项' }));
+    expect(onOrderingAnswerChange).toHaveBeenCalledWith([1, 2, 3]);
+  });
+
+  it('says so when the question has nothing to order', () => {
+    render(
+      <QuestionRenderer
+        question={{ questionType: 'ORDERING', stem: '空题', options: [] }}
+        mode="answer"
+        onOrderingAnswerChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('ordering-no-options')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '提交' })).toBeDisabled();
+  });
+
   it('review keeps the submitted order, drops the controls and flags the gap', () => {
     render(
       <QuestionRenderer
         question={question('ORDERING')}
         answer={{ explanation: '按发生先后排列' }}
         mode="review"
-        selectedOptionKeys={['B', 'A', 'C']}
+        orderingAnswer={[2, 1, 3]}
       />
     );
 
@@ -294,32 +419,162 @@ describe('QuestionRenderer — ORDERING (G02)', () => {
   });
 });
 
-describe('QuestionRenderer — MATCHING (G02)', () => {
-  it('renders the options read-only in two columns', () => {
-    render(<QuestionRenderer question={question('MATCHING')} mode="review" />);
-
-    const columns = screen.getAllByTestId('matching-column');
-    expect(columns).toHaveLength(2);
-    expect(columns[0]).toHaveTextContent('第一项');
-    expect(columns[0]).toHaveTextContent('第二项');
-    expect(columns[1]).toHaveTextContent('第三项');
+describe('QuestionRenderer — MATCHING (G02 / C09)', () => {
+  it('splits the option list into the two columns the editor pairs', () => {
+    const { left, right } = splitMatchingOptions(matchingOptions);
+    expect(left.map((item) => item.optionKey)).toEqual(['A', 'B']);
+    expect(right.map((item) => item.optionKey)).toEqual(['1', '2']);
   });
 
-  it('offers no pair widget and no submit in answer mode', () => {
-    const onSubmit = vi.fn();
+  it('emits the pair array as {left,right} JSON, keyed by optionKey', async () => {
+    const user = userEvent.setup();
+    const emitted: (string | undefined)[] = [];
     render(
-      <QuestionRenderer
-        question={question('MATCHING')}
-        mode="answer"
-        onSelectedOptionKeysChange={vi.fn()}
-        onSubmit={onSubmit}
+      <AnsweringPage
+        question={matchingQuestion()}
+        onPayload={(payload) => emitted.push(payload.matchingAnswer)}
       />
     );
 
-    expect(screen.queryByRole('button', { name: '提交' })).not.toBeInTheDocument();
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
-    expect(screen.getByTestId('contract-gap-notice')).toHaveTextContent('配对题');
-    expect(screen.getByTestId('contract-gap-notice')).toHaveTextContent('pairs');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '为「巴黎」选择配对项' }),
+      '1'
+    );
+    expect(emitted.at(-1)).toBe(JSON.stringify([{ left: 'A', right: '1' }]));
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '为「东京」选择配对项' }),
+      '2'
+    );
+    const wire = emitted.at(-1);
+    expect(wire).toBe(
+      JSON.stringify([
+        { left: 'A', right: '1' },
+        { left: 'B', right: '2' },
+      ])
+    );
+    // Exactly the two keys the grader parses, nothing else.
+    expect(JSON.parse(wire ?? '{}')).toEqual([
+      { left: 'A', right: '1' },
+      { left: 'B', right: '2' },
+    ]);
+  });
+
+  it('keeps submit disabled until every left item is paired', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <AnsweringPage question={matchingQuestion()} onSubmit={onSubmit} />
+    );
+
+    const submit = screen.getByRole('button', { name: '提交' });
+    expect(submit).toBeDisabled();
+    await user.click(submit);
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '为「巴黎」选择配对项' }),
+      '1'
+    );
+    expect(submit).toBeDisabled();
+    expect(screen.getByText('请为每个左侧项目选择一个配对项。')).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '为「东京」选择配对项' }),
+      '2'
+    );
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads back the stored pairs instead of starting over', () => {
+    render(
+      <QuestionRenderer
+        question={matchingQuestion()}
+        mode="answer"
+        matchingAnswer={JSON.stringify([
+          { left: 'B', right: '2' },
+          { left: 'A', right: '1' },
+        ])}
+        onMatchingAnswerChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    );
+
+    // Order in the string is irrelevant (the grader compares sets), and both
+    // rows come back filled, so the answer is submittable as it stands.
+    expect(
+      screen.getByRole('combobox', { name: '为「巴黎」选择配对项' })
+    ).toHaveValue('1');
+    expect(
+      screen.getByRole('combobox', { name: '为「东京」选择配对项' })
+    ).toHaveValue('2');
+    expect(screen.getByRole('button', { name: '提交' })).toBeEnabled();
+  });
+
+  it('refuses a malformed or foreign pair string', () => {
+    const onSubmit = vi.fn();
+    const { rerender } = render(
+      <QuestionRenderer
+        question={matchingQuestion()}
+        mode="answer"
+        matchingAnswer="not json at all"
+        onMatchingAnswerChange={vi.fn()}
+        onSubmit={onSubmit}
+      />
+    );
+    expect(screen.getByRole('button', { name: '提交' })).toBeDisabled();
+
+    rerender(
+      <QuestionRenderer
+        question={matchingQuestion()}
+        mode="answer"
+        // Complete-looking, but a pair the grader can never match (extra key)
+        // and a right item this question does not offer.
+        matchingAnswer={JSON.stringify([
+          { left: 'A', right: '1', note: 'x' },
+          { left: 'B', right: '9' },
+        ])}
+        onMatchingAnswerChange={vi.fn()}
+        onSubmit={onSubmit}
+      />
+    );
+    expect(screen.getByRole('button', { name: '提交' })).toBeDisabled();
+    expect(parseMatchingPairs('{"left":"A"}', ['A'], ['1'])).toEqual([]);
+  });
+
+  it('shows the submitted pairs in review and never an editor', () => {
+    render(
+      <QuestionRenderer
+        question={matchingQuestion()}
+        answer={{ explanation: '首都是关键' }}
+        mode="review"
+        matchingAnswer={JSON.stringify([{ left: 'A', right: '1' }, { left: 'B', right: '2' }])}
+      />
+    );
+
+    expect(screen.getAllByTestId('matching-pair').map((el) => el.textContent)).toEqual([
+      '巴黎 ↔ 法国',
+      '东京 ↔ 日本',
+    ]);
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.getByTestId('contract-gap-notice')).toHaveTextContent('matchesJson');
+  });
+
+  it('review says so when nothing was paired', () => {
+    render(<QuestionRenderer question={matchingQuestion()} mode="review" />);
+    expect(screen.getByTestId('matching-empty')).toBeInTheDocument();
+    expect(screen.queryAllByTestId('matching-pair')).toHaveLength(0);
+  });
+
+  it('shows the two columns as the item pool when the page cannot hold pairs', () => {
+    render(<QuestionRenderer question={matchingQuestion()} mode="answer" />);
+    const columns = screen.getAllByTestId('matching-column');
+    expect(columns).toHaveLength(2);
+    expect(columns[0]).toHaveTextContent('巴黎');
+    expect(columns[1]).toHaveTextContent('日本');
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 });
 

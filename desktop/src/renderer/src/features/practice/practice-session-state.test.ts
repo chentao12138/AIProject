@@ -1,6 +1,7 @@
 /**
  * Practice state helpers — payload shapes the backend accepts, error copy,
- * and the response mirror that survives unmount (audit W01 / W02 / W03).
+ * and the response mirror that survives unmount (audit W01 / W02 / W03) plus
+ * the A5.2 resume read (`GET …/answers`).
  */
 
 import { describe, expect, it } from 'vitest';
@@ -16,7 +17,9 @@ import {
   describeSubmittedAnswer,
   firstOpenSlotIndex,
   practiceLocalStateKey,
+  practicePayloadContext,
   toPracticeSlots,
+  unanswerableTypeNotice,
   usePracticeLocalState,
   type PracticeSubmittedAnswer,
 } from './practice-session-state';
@@ -61,19 +64,97 @@ describe('buildAnswerPayload', () => {
     expect(buildAnswerPayload('SHORT_ANSWER', { textAnswer: '' }).ok).toBe(false);
   });
 
-  // AnswerPayloadView carries neither orderingAnswer nor matchingAnswer.
-  it('names the missing contract fields instead of sending a 400-bound body', () => {
-    const ordering = buildAnswerPayload('ORDERING', { textAnswer: 'x' });
-    const matching = buildAnswerPayload('MATCHING', { textAnswer: 'x' });
-    expect(ordering.ok).toBe(false);
-    expect(matching.ok).toBe(false);
-    if (!ordering.ok) expect(ordering.message).toContain('orderingAnswer');
-    if (!matching.ok) expect(matching.message).toContain('matchingAnswer');
+  // C09 is closed: AnswerPayloadView grew orderingAnswer / matchingAnswer, so
+  // both types now travel in the field the backend actually grades.
+  it('sends the committed 1-based positions for ORDERING', () => {
+    expect(
+      buildAnswerPayload('ORDERING', { orderingAnswer: [3, 1, 2] }, { optionCount: 3 })
+    ).toEqual({ ok: true, answer: { orderingAnswer: [3, 1, 2] } });
+    // …and only that field: a payload with another one is a 400.
+    const result = buildAnswerPayload(
+      'ORDERING',
+      { orderingAnswer: [2, 1], textAnswer: 'stale draft' },
+      { optionCount: 2 }
+    );
+    expect(result.ok && result.answer).toEqual({ orderingAnswer: [2, 1] });
   });
 
-  it('rejects a question type the backend does not grade', () => {
+  // gradeOrdering compares the whole list for equality and throws on an empty
+  // one, so anything short of a full permutation must never be sent.
+  it('refuses an ORDERING answer that is not one complete permutation', () => {
+    const cases: Array<[number[] | undefined, number]> = [
+      [undefined, 3],
+      [[], 3],
+      [[1, 2], 3], // not every option placed
+      [[0, 1, 2], 3], // the contract puts minimum: 1 on every item
+      [[2, 2, 1], 3], // one option in two places
+      [[1, 2, 4], 3], // a position the paper does not have
+      [[1, 2, 3, 4], 3], // longer than the paper
+      [[1.5, 2, 3], 3],
+    ];
+    for (const [orderingAnswer, optionCount] of cases) {
+      const result = buildAnswerPayload(
+        'ORDERING',
+        orderingAnswer === undefined ? {} : { orderingAnswer },
+        { optionCount }
+      );
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('sends the pair JSON for MATCHING, re-serialized to {left,right}', () => {
+    const wire = JSON.stringify([
+      { left: 'B', right: '2' },
+      { left: 'A', right: '1' },
+    ]);
+    const result = buildAnswerPayload('MATCHING', { matchingAnswer: wire }, { leftCount: 2 });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Object.keys(result.answer)).toEqual(['matchingAnswer']);
+      // The order the pairs were made in is irrelevant to the grader (it
+      // compares sets), so it is passed through untouched, keys and all.
+      expect(JSON.parse(result.answer.matchingAnswer as string)).toEqual([
+        { left: 'B', right: '2' },
+        { left: 'A', right: '1' },
+      ]);
+    }
+  });
+
+  // gradeMatching parses the string into maps: malformed JSON, a stray key, a
+  // blank side or a repeated left item can only ever be a 400 or a wrong grade.
+  it('refuses a MATCHING answer the grader cannot read', () => {
+    const refused = [
+      undefined,
+      '',
+      '   ',
+      'not json',
+      '{"left":"A","right":"1"}', // an object, not the array the codec stores
+      '[]',
+      JSON.stringify([{ left: 'A', right: '1', note: 'extra key' }]),
+      JSON.stringify([{ left: 'A', right: '' }]),
+      JSON.stringify([{ left: 'A', right: '1' }, { left: 'A', right: '2' }]),
+      JSON.stringify([{ left: 'A', right: '1' }]), // one of two left items
+      JSON.stringify([{ key: 'A', value: '1' }]),
+      `"${'x'.repeat(10001)}"`,
+    ];
+    for (const matchingAnswer of refused) {
+      const result = buildAnswerPayload(
+        'MATCHING',
+        matchingAnswer === undefined ? {} : { matchingAnswer },
+        { leftCount: 2 }
+      );
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('still names the gap for a type the backend does not grade', () => {
     const result = buildAnswerPayload('ESSAY', { textAnswer: 'x' });
     expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain('暂不支持的题型');
+    expect(unanswerableTypeNotice('ESSAY')).toContain('ESSAY');
+    expect(unanswerableTypeNotice('ORDERING')).toBeNull();
+    expect(unanswerableTypeNotice('MATCHING')).toBeNull();
+    expect(unanswerableTypeNotice(undefined)).not.toBeNull();
   });
 });
 
@@ -89,6 +170,53 @@ describe('describeSubmittedAnswer', () => {
       '提交内容：a,b'
     );
     expect(describeSubmittedAnswer('SHORT_ANSWER', {})).toBe('未填写内容');
+    expect(
+      describeSubmittedAnswer('ORDERING', { orderingAnswer: [3, 1, 2] })
+    ).toBe('提交顺序：第3项 → 第1项 → 第2项');
+    expect(
+      describeSubmittedAnswer('MATCHING', {
+        matchingAnswer: JSON.stringify([
+          { left: 'A', right: '1' },
+          { left: 'B', right: '2' },
+        ]),
+      })
+    ).toBe('提交配对：A↔1、B↔2');
+    expect(describeSubmittedAnswer('MATCHING', { matchingAnswer: 'oops' })).toBe(
+      '未配对'
+    );
+  });
+
+  // An answer read back from GET …/answers has no content to describe: the
+  // copy says so instead of dressing up the verdict as the learner's reply.
+  it('has no echo to describe for a server-read answer', () => {
+    expect(describeSubmittedAnswer('SINGLE_CHOICE', undefined)).toBe(
+      '本端未记录作答内容'
+    );
+  });
+});
+
+describe('practicePayloadContext', () => {
+  it('counts the paper the way the editor splits it', () => {
+    expect(
+      practicePayloadContext({
+        options: [
+          { optionKey: 'A', content: 'a' },
+          { optionKey: 'B', content: 'b' },
+          { optionKey: 'C', content: 'c' },
+        ],
+      })
+    ).toEqual({ optionCount: 3, leftCount: 2 });
+    expect(practicePayloadContext({})).toEqual({ optionCount: 0, leftCount: 0 });
+  });
+
+  it('drives the ORDERING gate from the option count', () => {
+    const slot = { options: [{ optionKey: 'A', content: 'a' }, { optionKey: 'B', content: 'b' }] };
+    expect(
+      buildAnswerPayload('ORDERING', { orderingAnswer: [1] }, practicePayloadContext(slot)).ok
+    ).toBe(false);
+    expect(
+      buildAnswerPayload('ORDERING', { orderingAnswer: [2, 1] }, practicePayloadContext(slot)).ok
+    ).toBe(true);
   });
 });
 
@@ -296,5 +424,74 @@ describe('usePracticeLocalState', () => {
       expect(a.result.current.state.submitted[11]).toBeDefined();
     });
     expect(b.result.current.state.submitted).toEqual({});
+  });
+
+  // A5.2 resume: the server's answer rows land in the SAME cache entries the
+  // POST responses wrote, so "已作答" has one source. The view has no answer
+  // field, so these entries carry the verdict only — no invented `answer`.
+  it('mirrors the server answer rows into the submitted cache', async () => {
+    const { result } = renderHook(() => usePracticeLocalState(7, 1), { wrapper });
+    act(() => {
+      result.current.mirrorServerAnswers(
+        [{ practiceSessionQuestionId: 11 }, { practiceSessionQuestionId: 12 }],
+        [
+          {
+            id: 1,
+            practiceSessionQuestionId: 11,
+            questionId: 101,
+            isCorrect: true,
+            correctAnswer: 'A',
+            answeredAt: '2026-10-13T08:00:00Z',
+          },
+          // A row for a question that is not on this paper: nowhere to file it.
+          { id: 2, practiceSessionQuestionId: 99, questionId: 999, isCorrect: false },
+        ]
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.state.submitted[11]).toEqual({
+        view: expect.objectContaining({ practiceSessionQuestionId: 11, isCorrect: true }),
+        source: 'server',
+      });
+    });
+    expect(result.current.state.submitted[11]?.answer).toBeUndefined();
+    expect(result.current.state.submitted[12]).toBeUndefined();
+    expect(result.current.state.submitted[99]).toBeUndefined();
+    // Unanswered questions stay unanswered, and the resume position moves on.
+    expect(
+      firstOpenSlotIndex(
+        toPracticeSlots({
+          questions: [
+            { practiceSessionQuestionId: 11, questionId: 101 },
+            { practiceSessionQuestionId: 12, questionId: 102 },
+          ],
+        }),
+        result.current.state.submitted
+      )
+    ).toBe(1);
+  });
+
+  it('never overwrites the echo of an answer this client posted', async () => {
+    const { result } = renderHook(() => usePracticeLocalState(7, 1), { wrapper });
+    act(() => {
+      result.current.markSubmitted(11, {
+        answer: { orderingAnswer: [3, 1, 2] },
+        view: { practiceSessionQuestionId: 11, isCorrect: true },
+        source: 'submitted',
+      });
+      result.current.mirrorServerAnswers(
+        [{ practiceSessionQuestionId: 11 }],
+        [{ practiceSessionQuestionId: 11, isCorrect: false }]
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.state.submitted[11]?.answer).toEqual({
+        orderingAnswer: [3, 1, 2],
+      });
+    });
+    expect(result.current.state.submitted[11]?.view.isCorrect).toBe(true);
+    expect(result.current.state.submitted[11]?.source).toBe('submitted');
   });
 });

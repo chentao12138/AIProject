@@ -66,6 +66,34 @@ const ORDERING = {
   ],
 };
 
+const MATCHING = {
+  practiceSessionQuestionId: 15,
+  questionId: 105,
+  questionType: 'MATCHING',
+  stem: 'Match the cities',
+  options: [
+    { optionKey: 'A', content: '巴黎' },
+    { optionKey: 'B', content: '东京' },
+    { optionKey: '1', content: '法国' },
+    { optionKey: '2', content: '日本' },
+  ],
+};
+
+/** A row of `GET …/answers`: a verdict, and no answer content (A5.2). */
+function serverAnswer(slotId: number, extra: Record<string, unknown> = {}) {
+  return {
+    id: slotId,
+    practiceSessionQuestionId: slotId,
+    questionId: 100 + slotId,
+    isCorrect: true,
+    correctAnswer: 'A',
+    explanation: `slot ${slotId} read back from the server`,
+    score: 1,
+    answeredAt: '2026-10-13T07:30:00Z',
+    ...extra,
+  };
+}
+
 function ok<T>(data: T) {
   return { data, response: { status: 200 } };
 }
@@ -417,19 +445,128 @@ describe('PracticeSessionPage', () => {
     await waitFor(() => expect(finishPracticeSession).toHaveBeenCalledTimes(2));
   });
 
-  it('warns honestly when a started session has no readable answers', async () => {
+  // A5.2: the resume read EXISTS now, so a started session with nothing on
+  // record means the server really has no answers — not that this client lost
+  // them. The copy has to say which of the two it checked.
+  it('says plainly when the server has no answers for a started session', async () => {
+    const listPracticeAnswers = vi.fn(async () => ok([]));
     renderSession(
       mockApiClient({
         getPracticeSession: vi.fn(async () =>
           ok(session('IN_PROGRESS', [SINGLE], { startedAt: '2026-10-13T07:00:00Z' }))
         ),
+        listPracticeAnswers,
       }),
       createTestQueryClient()
     );
 
     const notice = await screen.findByTestId('resume-notice');
     expect(notice.textContent).toContain('此会话此前已开始');
-    expect(notice.textContent).toContain('后端没有逐题答案读取端点');
+    expect(notice.textContent).toContain('GET /answers');
+    expect(notice.textContent).toContain('没有返回任何已作答题目');
+    expect(listPracticeAnswers).toHaveBeenCalledWith(7, 1);
+    expect(screen.queryByText(/后端没有逐题答案读取端点/)).toBeNull();
+  });
+
+  // The read is what makes a refreshed session show its answered questions —
+  // no local POST, no cache, just the endpoint's rows.
+  it('resumes a refreshed session from listPracticeAnswers, verdict only', async () => {
+    const user = userEvent.setup();
+    const submitPracticeAnswer = vi.fn(answerServer);
+    const listPracticeAnswers = vi.fn(async () =>
+      ok([serverAnswer(11), serverAnswer(12, { isCorrect: false, correctAnswer: 'B' })])
+    );
+
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () =>
+          ok(
+            session('IN_PROGRESS', [SINGLE, TRUE_FALSE], {
+              startedAt: '2026-10-13T07:00:00Z',
+            })
+          )
+        ),
+        submitPracticeAnswer,
+        listPracticeAnswers,
+      }),
+      createTestQueryClient()
+    );
+
+    expect(await screen.findByTestId('answers-loading')).toBeInTheDocument();
+    await waitFor(() => expect(listPracticeAnswers).toHaveBeenCalledWith(7, 1));
+
+    // Both questions show as answered from the server's rows.
+    expect(await screen.findByText(/已提交 2 题/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '第 1 题（已提交）' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '第 2 题（已提交）' })
+    ).toBeInTheDocument();
+    // Every question answered on the server: nothing left to jump to.
+    expect(screen.queryByRole('button', { name: '跳到未提交题' })).toBeNull();
+
+    // The verdict comes through, tri-state, and this client may not write over
+    // a question the server already has.
+    expect(screen.getByText('答对')).toBeInTheDocument();
+    expect(screen.getByText(/slot 11 read back from the server/)).toBeInTheDocument();
+    expect(screen.getByText('正确答案：A')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '提交' })).toBeNull();
+    expect(submitPracticeAnswer).not.toHaveBeenCalled();
+
+    // …and no answer content is invented: the view does not echo it.
+    expect(screen.getByTestId('answer-content-unavailable')).toBeInTheDocument();
+    expect(screen.queryByText(/我的作答/)).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '第 2 题（已提交）' }));
+    expect(screen.getByText('第 2 题 · 判断')).toBeInTheDocument();
+    expect(screen.getByText('答错')).toBeInTheDocument();
+    expect(screen.getByText(/slot 12 read back from the server/)).toBeInTheDocument();
+  });
+
+  // An ungraded verdict from the read must not be rendered as 答错 (ADR-031).
+  it('keeps the read verdict tri-state for a short answer', async () => {
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () =>
+          ok(session('IN_PROGRESS', [SINGLE], { startedAt: '2026-10-13T07:00:00Z' }))
+        ),
+        listPracticeAnswers: vi.fn(async () =>
+          ok([serverAnswer(11, { isCorrect: null, score: null, explanation: null })])
+        ),
+      }),
+      createTestQueryClient()
+    );
+
+    expect(await screen.findByText('后端未返回逐题评分')).toBeInTheDocument();
+    expect(screen.queryByText('答对')).toBeNull();
+    expect(screen.queryByText('答错')).toBeNull();
+    expect(screen.getByTestId('answer-feedback').getAttribute('data-tone')).toBe(
+      'ungraded'
+    );
+  });
+
+  // A failed read must not silently report an untouched paper.
+  it('reports a failed answer read instead of pretending nothing was answered', async () => {
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () =>
+          ok(session('IN_PROGRESS', [SINGLE], { startedAt: '2026-10-13T07:00:00Z' }))
+        ),
+        listPracticeAnswers: vi.fn(async () => {
+          throw new ApiRequestError(500, {});
+        }),
+      }),
+      createTestQueryClient()
+    );
+
+    const note = await screen.findByTestId('answers-unreadable');
+    expect(note.textContent).toContain('无法读取服务端的已作答记录');
+    expect(note.textContent).toContain('服务器暂时无法完成请求');
+    expect(screen.getByRole('button', { name: '重试读取' })).toBeInTheDocument();
+    expect(screen.queryByTestId('resume-notice')).toBeNull();
+    // The paper is still usable: the read is a supplement, not a gate.
+    expect(screen.getByText('Pick one')).toBeInTheDocument();
   });
 
   // W03: the review is built from the PracticeAnswerView each POST returned.
@@ -518,9 +655,47 @@ describe('PracticeSessionPage', () => {
     expect(note.textContent).toContain('成绩需后端 result 端点');
     expect(note.textContent).toContain('C06');
 
+    // The per-question read EXISTS now, so the empty list is a fact about this
+    // session, not a missing endpoint: it says the server holds nothing.
     const review = await screen.findByTestId('review-unavailable');
-    expect(review.textContent).toContain('PracticeAnswerView');
-    expect(review.textContent).toContain('result');
+    expect(review.textContent).toContain('/answers');
+    expect(review.textContent).toContain('空列表');
+    expect(review.textContent).not.toContain('没有逐题答案读取端点');
+  });
+
+  // A5.2 / W03: a session reopened after 交卷 still gets its per-question
+  // review, because the rows come from GET …/answers rather than this client's
+  // memory of the POSTs.
+  it('builds the review of a finished session from the server answer read', async () => {
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () =>
+          ok(
+            session('SUBMITTED', [SINGLE, TRUE_FALSE], {
+              startedAt: '2026-10-13T07:00:00Z',
+              finishedAt: '2026-10-13T09:00:00Z',
+            })
+          )
+        ),
+        listPracticeAnswers: vi.fn(async () =>
+          ok([serverAnswer(11), serverAnswer(12, { isCorrect: false })])
+        ),
+      }),
+      createTestQueryClient()
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: '练习 #1 — 成绩' })
+    ).toBeInTheDocument();
+    expect(await screen.findByText(/已记录 2 \/ 2 题的后端逐题结果/)).toBeInTheDocument();
+    expect(screen.getByText(/slot 11 read back from the server/)).toBeInTheDocument();
+    expect(screen.getByText(/slot 12 read back from the server/)).toBeInTheDocument();
+    // The review line carries the verdict and the server's score in one row, so
+    // the label is matched as a substring; exactly one of each verdict.
+    expect(screen.getAllByText(/答对/)).toHaveLength(1);
+    expect(screen.getAllByText(/答错/)).toHaveLength(1);
+    // No invented replies anywhere in the review either.
+    expect(screen.getAllByTestId('review-answer-unreadable')).toHaveLength(2);
   });
 
   it('keeps the finish summary readable after leaving and returning', async () => {
@@ -604,10 +779,11 @@ describe('PracticeSessionPage', () => {
     expect(screen.getByText('我的作答：提交内容：alpha,beta')).toBeInTheDocument();
   });
 
-  // Audit C09: AnswerPayloadView has no orderingAnswer / matchingAnswer, so
-  // those types cannot be answered from this client at all.
-  it('explains why an ORDERING question cannot be answered yet', async () => {
-    const submitPracticeAnswer = vi.fn(async () => ok({ id: 14 }));
+  // C09 closed: ORDERING has its contract field, so the paper is answered with
+  // 1-based positions — and only once every option has one.
+  it('answers an ORDERING question with the exact orderingAnswer payload', async () => {
+    const user = userEvent.setup();
+    const submitPracticeAnswer = vi.fn(answerServer);
     renderSession(
       mockApiClient({
         getPracticeSession: vi.fn(async () => ok(session('IN_PROGRESS', [ORDERING]))),
@@ -616,10 +792,74 @@ describe('PracticeSessionPage', () => {
       createTestQueryClient()
     );
 
-    const note = await screen.findByTestId('unsupported-question-type');
-    expect(note.textContent).toContain('orderingAnswer');
-    expect(screen.queryByRole('button', { name: '提交' })).toBeNull();
+    expect(await screen.findByText('Put these in order')).toBeInTheDocument();
+    expect(screen.queryByTestId('unsupported-question-type')).toBeNull();
+
+    // Nothing committed yet: the card's own gate keeps 提交 dark.
+    const submit = screen.getByRole('button', { name: '提交' });
+    expect(submit).toBeDisabled();
+    expect(screen.getByTestId('submit-hint').textContent).toContain('排序题');
+    await user.click(submit);
     expect(submitPracticeAnswer).not.toHaveBeenCalled();
+
+    // Row 1 down = option 2 in front of option 1 -> positions [2,1].
+    await user.click(screen.getByRole('button', { name: '下移第 1 项' }));
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    await waitFor(() =>
+      expect(submitPracticeAnswer).toHaveBeenCalledWith(7, 1, {
+        practiceSessionQuestionId: 14,
+        answer: { orderingAnswer: [2, 1] },
+      })
+    );
+    expect(await screen.findByTestId('answer-feedback')).toBeInTheDocument();
+    expect(screen.getByText('我的作答：提交顺序：第2项 → 第1项')).toBeInTheDocument();
+  });
+
+  // MATCHING: the payload is the serialized pair array the grader parses, with
+  // exactly {left,right} per pair.
+  it('answers a MATCHING question with the exact matchingAnswer payload', async () => {
+    const user = userEvent.setup();
+    const submitPracticeAnswer = vi.fn(answerServer);
+    renderSession(
+      mockApiClient({
+        getPracticeSession: vi.fn(async () => ok(session('IN_PROGRESS', [MATCHING]))),
+        submitPracticeAnswer,
+      }),
+      createTestQueryClient()
+    );
+
+    expect(await screen.findByText('Match the cities')).toBeInTheDocument();
+    const submit = screen.getByRole('button', { name: '提交' });
+    expect(submit).toBeDisabled();
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '为「巴黎」选择配对项' }),
+      '1'
+    );
+    expect(submit).toBeDisabled();
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '为「东京」选择配对项' }),
+      '2'
+    );
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    await waitFor(() => expect(submitPracticeAnswer).toHaveBeenCalledTimes(1));
+    const body = submitPracticeAnswer.mock.calls[0]?.[2] as {
+      practiceSessionQuestionId: number;
+      answer: { matchingAnswer: string };
+    };
+    expect(body.practiceSessionQuestionId).toBe(15);
+    expect(Object.keys(body.answer)).toEqual(['matchingAnswer']);
+    expect(JSON.parse(body.answer.matchingAnswer)).toEqual([
+      { left: 'A', right: '1' },
+      { left: 'B', right: '2' },
+    ]);
+    expect(
+      await screen.findByText('我的作答：提交配对：A↔1、B↔2')
+    ).toBeInTheDocument();
   });
 
   it('reports an empty session instead of an empty answer form', async () => {

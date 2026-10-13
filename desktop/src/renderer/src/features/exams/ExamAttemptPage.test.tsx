@@ -630,4 +630,56 @@ describe('ExamAttemptPage', () => {
     // Nothing is answered yet, so no countdown on a paper not started.
     expect(screen.queryByText(/^剩余时间/)).not.toBeInTheDocument();
   });
+
+  // C09 closed on the exam side too: an ORDERING slot saves its 1-based
+  // positions (never `textAnswer: ''`, which the server would reject), and the
+  // save button stays dark until every option has a place.
+  it('saves an ORDERING answer as orderingAnswer positions', async () => {
+    const user = userEvent.setup();
+    const submitExamAnswer = mockSave();
+    renderAttempt({
+      submitExamAnswer,
+      getExamAttempt: vi.fn(async () =>
+        ok({
+          id: 5,
+          examId: 21,
+          status: 'IN_PROGRESS',
+          questions: [
+            {
+              examQuestionId: 14,
+              questionId: 114,
+              sortOrder: 1,
+              score: 5,
+              questionType: 'ORDERING',
+              stem: '把步骤排序',
+              options: [
+                { optionKey: 'A', content: '第一步' },
+                { optionKey: 'B', content: '第二步' },
+                { optionKey: 'C', content: '第三步' },
+              ],
+            },
+          ],
+        })
+      ),
+    });
+
+    const save = await screen.findByRole('button', { name: '保存答案' });
+    expect(save).toBeDisabled();
+    await user.click(save);
+    expect(submitExamAnswer).not.toHaveBeenCalled();
+
+    // 第三步 up once, then up again: the rows read C, A, B -> positions [3,1,2].
+    await user.click(screen.getByRole('button', { name: '上移第 3 项' }));
+    await user.click(screen.getByRole('button', { name: '上移第 2 项' }));
+    expect(save).toBeEnabled();
+    await user.click(save);
+
+    await waitFor(() =>
+      expect(submitExamAnswer).toHaveBeenCalledWith(7, 5, {
+        examQuestionId: 14,
+        answer: { orderingAnswer: [3, 1, 2] },
+      })
+    );
+    expect(await screen.findByRole('button', { name: '已保存' })).toBeInTheDocument();
+  });
 });

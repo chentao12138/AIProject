@@ -1,19 +1,25 @@
 /**
- * Practice per-question review (audit W03 + the reachable part of G05).
+ * Practice per-question review (audit W03 + the reachable part of G05 + A5.2).
  *
- * Data source discipline: `GET /practice-sessions/{id}` returns
- * `PracticeSessionDetail` = session fields + `questions` ONLY — no answers,
- * no score (verified in openapi.json / generated api.d.ts). The only
- * server-issued per-question truth is the `PracticeAnswerView` returned by
- * `POST /practice-sessions/{id}/answers`, and the contract declares no GET
- * for it (`/answers` is `post`; `get?: never`). So this list renders those
- * responses and says plainly which questions have no readable result,
- * instead of leaving a blank card or scoring locally (ADR-031).
+ * Data source discipline:
+ *  - `GET /practice-sessions/{id}` returns `PracticeSessionDetail` = session
+ *    fields + `questions` ONLY — no answers, no score.
+ *  - `GET /practice-sessions/{id}/answers` returns the `PracticeAnswerView`
+ *    rows the server holds, and `POST .../answers` returns one of the same.
+ *    Both are mirrored into the session's cache by practice-session-state, so
+ *    this list renders the server's records — including answers this device
+ *    never sent — instead of leaving a blank card or scoring locally (ADR-031).
+ *  - Neither view echoes the user's own answer text. An entry without a local
+ *    echo is reported as 已作答 with the verdict only; nothing about what was
+ *    answered is invented here.
+ *  - The session SCORE still has no read endpoint (`…/result` is not in the
+ *    contract — gap C06), which is the page's business, not this list's.
  */
 
 import { Link } from 'react-router-dom';
 import { isPositiveId } from '../../lib/ids';
 import { formatDateTime } from '../../lib/format';
+import { Button } from '../../components/Button';
 import {
   describeServerVerdict,
   describeSubmittedAnswer,
@@ -25,29 +31,57 @@ export interface PracticeReviewListProps {
   spaceId: number;
   slots: PracticeQuestionSlot[];
   submitted: Record<number, PracticeSubmittedAnswer>;
+  /** The answer read is still in flight: say so rather than claim nothing. */
+  loading?: boolean;
+  /** The answer read failed: name it, and offer the one action that helps. */
+  error?: string | null;
+  onRetry?: () => void;
 }
 
 export function PracticeReviewList({
   spaceId,
   slots,
   submitted,
+  loading = false,
+  error = null,
+  onRetry,
 }: PracticeReviewListProps) {
   const recorded = slots.filter((slot) => Boolean(submitted[slot.practiceSessionQuestionId]));
 
   return (
     <section className="workbench-section" aria-label="逐题回顾">
       <h2 className="section-title">逐题回顾</h2>
-      {recorded.length === 0 ? (
-        <p className="page__note" data-testid="review-unavailable">
-          本次会话没有可读的逐题作答结果：后端仅在提交单题答案的响应里返回
-          PracticeAnswerView，GET /practice-sessions/{'{id}'} 的合同（
-          PracticeSessionDetail）不含答案字段，也没有逐题答案查询端点。历史会话的错题回顾需要
-          GET /api/v1/spaces/{'{spaceId}'}/practice-sessions/{'{sessionId}'}/result（合同缺口 C06）。
+
+      {loading && (
+        <p className="page__note" role="status" data-testid="review-loading">
+          正在读取后端的逐题作答记录…
         </p>
-      ) : (
+      )}
+
+      {error && (
+        <p className="page__note" data-testid="review-error">
+          无法读取后端的逐题作答记录：{error}
+          {onRetry && (
+            <>
+              {' '}
+              <Button type="button" variant="ghost" onClick={onRetry}>
+                重试读取
+              </Button>
+            </>
+          )}
+        </p>
+      )}
+
+      {recorded.length === 0 && !loading && !error && (
+        <p className="page__note" data-testid="review-unavailable">
+          后端未返回本会话的逐题作答记录：{'GET /practice-sessions/{id}/answers'}
+          {' '}给出空列表，也就是本次练习没有已提交的题目。
+        </p>
+      )}
+      {recorded.length > 0 && (
         <>
           <p className="page__note">
-            已记录 {recorded.length} / {slots.length} 题的后端逐题结果（来自提交响应）。
+            已记录 {recorded.length} / {slots.length} 题的后端逐题结果。
           </p>
           <ol className="practice-review-list">
             {slots.map((slot, index) => {
@@ -73,8 +107,8 @@ export function PracticeReviewList({
                     <PracticeReviewItem slot={slot} entry={entry} />
                   ) : (
                     <p className="muted" data-testid="review-item-missing">
-                      本题没有可显示的后端逐题结果：本端未记录到它的提交响应，
-                      而合同不提供逐题答案读取端点。
+                      本题没有可显示的后端逐题结果：服务端的作答记录里没有它，
+                      也就是本会话并未提交过该题。
                     </p>
                   )}
                 </li>
@@ -104,9 +138,18 @@ function PracticeReviewItem({
           <> · {formatDateTime(entry.view.answeredAt)}</>
         )}
       </p>
-      <p className="muted">
-        我的作答：{describeSubmittedAnswer(slot.questionType, entry.answer)}
-      </p>
+      {entry.answer ? (
+        <p className="muted">
+          我的作答：{describeSubmittedAnswer(slot.questionType, entry.answer)}
+        </p>
+      ) : (
+        // Straight off GET .../answers: the view has no answer field, so only
+        // the verdict exists. Inventing the submitted text here would be the
+        // same fabrication the local cache used to be.
+        <p className="muted" data-testid="review-answer-unreadable">
+          作答内容不回传（PracticeAnswerView 无答案字段），此处只显示服务端判定。
+        </p>
+      )}
       {entry.view.correctAnswer && (
         <p>正确答案：{entry.view.correctAnswer}</p>
       )}

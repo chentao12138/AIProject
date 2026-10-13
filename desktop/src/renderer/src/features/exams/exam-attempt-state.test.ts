@@ -175,4 +175,41 @@ describe('buildAnswerBody (contract ExamAnswerRequest)', () => {
       answer: {},
     });
   });
+
+  // C09 closed: the paper's ORDERING / MATCHING slots answer with their own
+  // contract fields. Falling through to `textAnswer: ''` (the old behaviour) was
+  // a guaranteed 400 — gradeOrdering / gradeMatching only read their own field.
+  it('sends orderingAnswer for ORDERING, positions and nothing else', () => {
+    const body = buildAnswerBody(
+      { examQuestionId: 14, questionType: 'ORDERING' },
+      { orderingAnswer: [3, 1, 2], textAnswer: 'leftover draft' }
+    );
+    expect(body).toEqual({
+      examQuestionId: 14,
+      answer: { orderingAnswer: [3, 1, 2] },
+    });
+  });
+
+  it('sends matchingAnswer for MATCHING, the pair JSON untouched', () => {
+    const wire = JSON.stringify([
+      { left: 'A', right: '1' },
+      { left: 'B', right: '2' },
+    ]);
+    const body = buildAnswerBody(
+      { examQuestionId: 15, questionType: 'MATCHING' },
+      { matchingAnswer: wire }
+    );
+    expect(body).toEqual({ examQuestionId: 15, answer: { matchingAnswer: wire } });
+  });
+
+  it('sends neither when the learner has not committed an answer yet', () => {
+    // The renderer keeps 保存答案 disabled until the sequence / the pairs are
+    // complete, so the only thing an empty draft may produce is an empty answer.
+    expect(
+      buildAnswerBody({ examQuestionId: 14, questionType: 'ORDERING' }, undefined).answer
+    ).toEqual({ orderingAnswer: undefined });
+    expect(
+      buildAnswerBody({ examQuestionId: 15, questionType: 'MATCHING' }, undefined).answer
+    ).toEqual({ matchingAnswer: undefined });
+  });
 });

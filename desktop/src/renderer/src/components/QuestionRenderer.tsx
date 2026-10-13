@@ -169,6 +169,15 @@ function isPairShape(value: unknown): value is MatchingPair {
 }
 
 /**
+ * The one pair grammar the wire format allows, exposed for the callers that
+ * build a payload out of a drafted `matchingAnswer` string. Anything that is
+ * not a `{left,right}` map of non-blank strings comes back as null.
+ */
+export function readMatchingPair(value: unknown): MatchingPair | null {
+  return isPairShape(value) ? { left: value.left, right: value.right } : null;
+}
+
+/**
  * Parse the wire string back into rows, keeping only pairs this question can
  * still express: known keys, a left item not yet paired, a non-blank right.
  * Malformed JSON reads as "no pairs yet" — the server rejects that string with
@@ -544,27 +553,28 @@ export function QuestionRenderer({
         </p>
       )}
 
-      {isMatching && isReview && (
-        <div className="question-renderer__matching" data-testid="matching-review">
-          {matchingPairs.length === 0 ? (
-            <p className="muted" data-testid="matching-empty">
-              没有已提交的配对。
-            </p>
-          ) : (
-            <ul data-testid="matching-pair-list">
-              {matchingPairs.map((pair) => (
-                <li key={pair.left} data-testid="matching-pair">
-                  {labelOf(pair.left)} ↔ {labelOf(pair.right)}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {isMatching && isReview && matchingPairs.length === 0 && (
+        <p className="muted" data-testid="matching-empty">
+          没有已提交的配对。
+        </p>
       )}
 
-      {/* Answer mode with no wired callback: show the two columns as the item
-          pool, but never an editor whose value the page cannot read. */}
-      {isMatching && !isReview && !canEditPairs && (
+      {isMatching && isReview && matchingPairs.length > 0 && (
+        <ul className="question-renderer__matching-pairs" data-testid="matching-pair-list">
+          {matchingPairs.map((pair) => (
+            <li key={pair.left} className="question-renderer__matching-pair" data-testid="matching-pair">
+              <span className="question-renderer__matching-pair-text">
+                {labelOf(pair.left)} ↔ {labelOf(pair.right)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* The item pool, read-only: shown in review (so a stored question still
+          lists what can be paired) and in answer mode when the page cannot hold
+          pairs — a controlled editor the page cannot read is worse than none. */}
+      {isMatching && !canEditPairs && (
         <div
           className="question-renderer__matching"
           data-testid="matching-readonly"

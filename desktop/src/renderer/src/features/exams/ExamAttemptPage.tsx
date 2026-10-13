@@ -458,6 +458,8 @@ function ActiveExam({
             selectedOptionKeys={currentAnswer?.selectedOptionKeys}
             booleanAnswer={currentAnswer?.booleanAnswer}
             textAnswer={currentAnswer?.textAnswer}
+            orderingAnswer={currentAnswer?.orderingAnswer}
+            matchingAnswer={currentAnswer?.matchingAnswer}
             onSelectedOptionKeysChange={(keys) =>
               editDraft((previous) => ({ ...previous, selectedOptionKeys: keys }))
             }
@@ -466,6 +468,15 @@ function ActiveExam({
             }
             onTextAnswerChange={(val) =>
               editDraft((previous) => ({ ...previous, textAnswer: val }))
+            }
+            // ORDERING / MATCHING: the renderer emits the wire fields
+            // themselves (1-based positions / the serialized pair array), so an
+            // edit here is exactly what 保存答案 sends.
+            onOrderingAnswerChange={(val) =>
+              editDraft((previous) => ({ ...previous, orderingAnswer: val }))
+            }
+            onMatchingAnswerChange={(val) =>
+              editDraft((previous) => ({ ...previous, matchingAnswer: val }))
             }
             onSubmit={handleSubmit}
             submitLabel={QUESTION_SAVE_LABELS[saveStatus]}

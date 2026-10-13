@@ -15,17 +15,22 @@
  * resolves WITHOUT that record (e.g. an empty 200 body) must NOT be shown as
  * saved.
  *
- * CONTRACT LIMIT (C10, blocking full closure of W04/W06)
+ * CONTRACT LIMIT (C10 / A6.2, still open after the contract regeneration)
  * `ExamAttemptView` is `{id, examId, examPaperId, status, startedAt, deadlineAt,
- * submittedAt, questions}` — there is NO `answers` field, and the only
- * `ExamAnswerView` producer is `POST /exam-attempts/{attemptId}/answers`. There
- * is no `GET .../answers` list endpoint. `ExamAnswerView` itself is
+ * submittedAt, questions}` — there is NO `answers` field; its question rows are
+ * `AttemptQuestionView{examQuestionId, questionId, sortOrder, score,
+ * questionType, stem, options}` with no answer field either; and the contract
+ * declares `POST /exam-attempts/{attemptId}/answers` only — no GET. The only
+ * `ExamAnswerView` producer is that POST, and `ExamAnswerView` itself is
  * `{id, examAttemptId, examQuestionId, gradingStatus, answeredAt}` — no answer
  * CONTENT. So after a refresh the server cannot tell us which questions were
- * answered, nor restore what was typed. The maps below are therefore
- * best-effort for the CURRENT visit: server-authoritative per question while
- * the page is open, not recoverable across reloads. Do not "fix" that with a
- * localStorage cache — it would silently disagree with the server.
+ * answered, nor restore what was typed: an exam attempt does NOT resume. (The
+ * practice side got its read endpoint — `GET .../practice-sessions/{id}/answers`
+ * — and this one is the remaining half of that request.)
+ * The maps below are therefore best-effort for the CURRENT visit:
+ * server-authoritative per question while the page is open, not recoverable
+ * across reloads. Do not "fix" that with a localStorage cache — it would
+ * silently disagree with the server, and no copy here may claim a resume works.
  */
 
 import type {
@@ -129,6 +134,18 @@ export function buildAnswerBody(
     // missing booleanAnswer with 400, and a silent false would be stored as a
     // wrong judgement the learner never made.
     answer.booleanAnswer = draft?.booleanAnswer;
+  } else if (type === 'ORDERING') {
+    // `orderingAnswer` is the only field gradeOrdering reads, and it throws
+    // (a 400) on a null/empty one — so the field is set only when the learner
+    // committed a sequence. `QuestionRenderer` keeps 提交 disabled until that
+    // array covers every option with 1-based positions, so a partial one never
+    // reaches this call.
+    answer.orderingAnswer = draft?.orderingAnswer;
+  } else if (type === 'MATCHING') {
+    // Same rule for the pair editor: `matchingAnswer` is a JSON array of
+    // {left,right} maps (gradeMatching parses it, a malformed string is a 400),
+    // and the editor emits it only once every left item is paired.
+    answer.matchingAnswer = draft?.matchingAnswer;
   } else {
     answer.textAnswer = draft?.textAnswer ?? '';
   }

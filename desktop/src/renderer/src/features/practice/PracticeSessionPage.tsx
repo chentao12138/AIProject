@@ -3,14 +3,18 @@
  *
  * /spaces/:spaceId/practice/:sessionId
  *
- * State model (audit W01 / W02 / W03):
+ * State model (audit W01 / W02 / W03 + the A5.2 resume):
  *  - Session status and the question paper come from
  *    `GET /practice-sessions/{id}`; the server's status wins whenever a 409
  *    says our snapshot is stale.
- *  - "Submitted" for ONE question is the `PracticeAnswerView` the server
- *    returned for it, mirrored into the query cache by `markSubmitted`.
- *    Nothing is marked submitted optimistically, and an unsaved draft never
- *    counts as an answer.
+ *  - "Submitted" for ONE question is a `PracticeAnswerView`, and there are now
+ *    two sources for it, both mirrored into the same cache entry: the response
+ *    to this client's POST (`markSubmitted`, which also keeps the payload we
+ *    sent) and `GET /practice-sessions/{id}/answers` (`mirrorServerAnswers`),
+ *    which is what a refreshed or re-entered session reads. Nothing is marked
+ *    submitted optimistically, and an unsaved draft never counts as an answer.
+ *  - The read view carries the verdict only — no answer content — so a resumed
+ *    answer shows what the server said and never a reconstructed reply.
  *  - `PracticeSubmitView` (the only score this contract has) is mirrored the
  *    same way, so leaving the page and coming back does not erase the result.
  */
@@ -46,8 +50,9 @@ import {
   describePracticeError,
   firstOpenSlotIndex,
   normalizeCode,
+  practicePayloadContext,
   toPracticeSlots,
-  usePracticeLocalState,
+  usePracticeResumeState,
   usePracticeSubmitSummary,
   type PracticeActionError,
   type PracticeQuestionSlot,
@@ -280,8 +285,11 @@ function ActiveSession({
 }) {
   const api = useApiClient();
   const queryClient = useQueryClient();
-  const { state, setDraft, markSubmitted, setCurrentIndex } =
-    usePracticeLocalState(spaceId, sessionId);
+  // Drafts + this client's POSTs from the cache, with `GET .../answers`
+  // mirrored into the same entries: a refreshed session resumes on the
+  // server's list instead of an empty local cache (audit W01 / W02 / A5.2).
+  const { state, setDraft, markSubmitted, setCurrentIndex, answersQuery } =
+    usePracticeResumeState(spaceId, sessionId, slots);
 
   const canAnswer =
     normalizeCode(session.status) === PRACTICE_SESSION_STATUSES.IN_PROGRESS;
@@ -312,6 +320,12 @@ function ActiveSession({
       markSubmitted(vars.slot.practiceSessionQuestionId, {
         answer: vars.answer,
         view,
+        source: 'submitted',
+      });
+      // Keep the server's own list in step with what was just stored, so the
+      // resume read and this client's echo can never disagree after a reload.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.practiceAnswers(spaceId, sessionId),
       });
     },
     onError: (error: unknown) => {
@@ -360,7 +374,8 @@ function ActiveSession({
     }
     const payload = buildAnswerPayload(
       target.questionType,
-      state.drafts[target.practiceSessionQuestionId]
+      state.drafts[target.practiceSessionQuestionId],
+      practicePayloadContext(target)
     );
     if (!payload.ok) {
       return;
@@ -368,10 +383,14 @@ function ActiveSession({
     answerMutation.mutate({ slot: target, answer: payload.answer });
   }
 
-  // Started earlier but this client holds no answers: almost always a reload,
-  // because the contract has no GET for answers. Say so instead of letting a
-  // blank form read as "nothing was answered".
-  const resumedWithoutRecords =
+  // The server's answer list is what tells this page which questions are done.
+  // While it is loading, or if it failed, "已提交 0 题" would be a lie about a
+  // session that may well have answers, so say which of the two is happening.
+  const answersPending = answersQuery.isPending;
+  const answersFailed = answersQuery.isError;
+  // Read succeeded and the server has nothing on record for a session it
+  // already started — a genuinely fresh start, not a lost cache.
+  const resumedWithoutServer =
     canAnswer && submittedCount === 0 && Boolean(session.startedAt);
 
   return (
@@ -399,18 +418,39 @@ function ActiveSession({
         />
       )}
 
-      {resumedWithoutRecords && (
+      {answersPending && (
+        <p className="page__note" role="status" data-testid="answers-loading">
+          正在读取服务端已记录的作答…
+        </p>
+      )}
+
+      {answersFailed && (
+        <p className="page__note" data-testid="answers-unreadable">
+          无法读取服务端的已作答记录（{normalizeApiError(answersQuery.error).message}）：
+          下面的「已提交」只统计本端提交的题目，刷新后可能偏低。
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => void answersQuery.refetch()}
+          >
+            重试读取
+          </Button>
+        </p>
+      )}
+
+      {!answersPending && !answersFailed && resumedWithoutServer && (
         <p className="page__note" data-testid="resume-notice">
-          此会话此前已开始（服务端 startedAt 已设置）。后端没有逐题答案读取端点，
-          刷新后本页无法显示此前的作答；同一题重新提交会覆盖服务端答案。
+          此会话此前已开始（服务端 startedAt 已设置），而 GET /answers
+          没有返回任何已作答题目，因此本页按全新作答处理。
+          同一题重新提交会覆盖服务端答案。
         </p>
       )}
 
       <div className="practice-layout">
         <div className="practice-main">
-          <div className="practice-progress">
+          <div className="practice-progress" role="status">
             第 {currentIndex + 1} / {slots.length} 题 · 已提交 {submittedCount}{' '}
-            题（以服务端响应为准）
+            题（以服务端记录为准）
           </div>
           <PracticeQuestionCard
             slot={current}
@@ -507,9 +547,14 @@ function PracticeResult({
   onFallback: () => void;
 }) {
   const navigate = useNavigate();
-  // The same cache entry the answering view wrote: this page shows what the
-  // server reported for each question, and nothing it did not report.
-  const { state } = usePracticeLocalState(spaceId, sessionId);
+  // The same cache entries the answering view wrote, with the server's answer
+  // list mirrored into them: this page shows what the server reported for each
+  // question, and nothing it did not report.
+  const { state, answersQuery } = usePracticeResumeState(
+    spaceId,
+    sessionId,
+    slots
+  );
   const questionCount =
     session.questionCount ?? summary?.questionCount ?? slots.length;
 
@@ -558,6 +603,17 @@ function PracticeResult({
         spaceId={spaceId}
         slots={slots}
         submitted={state.submitted}
+        loading={answersQuery.isPending}
+        error={
+          answersQuery.isError
+            ? normalizeApiError(answersQuery.error).message
+            : null
+        }
+        onRetry={
+          answersQuery.isError
+            ? () => void answersQuery.refetch()
+            : undefined
+        }
       />
 
       <div className="form__actions">
