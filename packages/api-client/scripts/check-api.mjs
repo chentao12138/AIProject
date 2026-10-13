@@ -37,7 +37,18 @@ const TYPES_FILE = join(PKG_ROOT, 'src/generated/api.d.ts');
 const MANIFEST_FILE = join(PKG_ROOT, 'src/generated/manifest.json');
 const GENERATOR = join(PKG_ROOT, 'node_modules/openapi-typescript/bin/cli.js');
 
-const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+/**
+ * Hash content with CRLF folded to LF.
+ *
+ * `core.autocrlf=true` on a Windows checkout rewrites these artifacts to CRLF
+ * while openapi-typescript emits LF, so a byte-exact hash made the gate fail
+ * on a snapshot that had not drifted at all. Line endings are not content:
+ * any real edit to the spec or the generated types still changes this hash.
+ */
+const sha256 = (bytes) =>
+  createHash('sha256')
+    .update(bytes.toString('utf8').replace(/\r\n/g, '\n'))
+    .digest('hex');
 
 function fail(message) {
   console.error(`[api:check] FAILED: ${message}`);

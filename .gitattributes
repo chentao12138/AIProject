@@ -1,0 +1,6 @@
+# Generated contract artifacts are compared byte-for-byte by
+# `packages/api-client/scripts/check-api.mjs`, and openapi-typescript emits LF.
+# With core.autocrlf=true a Windows checkout rewrote them to CRLF, so
+# `npm run api:check` — and therefore the whole `npm run build` gate — failed
+# on a perfectly in-sync snapshot. Pin these paths to LF in the working tree.
+packages/api-client/src/generated/** text eol=lf
