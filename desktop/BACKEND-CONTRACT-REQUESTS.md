@@ -272,6 +272,38 @@ mutation, re-register the route and link it from `QuestionDetailPage`.
 
 ---
 
+## C11 Exam attempt history (audit W07)
+
+**Checklist:** A6.1, A6.3
+**Verified gap (2026-10-13):** `ExamResponse` has no attempts field, and there is
+neither `GET /spaces/{spaceId}/exams/{examId}/attempts` nor
+`GET /spaces/{spaceId}/exam-attempts`. An attempt can therefore only ever be
+created from the exam detail page; a previous attempt and its result cannot be
+reached again from the UI.
+
+**Request:** a paged attempt list for one exam (`id`, `status`, `startedAt`,
+`submittedAt`, and whatever score fields the contract already exposes on
+`ExamResultView`), or a recent-attempt summary embedded in `ExamResponse`.
+The frontend will not substitute "create another attempt" for history.
+
+## C12 Discriminable conflict codes
+
+**Checklist:** A6.2, A9.3
+**Verified gap:** exam conflicts all come back as `code: "CONFLICT"`; whether the
+deadline passed, the attempt is not `IN_PROGRESS`, or the exam is unavailable is
+only readable inside the free-text `detail`. Branching on that text is not a
+contract, and the English copy must not be shown to the user.
+
+**Request:** stable codes — e.g. `EXAM_DEADLINE_EXCEEDED`,
+`EXAM_ATTEMPT_NOT_IN_PROGRESS`, `EXAM_NOT_AVAILABLE` — declared in the OpenAPI
+responses (enum preferred), including the C10 case where a `SUBMITTED` attempt
+refuses a new answer.
+
+**Open question for the backend:** `ORDERING` answers are planned as an ordered
+`selectedOptionKeys` array, because no ordered field exists yet. Confirmation is
+needed that grading compares array order; otherwise wait for C09's
+`orderedOptionKeys`/`pairs` rather than inventing a wire format.
+
 ## Resolution order
 
 1. A8 Notes — highest priority (entire feature blocked).
