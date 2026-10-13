@@ -65,6 +65,30 @@ export type ExamAttemptDetail = ResultData<ApiClient['getExamAttempt']>;
 /** Graded exam result. */
 export type ExamResult = ResultData<ApiClient['getExamResult']>;
 
+/**
+ * One saved answer on an attempt — the only thing that proves an answer
+ * exists (C10: it carries `answeredAt`, never the answer content). Derived
+ * from the single method that produces it so it cannot drift.
+ */
+export type ExamAnswerRecord = ResultData<ApiClient['submitExamAnswer']>;
+
+/** Contract `ExamAnswerRequest`: the body the answer endpoint accepts. */
+export type ExamAnswerBody = NonNullable<
+  Parameters<ApiClient['submitExamAnswer']>[2]
+>;
+
+/** Contract `AnswerPayloadView`, reached through its request wrapper. */
+export type ExamAnswerPayload = NonNullable<ExamAnswerBody['answer']>;
+
+/**
+ * One paper slot of a live attempt. The contract types both ids optional, so
+ * they are intersected back to required: save state is keyed by
+ * `examQuestionId`, and a slot without an id cannot be rendered at all.
+ */
+export type ExamQuestionSlot = NonNullable<
+  ExamAttemptDetail['questions']
+>[number] & { examQuestionId: number; questionId: number };
+
 /** Practice session detail: status, counts and its question paper. */
 export type PracticeSessionDetail = ResultData<ApiClient['getPracticeSession']>;
 

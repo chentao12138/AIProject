@@ -270,15 +270,49 @@ describe('ExamAttemptPage', () => {
 
     expect(await screen.findByText(/答题时间已结束/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存答案' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '交卷' })).toBeDisabled();
+    // 交卷 can only ever 409 now (`submit` finalizes first), so it is replaced
+    // by the action that actually ends the attempt.
+    expect(screen.queryByRole('button', { name: '交卷' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '保存答案' }));
     expect(submitExamAnswer).not.toHaveBeenCalled();
+  });
 
-    // The way out is the server's own state: `finalizeIfExpired` flips the
-    // attempt to SUBMITTED on the next read.
-    await user.click(screen.getByRole('button', { name: '刷新考试状态' }));
-    await waitFor(() => expect(getExamAttempt).toHaveBeenCalledTimes(2));
+  it('ends an overdue attempt through the result endpoint, then goes read-only', async () => {
+    const user = userEvent.setup();
+    // Mirrors the backend: the overdue attempt keeps reporting IN_PROGRESS
+    // until `getResult` runs `finalizeIfExpired`, after which the re-read says
+    // SUBMITTED.
+    let calls = 0;
+    const getExamAttempt = vi.fn(async () => {
+      calls += 1;
+      return ok({
+        id: 5,
+        examId: 21,
+        status: calls === 1 ? 'IN_PROGRESS' : 'SUBMITTED',
+        deadlineAt: new Date(Date.now() - 60_000).toISOString(),
+        questions: calls === 1 ? [QUESTION_1, QUESTION_2] : [],
+      });
+    });
+    const getExamResult = vi.fn(async () =>
+      ok({
+        attemptId: 5,
+        status: 'SUBMITTED',
+        score: 0,
+        maxScore: 10,
+        correctCount: 0,
+        wrongCount: 0,
+        unansweredCount: 2,
+        items: [],
+      })
+    );
+    renderAttempt({ getExamAttempt, getExamResult });
+
+    await user.click(await screen.findByRole('button', { name: '结束并查看成绩' }));
+
+    await waitFor(() => expect(getExamResult).toHaveBeenCalledWith(7, 5));
+    expect(await screen.findByRole('heading', { name: /成绩/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /保存答案|交卷/ })).not.toBeInTheDocument();
   });
 
   // W05: failures must never be silent.

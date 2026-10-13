@@ -393,10 +393,18 @@ function ActiveExam({
     if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
   }
 
+  // The contract types `optionKey`/`content` as optional, while the renderer
+  // needs both: an option without one can be neither labelled nor submitted.
+  const renderableOptions = (current.options ?? []).filter(
+    (option): option is { optionKey: string; content: string; sortOrder?: number } =>
+      typeof option.optionKey === 'string' &&
+      typeof option.content === 'string'
+  );
+
   const payload: QuestionPayload = {
     questionType: current.questionType,
     stem: current.stem ?? '',
-    options: current.options,
+    options: renderableOptions,
   };
 
   return (

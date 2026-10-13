@@ -28,25 +28,22 @@
  * localStorage cache — it would silently disagree with the server.
  */
 
-/** One paper slot, contract `AttemptQuestionView` (all fields optional there). */
-export interface ExamQuestionSlot {
-  examQuestionId: number;
-  questionId: number;
-  sortOrder?: number;
-  score?: number;
-  questionType?: string;
-  stem?: string;
-  options?: Array<{ optionKey: string; content: string; sortOrder?: number }>;
-}
+import type {
+  ExamAnswerBody,
+  ExamAnswerPayload,
+  ExamAnswerRecord,
+  ExamQuestionSlot,
+} from '../../lib/types';
 
-/** Contract `ExamAnswerView` — deliberately WITHOUT answer content (C10). */
-export interface ExamAnswerRecord {
-  id?: number;
-  examAttemptId?: number;
-  examQuestionId?: number;
-  gradingStatus?: string;
-  answeredAt?: string;
-}
+// Re-exported so the page keeps importing its state vocabulary from here,
+// while the shapes themselves stay derived from the client (lib/types.ts):
+// a feature-local copy is exactly what renderer-conventions forbids.
+export type {
+  ExamAnswerBody,
+  ExamAnswerPayload,
+  ExamAnswerRecord,
+  ExamQuestionSlot,
+};
 
 /** The four states of one slot's save button (G03 requirement). */
 export type QuestionSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -113,19 +110,6 @@ export function countAnswered(
   serverRecords: Readonly<Record<number, ExamAnswerRecord | undefined>>
 ): number {
   return questionIds.filter((id) => isSavedOnServer(serverRecords[id])).length;
-}
-
-/** Contract `ExamAnswerRequest.answer` (`AnswerPayloadView`). */
-export interface ExamAnswerPayload {
-  selectedOptionKeys?: string[];
-  booleanAnswer?: boolean;
-  textAnswer?: string;
-}
-
-/** Contract `ExamAnswerRequest` — both fields are `required` there. */
-export interface ExamAnswerBody {
-  examQuestionId: number;
-  answer: ExamAnswerPayload;
 }
 
 /**
