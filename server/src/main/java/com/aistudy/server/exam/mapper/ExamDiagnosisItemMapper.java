@@ -2,6 +2,7 @@ package com.aistudy.server.exam.mapper;
 
 import com.aistudy.server.exam.entity.ExamDiagnosisItem;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -17,6 +18,10 @@ import java.util.List;
  */
 @Mapper
 public interface ExamDiagnosisItemMapper extends BaseMapper<ExamDiagnosisItem> {
+
+    /** Clears one diagnosis' items before the same attempt is re-diagnosed. */
+    @Delete("DELETE FROM exam_diagnosis_item WHERE exam_diagnosis_id = #{diagnosisId}")
+    int deleteByDiagnosisId(@Param("diagnosisId") Long diagnosisId);
 
     @Select("SELECT * FROM exam_diagnosis_item "
             + "WHERE exam_diagnosis_id = #{diagnosisId} ORDER BY id ASC")

@@ -48,6 +48,8 @@ public class ExamAttemptService {
     public static final String GRADING_GRADED = "GRADED";
     public static final String GRADING_UNGRADED = "UNGRADED";
     public static final String GRADING_NEEDS_REVIEW = "NEEDS_REVIEW";
+    /** Some answers are scored and a human still owes a grade on others. */
+    public static final String GRADING_PARTIALLY_GRADED = "PARTIALLY_GRADED";
 
     public record GradeAnswerRequest(Integer score, String feedback) {
     }
@@ -363,8 +365,12 @@ public class ExamAttemptService {
             throw ApiException.conflict(ApiErrorCodes.EXAM_ANSWER_NOT_GRADABLE,
                     "answer is not in a gradable state: " + answer.getGradingStatus());
         }
+        // selectByIdAndSpace takes (spaceId, examQuestionId). Passing them in
+        // the call's own order made every manual grade look for
+        // space_id = <slot id>, so ADMIN grading always answered 404 — no
+        // subjective answer could ever be graded.
         ExamQuestion slot = examQuestionMapper.selectByIdAndSpace(
-                answer.getExamQuestionId(), spaceId);
+                spaceId, answer.getExamQuestionId());
         if (slot == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ExamQuestion not found");
         }
@@ -415,6 +421,11 @@ public class ExamAttemptService {
      */
     private void recomputeResultAfterGrade(String ownerSubject, Long spaceId,
                                            ExamAttempt attempt, SlotAnswers data) {
+        // The acting subject may be an ADMIN grading someone else's paper: the
+        // result, mastery rows and diagnosis belong to the examinee, and the
+        // diagnosis lookup is keyed by that subject. ownerSubject stays only as
+        // the graded_by stamp on the answer.
+        String examinee = attempt.getUserSubject();
         List<ExamQuestion> slots = data.slots();
         Map<Long, ExamAnswer> answersBySlot = data.answers();
         int score = 0;
@@ -455,7 +466,7 @@ public class ExamAttemptService {
         if (result == null) {
             result = new ExamResult();
             result.setExamAttemptId(attempt.getId());
-            result.setUserSubject(ownerSubject);
+            result.setUserSubject(examinee);
             result.setSpaceId(spaceId);
             result.setCreatedAt(now);
         }
@@ -470,13 +481,13 @@ public class ExamAttemptService {
             examResultMapper.updateById(result);
         }
 
-        String attemptGrading = ungraded > 0 ? "PARTIALLY_GRADED" : GRADING_GRADED;
+        String attemptGrading = ungraded > 0 ? GRADING_PARTIALLY_GRADED : GRADING_GRADED;
         examAttemptMapper.updateGradingStatusByIdAndSpace(attempt.getId(), spaceId, attemptGrading, now);
 
-        masteryService.recomputeForQuestions(ownerSubject, spaceId,
+        masteryService.recomputeForQuestions(examinee, spaceId,
                 slots.stream().map(ExamQuestion::getQuestionId).toList());
 
-        examDiagnosisService.generate(ownerSubject, spaceId, attempt.getId(), slots,
+        examDiagnosisService.generate(examinee, spaceId, attempt.getId(), slots,
                 answersBySlot, score, maxScore, now);
     }
 
@@ -591,17 +602,7 @@ public class ExamAttemptService {
             items.add(itemView(slot, snapshot, grade, true));
         }
 
-        boolean hasSubjectivePending = answersBySlot.values().stream()
-                .anyMatch(a -> GRADING_UNGRADED.equals(a.getGradingStatus())
-                        || GRADING_NEEDS_REVIEW.equals(a.getGradingStatus())
-                        || (slots.stream().anyMatch(s -> {
-                            SnapshotView snap = AnswerDataCodec.parseSnapshot(s.getQuestionSnapshotJson());
-                            return "SHORT_ANSWER".equals(snap.questionType())
-                                    && answersBySlot.get(s.getId()) != null
-                                    && !GRADING_GRADED.equals(answersBySlot.get(s.getId()).getGradingStatus());
-                        })));
-        // Recompute pending subjective more simply:
-        hasSubjectivePending = false;
+        boolean hasSubjectivePending = false;
         for (ExamQuestion slot : slots) {
             SnapshotView snap = AnswerDataCodec.parseSnapshot(slot.getQuestionSnapshotJson());
             if (!"SHORT_ANSWER".equals(snap.questionType())) {
@@ -636,13 +637,13 @@ public class ExamAttemptService {
                     "exam attempt state changed concurrently");
         }
         attempt.setStatus(STATUS_SUBMITTED);
-        if (hasSubjectivePending) {
-            try {
-                examAttemptMapper.updateGradingStatusByIdAndSpace(
-                        attempt.getId(), spaceId, "PARTIALLY_GRADED", now);
-            } catch (Exception ignore) {
-            }
-        }
+        // The attempt has to label its own grading state (contract request C11):
+        // a score alone cannot say whether it is final. This write used to happen
+        // only for PARTIALLY_GRADED and inside catch (Exception ignore), so every
+        // all-objective submission kept grading_status = null and a swallowed
+        // failure was invisible.
+        examAttemptMapper.updateGradingStatusByIdAndSpace(attempt.getId(), spaceId,
+                hasSubjectivePending ? GRADING_PARTIALLY_GRADED : GRADING_GRADED, now);
 
         masteryService.recomputeForQuestions(ownerSubject, spaceId,
                 slots.stream().map(ExamQuestion::getQuestionId).toList());

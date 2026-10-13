@@ -147,6 +147,67 @@ class ExamVerticalSliceIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
     }
 
+    /**
+     * C11 second half: a paper with an ungraded subjective answer must say so on
+     * the row. Submit used to write grading_status only for PARTIALLY_GRADED and
+     * inside {@code catch (Exception ignore)}, so the verdict was either missing
+     * or silently lost and the client had to guess from "did a number arrive".
+     */
+    @Test
+    void subjectiveAnswerHoldsTheAttemptAtPartiallyGraded() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        String token = tokenFor("biz-e2e-user-1");
+        MvcResult created = mockMvc.perform(post(QUESTIONS, spaceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"questionType\":\"SHORT_ANSWER\",\"stem\":\"简述 B+ 树\","
+                                + "\"referenceAnswer\":\" descend \"}")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated())
+                .andReturn();
+        Long questionId = extractJsonLong(created.getResponse().getContentAsString(), "id");
+        mockMvc.perform(post(QUESTIONS + "/{questionId}/publish", spaceId, questionId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        Long examId = createExamAndPublish(token, spaceId, questionId, 4);
+        Long attemptId = startAttempt(token, spaceId, examId);
+        Long slot = slotIdOfAttempt(token, spaceId, attemptId);
+        String answered = mockMvc.perform(post(ATTEMPTS + "/{attemptId}/answers", spaceId, attemptId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"examQuestionId\":" + slot
+                                + ",\"answer\":{\"textAnswer\":\"从根向下遍历\"}}")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        Long answerId = extractJsonLong(answered, "id");
+
+        mockMvc.perform(post(ATTEMPTS + "/{attemptId}/submit", spaceId, attemptId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get(ATTEMPTS, spaceId).param("examId", String.valueOf(examId))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].gradingStatus").value("PARTIALLY_GRADED"))
+                .andExpect(jsonPath("$.items[0].score").value(0));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put(ATTEMPTS + "/{attemptId}/answers/{answerId}/grade", spaceId, attemptId, answerId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"score\":4,\"feedback\":\"正确\"}")
+                        // Manual subjective grading is ADMIN-only by product rule;
+                        // the same space owner carries the role here.
+                        .header("Authorization", "Bearer " + jwtAccessTokenService.issueAccessToken(
+                                "biz-e2e-user-1", java.util.List.of("USER", "ADMIN"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get(ATTEMPTS, spaceId).param("examId", String.valueOf(examId))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].gradingStatus").value("GRADED"))
+                .andExpect(jsonPath("$.items[0].score").value(4));
+    }
+
     // ==================== create ====================
 
     /** (1) create → 201, totalScore = sum, paper v1 DRAFT, safe composition. */
@@ -395,7 +456,9 @@ class ExamVerticalSliceIntegrationTest {
                 .andExpect(jsonPath("$.totalItems").value(1))
                 .andExpect(jsonPath("$.items[0].id").value(attemptId))
                 .andExpect(jsonPath("$.items[0].status").value("IN_PROGRESS"))
-                .andExpect(jsonPath("$.items[0].score").doesNotExist());
+                // C11: an open attempt has neither a score nor a grading verdict.
+                .andExpect(jsonPath("$.items[0].score").doesNotExist())
+                .andExpect(jsonPath("$.items[0].gradingStatus").doesNotExist());
 
         // A different user cannot even address this space: SpaceScopeInterceptor
         // answers 404 before the handler runs, so the list endpoint cannot be
@@ -429,6 +492,14 @@ class ExamVerticalSliceIntegrationTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.questions[0].answer.selectedOptionKeys[0]").value("A"));
+
+        // The row labels its own grading state: this paper is all objective, so a
+        // submitted attempt is final rather than a partial score in disguise.
+        mockMvc.perform(get(ATTEMPTS, spaceId).param("examId", String.valueOf(examId))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].gradingStatus").value("GRADED"))
+                .andExpect(jsonPath("$.items[0].score").value(2));
     }
 
     /** (6) create+start published exam; deadline = start + duration. */

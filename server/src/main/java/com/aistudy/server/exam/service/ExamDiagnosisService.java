@@ -66,22 +66,45 @@ public class ExamDiagnosisService {
         this.knowledgeCategoryMapper = knowledgeCategoryMapper;
     }
 
+    /**
+     * Writes (or rewrites) the diagnosis of one submitted attempt.
+     *
+     * <p>Idempotent by attempt: {@code exam_diagnosis} has a unique key on
+     * {@code exam_attempt_id}, and re-grading a subjective answer reaches this
+     * method again through {@code recomputeResultAfterGrade}. It used to always
+     * insert, so the second run died with {@code DuplicateKeyException} and an
+     * ADMIN could never finish grading an exam that contained a written answer —
+     * the whole attempt stayed PARTIALLY_GRADED behind a 500.
+     */
     @Transactional
     public void generate(String ownerSubject, Long spaceId, Long attemptId,
                          List<ExamQuestion> slots, Map<Long, ExamAnswer> answersBySlot,
                          int resultScore, int resultMaxScore, LocalDateTime now) {
         LocalDateTime created = now.truncatedTo(ChronoUnit.MICROS);
+        String summary = "Exam score " + resultScore + "/" + resultMaxScore;
 
-        ExamDiagnosis diagnosis = new ExamDiagnosis();
-        diagnosis.setExamAttemptId(attemptId);
-        diagnosis.setUserSubject(ownerSubject);
-        diagnosis.setSpaceId(spaceId);
-        diagnosis.setSummary("Exam score " + resultScore + "/" + resultMaxScore);
-        diagnosis.setCreatedAt(created);
-        examDiagnosisMapper.insert(diagnosis);
+        ExamDiagnosis existing = examDiagnosisMapper.selectByAttempt(attemptId, spaceId, ownerSubject);
+        Long diagnosisId;
+        if (existing == null) {
+            ExamDiagnosis diagnosis = new ExamDiagnosis();
+            diagnosis.setExamAttemptId(attemptId);
+            diagnosis.setUserSubject(ownerSubject);
+            diagnosis.setSpaceId(spaceId);
+            diagnosis.setSummary(summary);
+            diagnosis.setCreatedAt(created);
+            examDiagnosisMapper.insert(diagnosis);
+            diagnosisId = diagnosis.getId();
+        } else {
+            // The item set is derived from the grades, so it is rebuilt rather
+            // than merged: a stale WRONG item must not survive a regrade.
+            examDiagnosisItemMapper.deleteByDiagnosisId(existing.getId());
+            existing.setSummary(summary);
+            examDiagnosisMapper.updateById(existing);
+            diagnosisId = existing.getId();
+        }
 
         List<ExamDiagnosisItem> items = buildItems(
-                ownerSubject, spaceId, slots, answersBySlot, diagnosis.getId(), created);
+                ownerSubject, spaceId, slots, answersBySlot, diagnosisId, created);
         for (ExamDiagnosisItem item : items) {
             examDiagnosisItemMapper.insert(item);
         }

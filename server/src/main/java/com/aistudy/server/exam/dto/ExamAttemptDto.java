@@ -122,11 +122,22 @@ public final class ExamAttemptDto {
      * <p>{@code score}/{@code maxScore} stay {@code null} until the attempt has
      * a persisted result: an unfinished attempt has no score, and 0 would be a
      * fabricated grade that the client cannot tell apart from a real zero.
+     *
+     * <p>{@code gradingStatus} is carried because a score alone cannot say
+     * whether it is final: a partially graded attempt already has a real score
+     * that is not the whole grade, and the client must label the row instead of
+     * inferring "a number arrived" (contract request C11).
      */
     public record AttemptSummaryView(
             Long id,
             Long examId,
             String status,
+            @io.swagger.v3.oas.annotations.media.Schema(
+                    description = "Grading state of the attempt, null while it is still open. "
+                            + "GRADED is final; PARTIALLY_GRADED means the objective part is scored "
+                            + "while some answers still await a human grade.",
+                    allowableValues = {"GRADED", "PARTIALLY_GRADED", "UNGRADED"})
+            String gradingStatus,
             LocalDateTime startedAt,
             LocalDateTime submittedAt,
             Integer score,
@@ -135,6 +146,7 @@ public final class ExamAttemptDto {
         public static AttemptSummaryView from(ExamAttempt attempt, ExamResult result) {
             return new AttemptSummaryView(
                     attempt.getId(), attempt.getExamId(), attempt.getStatus(),
+                    attempt.getGradingStatus(),
                     attempt.getStartedAt(), attempt.getSubmittedAt(),
                     result == null ? null : result.getScore(),
                     result == null ? null : result.getMaxScore());
