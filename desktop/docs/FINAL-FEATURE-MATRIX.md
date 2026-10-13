@@ -30,6 +30,25 @@
 | Search → Note hit | `/spaces/:spaceId/search` | `SearchResult.type` enum has no `NOTE`. |
 | ORDERING / MATCHING authoring | `/spaces/:spaceId/questions/new` | `AnswerPayloadView`/`QuestionAnswerView` cannot express an ordered answer or pairs. |
 
+## Measured decisions (A9.5 / audit W18)
+
+Route-level code splitting was measured before deciding, not assumed:
+
+```
+npm run build -> electron-vite build
+out/renderer/assets/index-*.js   775.91 kB │ gzip: (bundle is read from local app://)
+out/main/index.js                 13.93 kB
+out/preload/index.js               1.65 kB
+build time ~1.5 s, 145 modules
+```
+
+One 776 KB renderer chunk is parsed from disk inside the packaged app — there is
+no network fetch to hide latency behind, and no route is measurably slow to
+reach. `React.lazy`/`Suspense` would add loading states and a new failure mode
+to every route for no observed gain, so the checklist item is closed as
+**measured, no action**. Re-open it only with a startup or navigation
+measurement that shows a regression.
+
 ## Out of scope (B-class)
 
 See `AISTUDY-FRONTEND-FINAL-COMPLETION-MASTER-CHECKLIST.md` section 12 for the full B-class list:
