@@ -21,9 +21,9 @@ import { spaceQuery } from '../../lib/queries';
 import { useSpaceId } from '../../lib/space-scope';
 import { isPositiveId } from '../../lib/ids';
 import {
-  CONTRACT_GAP_NOTICES,
   difficultyLabel,
   questionTypeLabel,
+  QUESTIONS_PAGE_SIZE,
   QUESTION_TYPES,
 } from '../../lib/format';
 import { Button } from '../../components/Button';
@@ -47,16 +47,28 @@ export function QuestionsPage() {
   const knowledgePointId = isPositiveId(rawKnowledgePointId)
     ? rawKnowledgePointId
     : undefined;
+  // 0-based, like the server's own `page`. A garbage value falls back to the
+  // first page instead of requesting a page that cannot exist.
+  const rawPage = Number(searchParams.get('page') ?? '0');
+  const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 0;
 
   const listQuery = useQuery(
     spaceQuery(
       spaceId,
-      queryKeys.questions(spaceId, { status, questionType, knowledgePointId }),
+      queryKeys.questions(spaceId, {
+        status,
+        questionType,
+        knowledgePointId,
+        page,
+        size: QUESTIONS_PAGE_SIZE,
+      }),
       (id) =>
         api.listQuestions(id, {
           status,
           questionType,
           knowledgePointId,
+          page,
+          size: QUESTIONS_PAGE_SIZE,
         })
     )
   );
@@ -72,7 +84,10 @@ export function QuestionsPage() {
     )
   );
 
-  const items = listQuery.data ?? [];
+  const pageView = listQuery.data;
+  const items = pageView?.items ?? [];
+  const totalItems = pageView?.totalItems ?? 0;
+  const totalPages = pageView?.totalPages ?? 0;
 
   function setFilter(key: string, value: string | null) {
     const next = new URLSearchParams(searchParams);
@@ -81,6 +96,10 @@ export function QuestionsPage() {
     } else {
       next.set(key, value);
     }
+    // A changed filter is a different result set: its page numbers no longer
+    // mean the same thing, and landing on page 3 of a shorter list looked like
+    // an empty page rather than a filtered one.
+    next.delete('page');
     setSearchParams(next, { replace: true });
   }
 
@@ -178,9 +197,40 @@ export function QuestionsPage() {
             </Button>
           )}
         </div>
-        <p className="page__note" role="note" data-testid="paging-gap-notice">
-          {CONTRACT_GAP_NOTICES.QUESTION_PAGING}
+        <p className="page__note" data-testid="questions-total">
+          第 {page + 1} / {Math.max(totalPages, 1)} 页 · 共 {totalItems} 条 ·
+          每页 {QUESTIONS_PAGE_SIZE} 条
         </p>
+        {totalPages > 1 && (
+          <div className="form__actions">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={page === 0 || listQuery.isFetching}
+              data-testid="questions-prev-page"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.set('page', String(page - 1));
+                setSearchParams(next);
+              }}
+            >
+              上一页
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={page >= totalPages - 1 || listQuery.isFetching}
+              data-testid="questions-next-page"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.set('page', String(page + 1));
+                setSearchParams(next);
+              }}
+            >
+              下一页
+            </Button>
+          </div>
+        )}
       </section>
 
       {listQuery.isPending && <LoadingState text="加载题目…" />}

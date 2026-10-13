@@ -97,8 +97,6 @@ export const CONTRACT_GAP_NOTICES = {
     '无法回显标准顺序：契约的读侧 QuestionAnswerView 只有 correctOptionKey / correctOptionKeys / correctBoolean / referenceAnswer，没有 correctOrder，所以题库详情看不到创建时设的顺序（缺口 C09b）。批改结果里的 correctAnswer 仍会给出服务端判分用的顺序。',
   MATCHING_REVIEW:
     '无法回显标准配对：QuestionAnswerView 不携带 matchesJson，创建时设定的配对读不回来（缺口 C09b）。批改结果里的 correctAnswer 仍会给出服务端的配对。',
-  QUESTION_PAGING:
-    '列表没有分页：GET /questions 只接受 status / questionType / knowledgePointId，没有 page / size（缺口 C-Paging）。前端不会拉全量自己做假分页。',
   QUESTION_UPDATE_FIELDS:
     '编辑只能改题干 / 解析 / 难度：契约的 UpdateQuestionRequest 只有 stem、explanation、difficulty 三个字段，选项与正确答案无法修改。要改答案只能新建一道题。',
 } as const;
@@ -220,8 +218,14 @@ export const QUESTION_FIELD_LIMITS = {
 } as const;
 
 /**
- * Practice session size bounds, copied from `CreatePracticeSessionRequest.count`
- * (`minimum`/`maximum`) in the generated contract. The contract guard compares
+ * `size` default of `GET /questions` (openapi.json declares page 0 / size 20).
+ * The contract guard compares it, so widening the server default has to widen
+ * this deliberately instead of leaving the list page narrower than the server.
+ */
+export const QUESTIONS_PAGE_SIZE = 20;
+
+/**
+ * Practice session size bounds, copied from `CreatePracticeSessionRequest.count` * (`minimum`/`maximum`) in the generated contract. The contract guard compares
  * these numbers against openapi.json, so a deployment that widens the range
  * fails the guard instead of leaving the form silently tighter than the server.
  */

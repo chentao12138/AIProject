@@ -7,6 +7,18 @@ import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExamsPage } from './ExamsPage';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
+import { QUESTIONS_PAGE_SIZE } from '../../lib/format';
+
+/** GET /questions now answers with a paged envelope, not an array. */
+function page<T>(items: T[]) {
+  return {
+    items,
+    page: 0,
+    pageSize: QUESTIONS_PAGE_SIZE,
+    totalItems: items.length,
+    totalPages: 1,
+  };
+}
 
 function render() {
   const createExam = vi.fn(async () => ({
@@ -15,10 +27,10 @@ function render() {
   }));
   const listQuestions = vi.fn(
     async (_spaceId: number, _query?: { status?: string }) => ({
-      data: [
+      data: page([
         { id: 29, stem: '1+1 等于几？', questionType: 'SINGLE_CHOICE', status: 'PUBLISHED' },
         { id: 30, stem: '2+2 等于几？', questionType: 'SINGLE_CHOICE', status: 'PUBLISHED' },
-      ],
+      ]),
       response: { status: 200 },
     })
   );

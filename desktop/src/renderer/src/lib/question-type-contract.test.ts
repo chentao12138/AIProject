@@ -15,9 +15,9 @@
  *    instead of silently half-supporting the type;
  *  - `QUESTION_FIELD_LIMITS` equals the contract's `maxLength`/`maxItems`,
  *    and `stem` stays uncapped because the contract gives it only `minLength`;
- *  - the question routes stay GET/POST-only (no PUT / DELETE / archive), and
- *    `GET /questions` stays free of paging params, which is exactly why the
- *    list page has no pager.
+ *  - `GET /questions` is paged (page/size + a `QuestionPageResponse` envelope)
+ *    and the list page takes its size from the contract default, so a pager that
+ *    slices a fetched array locally fails here.
  *
  * Skips when the generated contract is not next to this checkout.
  */
@@ -36,6 +36,7 @@ import {
   KNOWLEDGE_FORM_LIMITS,
   SOURCE_FORM_LIMITS,
   NOTE_FORM_LIMITS,
+  QUESTIONS_PAGE_SIZE,
   QUESTION_TYPE_DISPLAY_GAP,
   isAuthorableQuestionType,
   isPublishableQuestionType,
@@ -327,14 +328,41 @@ describe.skipIf(!hasContract)('question routes offer exactly the verbs the rende
     ]);
   });
 
-  it('has no paging params, so the list page must not fake a pager (C-Paging)', () => {
+  it('is paged, so the list page has to drive the server rather than slice', () => {
     const names = (contract?.paths[collection]?.get as { parameters?: Array<{ name: string }> })
       ?.parameters?.map((p) => p.name);
-    expect(names).toEqual(['spaceId', 'status', 'questionType', 'knowledgePointId']);
-    expect(names).not.toContain('page');
-    expect(names).not.toContain('size');
-    expect(names).not.toContain('keyword');
-    expect(names).not.toContain('difficulty');
+    expect(names).toEqual([
+      'spaceId',
+      'status',
+      'questionType',
+      'knowledgePointId',
+      'page',
+      'size',
+    ]);
+    // C-Paging closed on 2026-10-14: the endpoint answers with an envelope, and
+    // the list page reads its totals from it instead of counting a fetched array.
+    const response = schemas['QuestionPageResponse'];
+    expect(Object.keys(response?.properties ?? {})).toEqual([
+      'items',
+      'page',
+      'pageSize',
+      'totalItems',
+      'totalPages',
+    ]);
+    expect(
+      JSON.stringify(response?.properties?.items),
+      'items must be an array of $ref question rows'
+    ).toContain('$ref');
+  });
+
+  it('uses the contract page size, not a number the UI invented', () => {
+    const params =
+      (contract?.paths?.[collection]?.get as {
+        parameters?: Array<{ name: string; schema?: { default?: number } }>;
+      })?.parameters ?? [];
+    expect(QUESTIONS_PAGE_SIZE).toBe(
+      params.find((p) => p.name === 'size')?.schema?.default
+    );
   });
 
   it('only reads filters the endpoint actually accepts', () => {

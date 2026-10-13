@@ -106,7 +106,6 @@ describe('contract-gap copy', () => {
     expect(CONTRACT_GAP_NOTICES.ORDERING_REVIEW).toContain('QuestionAnswerView');
     expect(CONTRACT_GAP_NOTICES.ORDERING_REVIEW).toContain('correctOrder');
     expect(CONTRACT_GAP_NOTICES.MATCHING_REVIEW).toContain('matchesJson');
-    expect(CONTRACT_GAP_NOTICES.QUESTION_PAGING).toContain('page');
     expect(CONTRACT_GAP_NOTICES.QUESTION_UPDATE_FIELDS).toContain(
       'UpdateQuestionRequest'
     );

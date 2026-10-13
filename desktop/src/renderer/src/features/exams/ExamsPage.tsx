@@ -46,9 +46,28 @@ export function ExamsPage() {
   const publishedQuery = useQuery(
     spaceQuery(
       spaceId,
-      queryKeys.questions(spaceId, { status: 'PUBLISHED' }),
-      (id) => api.listQuestions(id, { status: 'PUBLISHED' })
+      queryKeys.questions(spaceId, {
+        status: 'PUBLISHED',
+        page: 0,
+        size: EXAM_FORM_LIMITS.maxQuestions,
+      }),
+      // A paper can hold at most `maxQuestions` questions, so asking the server
+      // for exactly that many published ones covers every exam the contract
+      // allows without a second pager here. Anything beyond that first page is
+      // stated in the picker's own note rather than left implicit.
+      (id) =>
+        api.listQuestions(id, {
+          status: 'PUBLISHED',
+          page: 0,
+          size: EXAM_FORM_LIMITS.maxQuestions,
+        })
     )
+  );
+
+  const publishedQuestions = publishedQuery.data?.items ?? [];
+  const unpublishedBeyond = Math.max(
+    0,
+    (publishedQuery.data?.totalItems ?? 0) - publishedQuestions.length
   );
 
   const questions = Object.entries(selected).map(([questionId, score]) => ({
@@ -153,12 +172,12 @@ export function ExamsPage() {
                 onRetry={() => void publishedQuery.refetch()}
               />
             )}
-            {publishedQuery.isSuccess && publishedQuery.data.length === 0 && (
+            {publishedQuery.isSuccess && publishedQuestions.length === 0 && (
               <EmptyState title="没有已发布的题目" description="请先在 Questions 页面创建并发布题目。" />
             )}
-            {publishedQuery.isSuccess && publishedQuery.data.length > 0 && (
+            {publishedQuery.isSuccess && publishedQuestions.length > 0 && (
               <ul className="point-list">
-                {publishedQuery.data.map((q) => {
+                {publishedQuestions.map((q) => {
                   const checked = q.id !== undefined && selected[q.id] !== undefined;
                   return (
                     <li key={q.id} className="question-pick">
@@ -202,6 +221,13 @@ export function ExamsPage() {
                   );
                 })}
               </ul>
+            )}
+            {publishedQuery.isSuccess && unpublishedBeyond > 0 && (
+              <p className="field__hint" role="note" data-testid="picker-beyond-note">
+                已发布题目共 {publishedQuery.data?.totalItems} 道，这里只列出前{' '}
+                {EXAM_FORM_LIMITS.maxQuestions} 道 —— 一份试卷最多也只能装这么多题。
+                若要选用其余题目，请先到题库调整已发布范围。
+              </p>
             )}
           </div>
 

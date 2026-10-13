@@ -20,12 +20,25 @@ import {
   mockApiClient,
   renderWithProviders,
 } from '../../test/test-utils';
+import { QUESTIONS_PAGE_SIZE } from '../../lib/format';
+
+/** GET /questions now answers with a paged envelope, not an array. */
+function page<T>(items: T[]) {
+  return {
+    items,
+    page: 0,
+    pageSize: QUESTIONS_PAGE_SIZE,
+    totalItems: items.length,
+    totalPages: 1,
+  };
+}
 
 const ROUTE = '/spaces/:spaceId/questions';
 
 function knowledgePointsApi(overrides: Parameters<typeof mockApiClient>[0] = {}) {
   return mockApiClient({
     listKnowledgePoints: vi.fn(async () => ({
+      // Still a bare array in the contract — only /questions is paged.
       data: [
         { id: 3, title: '牛顿第二定律' },
         { id: 5, title: '能量守恒' },
@@ -75,7 +88,7 @@ describe('QuestionsPage', () => {
     renderWithProviders(<QuestionsPage />, {
       apiClient: mockApiClient({
         listQuestions: vi.fn(async () => ({
-          data: [],
+          data: page([]),
           response: { status: 200 },
         })),
       }),
@@ -90,10 +103,10 @@ describe('QuestionsPage', () => {
     renderWithProviders(<QuestionsPage />, {
       apiClient: mockApiClient({
         listQuestions: vi.fn(async () => ({
-          data: [
+          data: page([
             { id: 1, questionType: 'SINGLE_CHOICE', stem: 'What is 1+1?', status: 'PUBLISHED', difficulty: 'EASY' },
             { id: 2, questionType: 'BOOLEAN', stem: 'The sky is blue.', status: 'DRAFT', difficulty: 'EASY' },
-          ],
+          ]),
           response: { status: 200 },
         })),
       }),
@@ -109,7 +122,7 @@ describe('QuestionsPage', () => {
   it('filters by status and question type via URL search params', async () => {
     const user = userEvent.setup();
     const listQuestions = vi.fn(async () => ({
-      data: [],
+      data: page([]),
       response: { status: 200 },
     }));
 
@@ -124,6 +137,8 @@ describe('QuestionsPage', () => {
         status: 'PUBLISHED',
         questionType: 'SINGLE_CHOICE',
         knowledgePointId: undefined,
+        page: 0,
+        size: QUESTIONS_PAGE_SIZE,
       });
     });
 
@@ -133,6 +148,8 @@ describe('QuestionsPage', () => {
         status: 'DRAFT',
         questionType: 'SINGLE_CHOICE',
         knowledgePointId: undefined,
+        page: 0,
+        size: QUESTIONS_PAGE_SIZE,
       });
     });
   });
@@ -142,7 +159,7 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
   it('offers the space’s real points and puts the choice on the URL', async () => {
     const user = userEvent.setup();
     const listQuestions = vi.fn(async () => ({
-      data: [],
+      data: page([]),
       response: { status: 200 },
     }));
     renderWithUrl(
@@ -166,6 +183,8 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
         status: undefined,
         questionType: undefined,
         knowledgePointId: 3,
+        page: 0,
+        size: QUESTIONS_PAGE_SIZE,
       })
     );
     expect(urlParams()).toEqual({ knowledgePointId: '3' });
@@ -174,7 +193,7 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
 
   it('replays a knowledgePointId that arrived in the URL', async () => {
     const listQuestions = vi.fn(async () => ({
-      data: [],
+      data: page([]),
       response: { status: 200 },
     }));
     renderWithUrl(
@@ -187,6 +206,8 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
         status: undefined,
         questionType: undefined,
         knowledgePointId: 5,
+        page: 0,
+        size: QUESTIONS_PAGE_SIZE,
       })
     );
     expect(await screen.findByLabelText('知识点')).toHaveValue('5');
@@ -195,7 +216,7 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
   it('drops a malformed knowledgePointId instead of asking for NaN', async () => {
     const listQuestions = vi.fn(
       async (_spaceId: number, _query: Record<string, unknown>) => ({
-        data: [],
+        data: page([]),
         response: { status: 200 },
       })
     );
@@ -207,6 +228,8 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
     await waitFor(() => expect(listQuestions).toHaveBeenCalled());
     expect(listQuestions.mock.calls[0][1]).toMatchObject({
       knowledgePointId: undefined,
+      page: 0,
+      size: QUESTIONS_PAGE_SIZE,
     });
     expect(screen.getByLabelText('知识点')).toHaveValue('');
   });
@@ -214,7 +237,7 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
   it('clears every filter from the URL, not just the visible one', async () => {
     const user = userEvent.setup();
     const listQuestions = vi.fn(async () => ({
-      data: [],
+      data: page([]),
       response: { status: 200 },
     }));
     renderWithUrl(
@@ -229,6 +252,8 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
         status: undefined,
         questionType: undefined,
         knowledgePointId: undefined,
+        page: 0,
+        size: QUESTIONS_PAGE_SIZE,
       })
     );
     expect(urlParams()).toEqual({});
@@ -238,36 +263,61 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
   });
 });
 
-describe('QuestionsPage — no paging without a contract for it (C-Paging)', () => {
-  it('states the gap and never fakes a pager', async () => {
-    const listQuestions = vi.fn(async () => ({
-      data: Array.from({ length: 40 }, (_, i) => ({
-        id: i + 1,
-        questionType: 'SINGLE_CHOICE',
-        stem: `题目 ${i + 1}`,
-        status: 'PUBLISHED',
-      })),
-      response: { status: 200 },
+describe('QuestionsPage — the server pages the list (C-Paging closed)', () => {
+  const rows = (count: number, offset = 0) =>
+    Array.from({ length: count }, (_, i) => ({
+      id: offset + i + 1,
+      questionType: 'SINGLE_CHOICE',
+      stem: `题目 ${offset + i + 1}`,
+      status: 'PUBLISHED',
     }));
+
+  it('asks for one page and drives the pager from the server totals', async () => {
+    const user = userEvent.setup();
+    const listQuestions = vi.fn(
+      async (_id: number, q: { page?: number; size?: number }) => ({
+        data: {
+          items: rows(q?.size ?? 20, (q?.page ?? 0) * (q?.size ?? 20)),
+          page: q?.page ?? 0,
+          pageSize: q?.size ?? 20,
+          totalItems: 55,
+          totalPages: 3,
+        },
+        response: { status: 200 },
+      })
+    );
     renderWithUrl(
       knowledgePointsApi({ listQuestions }),
       ['/spaces/7/questions']
     );
 
-    expect(await screen.findByText('题目 40')).toBeInTheDocument();
-    expect(
-      await screen.findByTestId('paging-gap-notice')
-    ).toHaveTextContent('page');
-    expect(screen.queryByRole('button', { name: /下一页|上一页|第 \d+ 页/ }))
-      .not.toBeInTheDocument();
-    // One request for the whole (unpaged) result set — no slice-per-page loop.
-    expect(listQuestions).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('题目 20')).toBeInTheDocument();
+    expect(await screen.findByTestId('questions-total')).toHaveTextContent(
+      '第 1 / 3 页 · 共 55 条'
+    );
+    expect(listQuestions.mock.calls[0][1]).toMatchObject({
+      page: 0,
+      size: QUESTIONS_PAGE_SIZE,
+    });
+    expect(screen.getByTestId('questions-prev-page')).toBeDisabled();
+
+    await user.click(screen.getByTestId('questions-next-page'));
+
+    await waitFor(() =>
+      expect(
+        listQuestions.mock.calls.some((call) => call[1]?.page === 1)
+      ).toBe(true)
+    );
+    // The page lives in the URL, so reload and back/forward return to it.
+    expect(await screen.findByTestId('questions-total')).toHaveTextContent(
+      '第 2 / 3 页'
+    );
   });
 
-  it('sends only the three filters the endpoint declares', async () => {
+  it('sends only the parameters the endpoint declares', async () => {
     const listQuestions = vi.fn(
       async (_spaceId: number, _query: Record<string, unknown>) => ({
-        data: [],
+        data: page([]),
         response: { status: 200 },
       })
     );
@@ -279,7 +329,9 @@ describe('QuestionsPage — no paging without a contract for it (C-Paging)', () 
     await waitFor(() => expect(listQuestions).toHaveBeenCalled());
     expect(Object.keys(listQuestions.mock.calls[0][1]).sort()).toEqual([
       'knowledgePointId',
+      'page',
       'questionType',
+      'size',
       'status',
     ]);
   });
@@ -288,7 +340,7 @@ describe('QuestionsPage — no paging without a contract for it (C-Paging)', () 
 describe('QuestionsPage — knowledge point list failure', () => {
   it('still lists questions and keeps the filter usable', async () => {
     const listQuestions = vi.fn(async () => ({
-      data: [{ id: 1, questionType: 'SINGLE_CHOICE', stem: '题目', status: 'DRAFT' }],
+      data: page([{ id: 1, questionType: 'SINGLE_CHOICE', stem: '题目', status: 'DRAFT' }]),
       response: { status: 200 },
     }));
     renderWithUrl(
@@ -313,7 +365,7 @@ describe('QuestionsPage — archived questions are reachable, not vanished (G09)
   it('offers 已归档 as a status filter and asks the server for it', async () => {
     const user = userEvent.setup();
     const listQuestions = vi.fn(async () => ({
-      data: [],
+      data: page([]),
       response: { status: 200 },
     }));
     renderWithUrl(knowledgePointsApi({ listQuestions }), ['/spaces/7/questions']);
@@ -331,6 +383,8 @@ describe('QuestionsPage — archived questions are reachable, not vanished (G09)
         status: 'ARCHIVED',
         questionType: undefined,
         knowledgePointId: undefined,
+        page: 0,
+        size: QUESTIONS_PAGE_SIZE,
       })
     );
     expect(urlParams()).toEqual({ status: 'ARCHIVED' });
@@ -340,10 +394,10 @@ describe('QuestionsPage — archived questions are reachable, not vanished (G09)
     renderWithProviders(<QuestionsPage />, {
       apiClient: mockApiClient({
         listQuestions: vi.fn(async () => ({
-          data: [
+          data: page([
             { id: 1, questionType: 'SINGLE_CHOICE', stem: '可编辑', status: 'DRAFT' },
             { id: 2, questionType: 'SINGLE_CHOICE', stem: '已归档', status: 'ARCHIVED' },
-          ],
+          ]),
           response: { status: 200 },
         })),
       }),
