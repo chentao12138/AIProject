@@ -9,6 +9,7 @@ import {
   CONTRACT_GAP_NOTICES,
   QUESTION_FIELD_LIMITS,
   QUESTION_TYPES,
+  QUESTION_TYPE_DISPLAY_GAP,
   formatBytes,
   isAuthorableQuestionType,
   isPublishableQuestionType,
@@ -112,6 +113,25 @@ describe('contract-gap copy', () => {
     expect(questionTypeGap('MATCHING')).toBe(CONTRACT_GAP_NOTICES.MATCHING);
     expect(questionTypeGap('FILL_BLANK')).toBeNull();
     expect(questionTypeGap('SINGLE_CHOICE')).toBeNull();
+  });
+
+  it('separates the authoring sentence from the display sentence', () => {
+    // A stored ORDERING question can be shown even though it cannot be
+    // created, so the renderer needs the review wording, not the create-form
+    // wording.
+    expect(QUESTION_TYPE_DISPLAY_GAP.ORDERING?.answer).toBe(
+      CONTRACT_GAP_NOTICES.ORDERING_ANSWER
+    );
+    expect(QUESTION_TYPE_DISPLAY_GAP.ORDERING?.review).toBe(
+      CONTRACT_GAP_NOTICES.ORDERING_REVIEW
+    );
+    expect(QUESTION_TYPE_DISPLAY_GAP.ORDERING?.review).toContain('selectedOptionKeys');
+    expect(QUESTION_TYPE_DISPLAY_GAP.MATCHING?.review).toBe(
+      CONTRACT_GAP_NOTICES.MATCHING
+    );
+    // Nothing to flag for a type the contract closes.
+    expect(QUESTION_TYPE_DISPLAY_GAP.FILL_BLANK).toBeUndefined();
+    expect(QUESTION_TYPE_DISPLAY_GAP.SHORT_ANSWER).toBeUndefined();
   });
 
   it('labels the three new types for display', () => {

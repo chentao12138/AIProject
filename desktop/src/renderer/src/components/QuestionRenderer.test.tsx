@@ -113,6 +113,28 @@ describe('QuestionRenderer — FILL_BLANK (G02)', () => {
     expect(onTextAnswerChange).toHaveBeenNthCalledWith(2, 'b');
   });
 
+  it('shows no text box in answer mode when the page cannot receive it', () => {
+    // A textarea whose value is thrown away is worse than none: the practice
+    // card kept its own FILL_BLANK control while this component had no branch,
+    // and wiring a second dead box would have shown two of them.
+    render(
+      <QuestionRenderer
+        question={{ questionType: 'FILL_BLANK', stem: '水的化学式是 ___。' }}
+        mode="answer"
+      />
+    );
+    expect(screen.queryByRole('textbox', { name: '作答' })).not.toBeInTheDocument();
+    // Review still shows the stored reference answer.
+    render(
+      <QuestionRenderer
+        question={{ questionType: 'FILL_BLANK', stem: '水的化学式是 ___。' }}
+        answer={{ referenceAnswer: 'H2O' }}
+        mode="review"
+      />
+    );
+    expect(screen.getByRole('textbox', { name: '作答' })).toBeDisabled();
+  });
+
   it('shows the reference answer in review and never claims a gap for it', () => {
     render(
       <QuestionRenderer
@@ -239,10 +261,10 @@ describe('QuestionRenderer — ORDERING (G02)', () => {
   });
 
   it('review says so when nothing was submitted', () => {
-    render(
-      <QuestionRenderer question={question('ORDERING')} mode="review" />
-    );
+    render(<QuestionRenderer question={question('ORDERING')} mode="review" />);
     expect(screen.getByTestId('ordering-empty')).toBeInTheDocument();
+    // Printing the option order as if it were the user's answer would be a lie.
+    expect(screen.queryAllByTestId('ordering-item')).toHaveLength(0);
   });
 });
 

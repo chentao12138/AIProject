@@ -95,7 +95,7 @@ export const CONTRACT_GAP_NOTICES = {
   ORDERING_ANSWER:
     '排序题作答：你的顺序通过 AnswerPayloadView.selectedOptionKeys（有序数组）表达。契约无法提交标准顺序，后端目前无法判分（缺口 C09）。',
   ORDERING_REVIEW:
-    '无法显示标准顺序：QuestionAnswerView 只有 correctOptionKey / correctOptionKeys / correctBoolean / referenceAnswer，没有顺序字段（缺口 C09）。下面展示的是你提交的顺序。',
+    '无法显示标准顺序：QuestionAnswerView 只有 correctOptionKey / correctOptionKeys / correctBoolean / referenceAnswer，没有顺序字段（缺口 C09）。下面展示的是你提交的顺序（来自 AnswerPayloadView.selectedOptionKeys 的数组下标）。',
   MATCHING:
     '配对题暂不能创建、也不能作答：契约里不存在配对结构 —— CreateQuestionRequest 没有 matches、AnswerPayloadView 没有配对字段、QuestionAnswerView 没有 pairs。当前只读展示题干与选项。',
   QUESTION_PAGING:
@@ -178,6 +178,26 @@ export function isPublishableQuestionType(type?: string | null): boolean {
 export function questionTypeGap(type?: string | null): string | null {
   return questionTypeSupport(type)?.gap ?? null;
 }
+
+/**
+ * Copy for the display of a type the contract cannot close, per surface:
+ * `gap` is the authoring-side sentence (what the create form must refuse and
+ * why), `reviewGap` is what a reader of a stored question is owed. They differ
+ * because a question can already exist (imported, AI-derived) while the form
+ * still cannot make one.
+ */
+export const QUESTION_TYPE_DISPLAY_GAP: Partial<
+  Record<QuestionType, { answer: string; review: string }>
+> = {
+  ORDERING: {
+    answer: CONTRACT_GAP_NOTICES.ORDERING_ANSWER,
+    review: CONTRACT_GAP_NOTICES.ORDERING_REVIEW,
+  },
+  MATCHING: {
+    answer: CONTRACT_GAP_NOTICES.MATCHING,
+    review: CONTRACT_GAP_NOTICES.MATCHING,
+  },
+};
 
 /**
  * Length caps copied out of openapi.json — `maxLength` on a string,

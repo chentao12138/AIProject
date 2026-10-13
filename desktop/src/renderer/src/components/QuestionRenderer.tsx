@@ -23,8 +23,9 @@
 import { type KeyboardEvent } from 'react';
 import { Button } from './Button';
 import {
-  CONTRACT_GAP_NOTICES,
   QUESTION_FIELD_LIMITS,
+  QUESTION_TYPE_DISPLAY_GAP,
+  type QuestionType,
 } from '../lib/format';
 
 interface Option {
@@ -93,14 +94,18 @@ export function QuestionRenderer({
   const options = question.options ?? [];
 
   /**
-   * The order the user has committed to. Controlled: until the parent has a
-   * value we show the options in the order the backend sent them, which is
-   * the starting position the up/down buttons operate on.
+   * The order the user has committed to. Controlled: in answer mode, until the
+   * parent has a value we show the options in the order the backend sent them,
+   * which is the starting position the up/down buttons operate on. In review
+   * mode an empty answer stays empty — printing the option order there would
+   * present a shuffle as if it were the user's response.
    */
   const orderingKeys =
     selectedOptionKeys.length > 0
       ? selectedOptionKeys
-      : options.map((opt) => opt.optionKey);
+      : isReview
+        ? []
+        : options.map((opt) => opt.optionKey);
   const optionByKey = new Map(
     options.map((opt) => [opt.optionKey, opt] as const)
   );
@@ -138,13 +143,12 @@ export function QuestionRenderer({
   };
 
   /** Copy telling the user which part of the loop the contract cannot close. */
-  const gapNotice = isOrdering
+  const displayGap = QUESTION_TYPE_DISPLAY_GAP[qType as QuestionType];
+  const gapNotice = displayGap
     ? isReview
-      ? CONTRACT_GAP_NOTICES.ORDERING_REVIEW
-      : CONTRACT_GAP_NOTICES.ORDERING_ANSWER
-    : isMatching
-      ? CONTRACT_GAP_NOTICES.MATCHING
-      : null;
+      ? displayGap.review
+      : displayGap.answer
+    : null;
 
   const submitDisabled =
     disabled ||
@@ -201,7 +205,11 @@ export function QuestionRenderer({
         </div>
       )}
 
-      {isText && (
+      {/* A controlled input the page cannot read is worse than none: the user
+          types into it and the value is thrown away. So an answer-mode text
+          control appears only when the page wired the callback (review mode
+          always shows it, disabled, as the submitted answer). */}
+      {isText && (mode === 'review' || onTextAnswerChange) && (
         <textarea
           className="textarea"
           value={textAnswer ?? ''}
