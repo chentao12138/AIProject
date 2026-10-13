@@ -279,7 +279,34 @@ product failed — recorded here so nobody reads them as defects or as passes:
   remain unverified live.
 
 Re-run to close those two: publish the exam, and read the practice session
-detail before answering. R03–R05 (installed-app login/restore and the GUI
+detail before answering.
+
+## Those two rows are now closed — live journey, 2026-10-14 03:1x
+
+Reproduce it with `node scripts/live-journey.mjs` after exporting
+`AISTUDY_API_BASE_URL`, `AISTUDY_USER` and `AISTUDY_PASS` (the script carries no
+credentials; without them login fails and it aborts). It exits non-zero if any
+assertion fails, and it writes into the backend's schema by design — run it only
+inside a promised window.
+
+Backend restarted main on `:8080`, re-seeded `dev`, and held the window (no IT, no
+restart) until this finished. **22/22 assertions passed** against that instance:
+
+| Result | Step (the server's own answer) |
+|--------|-------------------------------|
+| PASS | login 200; `GET /spaces` → `[]` (the schema had been wiped by IT) → `POST /spaces` 201 |
+| PASS | `POST /questions` ORDERING with the shape the editor really sends — `options` A/B/C **and** `correctOrder:[1,2,3]` → 201 |
+| PASS | the new rule at work: ORDERING with `correctOrder` and **no `options`** → **400 `VALIDATION_ERROR`**, so the editor's payload is the accepted one |
+| **PASS** | C09b read-back: `GET /questions/{id}` → `answer.correctOrder == [1,2,3]` — the evidence that let both "cannot be read back" notices be deleted |
+| **PASS** | C05 measured: `PUT` on DRAFT → 200; after publish, `PUT` → **409 `code: QUESTION_NOT_EDITABLE`**. The UI hides the edit entry for that state, so nobody fills a form whose save is doomed |
+| **PASS** | first closed row: `GET …/practice-sessions/{id}/result` **before** `finish` → 409 `PRACTICE_SESSION_NOT_SUBMITTED`; after `start` + answering with `orderingAnswer:[1,2,3]` (`isCorrect=true`, graded server-side) + `finish` → 200 `{sessionId:28,status:"SUBMITTED",questionCount:1,answeredCount:1,correctCount:1,score:1,maxScore:1}` |
+| **PASS** | the `explanation` fix landed: `GET …/answers` now returns `explanation:"顺序即判分依据。"`, not `null` |
+| **PASS** | second closed row: `POST /exams` (`timeLimitMinutes:30`) → publish → attempt via `POST /exams/{examId}/sessions` (the app's verb; `…/attempts` is 404) → start → `GET /exam-attempts/{id}` → **`deadlineAt = 2026-10-14T04:31:12.962502`**, and its question reads `answered:false, answer:null` before any answer (C10 read model) |
+| **PASS** | C11: `GET /exam-attempts?examId=&page=0&size=10` → `{items:[…],totalItems:1}` with **`score:null, maxScore:null`** on the in-progress attempt — so `—` + 等待评分 is the honest render, not `0 / 0` |
+
+Not proven by this, and unchanged: anything about the **installed renderer**. R03–R05
+still need the packaged app pointed at this account, and the artifact on `dist/`
+postdates the last install run. R03–R05 (installed-app login/restore and the GUI
 journeys) still need the same account plus a person or automation at the keyboard.
 
 ## Smoke steps, 2026-10-14

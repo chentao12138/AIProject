@@ -828,3 +828,41 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
 - 账号仍未恢复：本轮实测 `POST :8080/api/v1/auth/login`（dev/devpassword123）→
   `401 UNAUTHORIZED`。所以 A5.3 分数读回、`deadlineAt` 这两条此前记为"未跑"的 live
   断言，以及 R03–R05，**继续挂在后端承诺的重灌窗口上**（已一次一条索取）。
+
+## 2026-10-14（第五轮）：后端交付 + 验证窗口，两条"未跑"的 live 断言补完了
+
+- **契约 197 → 198 path**：`api:generate` 对运行实例重生成后 `api:check` / `api:live` 双绿。
+- **`api:live` 假红一次，根因是 springdoc 把请求的 Host 回显进 `servers[].url`**：
+  同一份文档经 `localhost` 取回是 `http://localhost:8080`，经 `127.0.0.1` 取回是
+  `http://127.0.0.1:8080`，于是比对永远不等——"paths added: none, removed: none"
+  却报 canonical 不同。修法：比对**剔除 `servers`**（它是"你怎么访问到的"，不是契约内容），
+  并把失败信息改成打印两份 canonical 长度与**第一个差异字符位置**。
+  这次排障花了我四个临时脚本，就是因为原来那句话只说"不一样"，不说哪里不一样。
+  负向证据：改动前那份被人为改过字段的快照在 `api:check` 的 manifest 步骤就红了（守卫顺序如文档所述）。
+- **C05 从散文变成契约事实，并且实测到了**：PUT 的 description 写明只接受 DRAFT，
+  非 DRAFT 返回 **409 `code: QUESTION_NOT_EDITABLE`**，`status` 成了真枚举
+  （DRAFT/PUBLISHED/ARCHIVED/REJECTED）。于是「编辑」入口对 PUBLISHED/ARCHIVED/REJECTED
+  一律收起（列表页 + 详情页），编辑表单对这些状态只读、横幅点名那个 code，
+  并且**处理**这个 code（表单开着时题目被别人发布，也不会得到一个看不懂的失败）。
+  live 侧：同一道题 DRAFT 时 PUT 200，发布后 PUT 409 + 该 code。**没有**依据旧的
+  散文加门禁，也没依据旧代码放行——是契约变了才动 UI。
+- **C09b 落地**：`QuestionAnswerView` 现在有 `correctOrder` / `matches`。
+  两条"读不回来"的提示文案连同 `QUESTION_TYPE_DISPLAY_GAP` 一起删干净（不是留着不显示），
+  并加了会**反向失败**的守卫：任何人把这类文案加回来，`format.test.ts` 与
+  `question-type-contract.test.ts` 就红。详情页新增「标准顺序 / 标准配对」区块。
+  这里我先写错了一次语义：`correctOrder[i]` 是**第 i 个选项被放到的位置**，
+  不是"第 i 个位置放哪个选项"；按前者渲染才会把 `[2,1]` 读成 `第1位:第二项 / 第2位:第一项`。
+  语义以创建侧 `toCorrectOrder()` 写入的方向为准，测试钉死。
+- **ORDERING 破坏性变更核对**：后端新增"ORDERING 必须带 options(>=2) 且 correctOrder 是完整排列"。
+  我这侧**已经**是这个形状（编辑器把选项与排列一起发），实测 `options+correctOrder` → 201；
+  故意只发 `correctOrder` 不发 `options` → 400 `VALIDATION_ERROR`。已把"我们实际发什么形状"回给对方。
+- **两条此前记为"未跑"的 live 断言补完（22/22 全通过）**：练习分数在 `finish` 前后分别是
+  409 `PRACTICE_SESSION_NOT_SUBMITTED` 与 200 `{score:1,maxScore:1,correctCount:1}`；
+  `orderingAnswer:[1,2,3]` 服务端判 `isCorrect=true`；考试 `deadlineAt` 有值（30 分钟限时），
+  attempt 题行作答前 `answered:false / answer:null`；attempt 历史未判分时 `score:null`（不是 0）。
+  `answers` 列表的 `explanation` 缺陷也已修好并实测返回中文。
+  脚本留在 `scripts/live-journey.mjs`，可重跑；它按设计会往对方 schema 里写数据，只在承诺的窗口内跑。
+  注意 attempt 的创建动词是 `POST /exams/{examId}/sessions`（我第一版脚本猜成 `…/attempts` → 404）。
+- 门禁：lint 0 / `tsc` 0 / **73 files 1070 tests 全绿** / `api:check` + `api:live` 绿。
+- 仍未做：Notes 的 `archived` 过滤 + restore 按钮接线（本轮后端刚给）、打包版 R03–R05、
+  制品重安装；`matchingAnswer` 的 typed pairs 与练习模块专属冲突码仍缺。

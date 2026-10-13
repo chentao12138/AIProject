@@ -38,8 +38,15 @@ wired, the gates pass and the live journey has been run.
 
 | Feature | Routes | Blocker |
 |---------|--------|---------|
-| Show a stored standard order / pair set | `/spaces/:spaceId/questions/:questionId` | `QuestionAnswerView` has neither `correctOrder` nor `matches` (C09b): authoring is one-way, so the detail page cannot echo what was set and an editor cannot pre-fill it. |
-| Notes archive is one-way and invisible | `/spaces/:spaceId/notes` | Archive sets `archived_at` while the list filters it out, `NoteView` has no `archivedAt` and there is no restore endpoint (C-Notes-archive); there is also no entity → notes read (C-Notes-reverse) and both link-add endpoints answer 201 while silently dropping a foreign id (C-Notes-link-noop). |
+| *(none left in this table)* | | The last two rows left on 2026-10-14: C09b landed (`QuestionAnswerView.correctOrder` / `.matches`, verified live — `GET /questions/{id}` returned `correctOrder:[1,2,3]`), and the Notes follow-ups landed (`archivedAt` on `NoteView`, `POST /notes/{id}/restore`, `archived`/`knowledgePointId`/`sourceId`/`contentBlockId`/`questionId` filters on `GET /notes`, and link/unlink now 404s with a code instead of answering 201 while dropping a foreign id). Both are wiring work again, listed below. |
+
+### Newly unblocked by this delivery (wiring, not a backend gap)
+
+| Feature | Contract that closed it | Frontend status |
+|---------|-------------------------|-----------------|
+| Notes archive visible + restorable, and entity → notes lists | `NoteView.archivedAt`, `POST /notes/{id}/restore` (204), `GET /notes?archived=&knowledgePointId=&sourceId=&contentBlockId=&questionId=` | Not yet wired — the list shows only unarchived notes today; the archived filter and the restore action are the remaining frontend work |
+| Question editability | PUT description + `409 QUESTION_NOT_EDITABLE` + the `status` enum | **Wired and measured live** — `编辑` is gone for PUBLISHED/ARCHIVED/REJECTED, the edit form is read-only with the code named, and the 409 itself is handled |
+| Stored order / pair set on the detail page | `QuestionAnswerView.correctOrder` / `.matches` | **Wired and measured live** — the two "cannot be read back" notices are deleted, with a guard that fails if either returns |
 
 Closed by the 2026-10-14 contract wave (previously in this table): Notes CRUD /
 editor / context links (C01), question edit (C05) and archive/restore (C07),
