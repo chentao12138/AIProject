@@ -4,7 +4,6 @@ import com.aistudy.server.practice.dto.PracticeAnswerRequest;
 import com.aistudy.server.practice.dto.PracticeAnswerResponse.PracticeAnswerView;
 import com.aistudy.server.practice.dto.PracticeAnswerResponse.PracticeSubmitView;
 import com.aistudy.server.practice.dto.PracticeSessionResponse.PracticeResultView;
-import com.aistudy.server.practice.entity.PracticeAnswer;
 import com.aistudy.server.practice.service.PracticeAnswerService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
@@ -82,14 +81,11 @@ public class PracticeAnswerController {
     public List<PracticeAnswerView> listAnswers(@PathVariable Long spaceId,
                                                 @PathVariable Long sessionId,
                                                 Authentication authentication) {
-        List<PracticeAnswer> answers = practiceAnswerService.listAnswers(
+        List<PracticeAnswerView> views = practiceAnswerService.reviewAnswers(
                 authentication.getName(), spaceId, sessionId);
-        if (answers == null) {
+        if (views == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "PracticeSession not found");
         }
-        return answers.stream()
-                .map(a -> PracticeAnswerView.from(
-                        a, a.getIsCorrect() != null ? a.getCorrectAnswerSummary() : null, null))
-                .toList();
+        return views;
     }
 }

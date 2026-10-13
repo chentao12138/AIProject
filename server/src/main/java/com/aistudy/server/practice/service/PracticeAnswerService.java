@@ -301,10 +301,35 @@ public class PracticeAnswerService {
     }
 
     /**
-     * Lists all answers of a practice session (space-scoped).
+     * Per-question review rows (contract C06 错题回顾), owner-scoped like every
+     * other practice read.
+     *
+     * <p>{@code explanation} comes from the slot's frozen snapshot, which is the
+     * same source the POST answer path graded against. It used to be a literal
+     * {@code null} here, so the review screen could never show the explanation
+     * the learner had just been given.
+     *
+     * @return {@code null} when the session is not the caller's in this space
+     *         (the controller answers 404); the bare session-id mapper query is
+     *         only space-scoped, so it cannot be the authorization gate
      */
-    public List<PracticeAnswer> listAnswers(String ownerSubject, Long spaceId, Long sessionId) {
-        return practiceAnswerMapper.selectBySessionId(spaceId, sessionId);
+    public List<PracticeAnswerView> reviewAnswers(String ownerSubject, Long spaceId, Long sessionId) {
+        PracticeSession session = practiceSessionMapper.selectByIdSpaceOwnerUser(
+                sessionId, spaceId, ownerSubject, ownerSubject);
+        if (session == null) {
+            return null;
+        }
+        Map<Long, String> explanationBySlot = new HashMap<>();
+        for (PracticeSessionQuestion slot
+                : practiceSessionQuestionMapper.selectBySessionId(spaceId, sessionId)) {
+            explanationBySlot.put(slot.getId(),
+                    AnswerDataCodec.parseSnapshot(slot.getQuestionSnapshotJson()).explanation());
+        }
+        return practiceAnswerMapper.selectBySessionId(spaceId, sessionId).stream()
+                .map(answer -> PracticeAnswerView.from(answer,
+                        answer.getIsCorrect() != null ? answer.getCorrectAnswerSummary() : null,
+                        explanationBySlot.get(answer.getPracticeSessionQuestionId())))
+                .toList();
     }
 
     /** Shape validation per snapshot type (400 on violations). */

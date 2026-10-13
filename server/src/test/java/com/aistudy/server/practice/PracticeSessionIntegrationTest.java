@@ -544,6 +544,57 @@ class PracticeSessionIntegrationTest {
                 .andExpect(jsonPath("$.explanation").value("A is right"));
     }
 
+    /**
+     * (16b) C06 review read-back: {@code GET .../answers} has to return the same
+     * explanation and correct answer the learner saw when answering. Both were
+     * missing on this path — explanation was a literal null, and a session that
+     * is not the caller's produced an empty 200 list instead of 404, because the
+     * mapper query is only space-scoped and the controller's null branch was
+     * unreachable.
+     */
+    @Test
+    void reviewAnswersCarriesExplanationAndScopesToTheCaller() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        String token = tokenFor("biz-e2e-user-1");
+        MvcResult created = mockMvc.perform(post(QUESTIONS, spaceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"questionType\":\"SINGLE_CHOICE\",\"stem\":\"q1\","
+                                + "\"options\":[{\"optionKey\":\"A\",\"content\":\"a\"},"
+                                + "{\"optionKey\":\"B\",\"content\":\"b\"}],"
+                                + "\"correctOptionKey\":\"A\",\"explanation\":\"A is right\"}")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated())
+                .andReturn();
+        Long q1 = extractJsonLong(created.getResponse().getContentAsString(), "id");
+        mockMvc.perform(post(QUESTIONS + "/{questionId}/publish", spaceId, q1)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        Long sessionId = extractJsonLong(
+                createSession(token, spaceId, "{\"questionIds\":[" + q1 + "]}"), "id");
+        mockMvc.perform(post(SESSIONS + "/{sessionId}/start", spaceId, sessionId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        Long slotId = slotIdOf(token, spaceId, sessionId);
+        mockMvc.perform(post(SESSIONS + "/{sessionId}/answers", spaceId, sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"practiceSessionQuestionId\":" + slotId + ","
+                                + "\"answer\":{\"selectedOptionKeys\":[\"B\"]}}")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get(SESSIONS + "/{sessionId}/answers", spaceId, sessionId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].questionId").value(q1))
+                .andExpect(jsonPath("$[0].isCorrect").value(false))
+                .andExpect(jsonPath("$[0].correctAnswer").value("A"))
+                .andExpect(jsonPath("$[0].explanation").value("A is right"));
+
+        mockMvc.perform(get(SESSIONS + "/{sessionId}/answers", spaceId, 999999L)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+    }
+
     /** (17) MULTIPLE_CHOICE exact-set grading end-to-end. */
     @Test
     void answerMultipleChoiceExactSet() throws Exception {
