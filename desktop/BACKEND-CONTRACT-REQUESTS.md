@@ -9,17 +9,66 @@ Each item maps to a specific checklist section.
 
 ## Status summary
 
+Regenerated from the live server on 2026-10-14 — see the section below this one
+for what that proved. Rows are the frontend's own audit items, not the C-numbers.
+
 | Item | Status | Note |
 |------|--------|------|
-| A2.1 provenance nav | Partial | Deep-link via `?block=` added; full nav needs `sourceId`/`sourcePageId` in `KnowledgePointSourceResponse`. |
-| A3.2 AI context | Blocked | `SendMessageRequest` only contains `content`; context chips require optional context ID fields. |
-| A8 Notes | Blocked | No `/notes` endpoints in `api.d.ts`. UI not implemented. |
-| A4.5 Question update | Blocked | No `PUT`/`PATCH` on `/questions/{questionId}`; the form is create-only and the edit route was removed. |
-| A5.3 Practice result | Blocked | `PracticeSessionDetail` carries no score; only the `finish` response does, so a past session cannot show its result. |
-| A6.2 Exam answer resume | Blocked | `ExamAnswerView` echoes no answer content, so a reload cannot rebuild what was saved. |
-| A4.3 ORDERING / MATCHING | Blocked | `AnswerPayloadView` and `QuestionAnswerView` cannot express an order or pairs. |
-| A4.2 Question paging | Blocked | `GET /questions` accepts no `page`/`size`; client-side full-list paging is forbidden by the checklist. |
-| A7.3 Search → Note | Blocked | `SearchResult.type` enum has no `NOTE`, so a note hit cannot be opened. |
+| A2.1 provenance nav | **Still blocked (C02)** | `KnowledgePointSourceResponse` is still `{id, spaceId, knowledgePointId, contentBlockId, relationType, relevanceScore, createdAt}` — no `sourceId`/`sourcePageId`. |
+| A3.2 AI context | **Still blocked (C03)** | `SendMessageRequest` is still `{content}` only. |
+| A8 Notes | **Unblocked, building** | Full CRUD + archive + paged list + context links are in the contract. |
+| A4.5 Question update | **Unblocked, with a limit** | `PUT /questions/{questionId}` exists but `UpdateQuestionRequest` is only `stem`/`explanation`/`difficulty`; options and the correct answer cannot be edited. |
+| A5.3 Practice result | **Partly unblocked** | Per-question review works from `GET .../answers`. The score is still unreachable for a session that is already finished — it exists only in the `finish` response, so history cannot show 成绩 (C06 remains open for that half). |
+| A6.2 Exam answer resume | **Still blocked (C10)** | Only `POST .../exam-attempts/{attemptId}/answers`; `AttemptQuestionView` has no answer and `ExamAnswerView` still echoes no content. |
+| A4.3 ORDERING / MATCHING | **Unblocked on the write side (new gap C09b)** | `CreateQuestionRequest.correctOrder`/`matches` and `AnswerPayloadView.orderingAnswer`/`matchingAnswer` exist and the server grades both. `QuestionAnswerView` still has neither, so a stored standard order/pair set cannot be read back. |
+| A4.2 Question paging | **Still blocked (C-Paging)** | `GET /questions` still accepts only `spaceId`/`status`/`questionType`/`knowledgePointId`. |
+| A7.3 Search → Note | **Unblocked** | `SearchResult.type` enum is now `[SOURCE, CONTENT_BLOCK, KNOWLEDGE_POINT, QUESTION, WRONG_QUESTION, NOTE]` and the hit carries `noteId`. |
+| A6.1 Exam attempt history | **Still blocked (C11)** | `POST /exams/{examId}/sessions` creates an attempt; only `GET /admin/exams/{examId}/attempts` lists them. |
+
+---
+
+## Status after regenerating from the live server (2026-10-14)
+
+The backend session started AIStudy on `:8081` (`:8080` still belongs to another
+project). `npm run api:generate` moved the snapshot from **67 paths to 195**, and
+`npm run api:live` (`packages/api-client/scripts/check-api.mjs --live`) now proves
+the committed snapshot equals the running server's document, so this section is
+verification, not memory.
+
+What that regeneration changed, with the contract evidence:
+
+| Ask | Landed? | Evidence in `openapi.json` |
+|-----|---------|-----------------------------|
+| C01 Notes | yes | `/spaces/{spaceId}/notes` GET(page,size,keyword)+POST, `/{noteId}` GET+PUT+DELETE, `/{noteId}/archive` POST(204), `/{noteId}/knowledge-points`(+`/{kpId}`), `/{noteId}/source-blocks`(+`/{blockId}`); `NotePageResponse{items,page,pageSize,totalItems,totalPages}` |
+| C05 Question update | yes, narrower than asked | `PUT /spaces/{spaceId}/questions/{questionId}`; `UpdateQuestionRequest{stem,explanation,difficulty}` only |
+| C07 Question archive/restore | yes | `POST /questions/{id}/archive`, `POST /questions/{id}/restore` (same pair exists for exams, spaces, sources, knowledge points) |
+| C09 ORDERING / MATCHING write side | yes | `CreateQuestionRequest.correctOrder` (`array<int32>`, `maxItems:100`) and `.matches` (`string`, `maxLength:4000`); `AnswerPayloadView.orderingAnswer` (`array<int32 items minimum:1>`, `maxItems:100`) and `.matchingAnswer` (`string`, `maxLength:10000`) |
+| C06 Practice per-question review | yes, **but only half the ask** | `GET .../practice-sessions/{sessionId}/answers` → `PracticeAnswerView{id,practiceSessionQuestionId,questionId,isCorrect,correctAnswer,explanation,score,answeredAt}` — the 错题回顾 part. The 成绩 part is still missing: `PracticeSessionSummary` and `PracticeSessionDetail` have no score/maxScore, and the totals only appear in the `finish` response, so re-opening a finished session from history cannot show its score. Still need `score`/`maxScore`/`correctCount` on the session read model (or a `GET .../result`). |
+| C-Search `NOTE` | yes | `SearchResult.type` enum includes `NOTE`; the hit gained `noteId` (and `sourceId`/`sourceAssetId`/`sourcePageId`/`pageNumber`/`knowledgePointId`/`questionId`) |
+| C02 provenance ids | **no** | `KnowledgePointSourceResponse` unchanged |
+| C03 AI context | **no** | `SendMessageRequest{content}` unchanged |
+| C04 citation ids | **no** | `ContextReference{type,id,title,snippet,locator}` unchanged; `locator` is still free text |
+| C10 exam answer read-back | **no** | `/exam-attempts/{attemptId}/answers` has only POST; `ExamAnswerView{id,examAttemptId,examQuestionId,gradingStatus,answeredAt}` |
+| C11 learner attempt list | **no** | attempts are only listable under `/admin/exams/{examId}/attempts` |
+| C-Paging question list | **no** | GET params unchanged |
+| FILL_BLANK per-blank grading | **no** (accepted) | `textAnswer` is one `string` (`maxLength:4000`) and `QuestionAnswerEvaluator.gradeFillBlank` does whole-string `trim().equals`, so a multi-blank answer is only correct if it matches the reference's exact punctuation. The UI copy says so instead of promising per-blank marking. |
+
+### Two asks this round added (they are new consequences of the widened write side)
+
+- **C09b — read side for order and pairs.** `QuestionAnswerView` still has only
+  `correctOptionKey`/`correctOptionKeys`/`correctBoolean`/`referenceAnswer`, so a
+  question's standard order/pair set can be written once and never read: the
+  detail page cannot show it, and an editor cannot pre-fill it. Needed:
+  `correctOrder` and `matches` (or a redacted view) on the authoring read model.
+- **C-Ordering-space — confirm and constrain the integer space.**
+  `AnswerPayloadView.orderingAnswer.items` declares `minimum: 1`, while
+  `CreateQuestionRequest.correctOrder` items declare nothing, and
+  `gradeOrdering` compares the two with exact `List.equals`. So 1-based option
+  positions are the only interpretation both sides can share, but nothing stops
+  an import or an AI-generated question from storing 0-based values, which makes
+  every answer wrong with no error anywhere. Needed: `minimum: 1` on
+  `correctOrder` items and a check that its values are a permutation of the
+  question's option positions.
 
 ---
 

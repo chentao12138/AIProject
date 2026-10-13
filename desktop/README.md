@@ -79,6 +79,7 @@ renderer 经 `window.aistudyConfig.getApiBaseUrl()`（只读 IPC 通道）读取
 
 ```powershell
 npm run api:check   # openapi.json ↔ api.d.ts ↔ manifest.json 必须一致
+npm run api:live    # 再加一条：已提交快照 == 正在跑的后端（需后端在跑）
 ```
 
 `npm run build` 已包含该检查。生成物只能由
@@ -86,6 +87,17 @@ npm run api:check   # openapi.json ↔ api.d.ts ↔ manifest.json 必须一致
 **不得手改** `api.d.ts`；renderer 领域类型统一由
 `src/renderer/src/lib/types.ts` 从 client 反推（页面禁止 `as unknown as`
 与平行 DTO，由 `renderer-conventions.test.ts` 扫描强制）。
+
+`api:check` 只能证明快照与自己的生成物一致，证明不了快照没落后。
+2026-10-14 就吃过这个亏：旧快照的 `CreateExamRequest` 写着 `durationMinutes`，
+服务端实际绑的是 `timeLimitMinutes`，`openapi.json`/`api.d.ts`/`manifest.json`
+三者完全自洽、`api:check` 全绿、`tsc` 全绿，于是每张考试都以"没设时长"落库，
+依赖 `deadlineAt` 的倒计时也就无从倒计时。`api:live` 把已提交文档与运行中
+服务器的 `/v3/api-docs` 做**规范化内容比对**（键排序后取哈希），所以零路径变化
+的纯字段改名也会失败；比对前还会拒绝非 AIStudy 文档（缺 `/api/v1/spaces` 或
+`/api/v1/auth/login` 就报错退出），避免又一次把别的项目的契约抄进来。
+后端在跑时（比如 `OPENAPI_URL=http://localhost:8081/v3/api-docs npm run api:live`）
+这条必须绿，再动任何接口相关代码。
 
 ## 正式登录与会话（ADR-026 / ADR-037）
 
