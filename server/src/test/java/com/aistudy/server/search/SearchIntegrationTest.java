@@ -34,6 +34,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * BUSINESS-022 — Search vertical slice (SQL ranking, pagination, types,
  * LIKE escaping, Unicode).
+ *
+ * <p>Also defends the feature-freeze fixes:
+ * <ul>
+ *   <li>F-01 every {@code types} subset must render a valid UNION ALL, which
+ *       {@code types=NOTE} alone and {@code types=SOURCE,NOTE} did not;</li>
+ *   <li>F-02 only published / current-revision content may be searchable, so
+ *       DRAFT and unreviewed rows cannot leak into the AI tutor context;</li>
+ *   <li>F-03 the V054 ngram indexes drive relevance;</li>
+ *   <li>F-04 NOTE hits carry {@code noteId} and {@code totalElements} agrees
+ *       with the returned page.</li>
+ * </ul>
+ *
+ * <p>FIXTURE NOTE: the source helper used to insert {@code REGISTERED} rows and
+ * assert they were found. That assumption encoded the F-02 leak, so fixtures
+ * now insert {@code PUBLISHED} and the unpublished states are covered by
+ * explicit negative tests.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -261,6 +277,276 @@ class SearchIntegrationTest {
         assertTrue(body2.contains("第一范式"), body2);
     }
 
+    // ==================== F-01: UNION ALL assembly per types subset ====================
+
+    /**
+     * types=NOTE alone used to render a LEADING {@code UNION ALL} (the NOTE
+     * branch opened with one while {@code suffixOverrides} only strips a
+     * trailing separator), so the request died with MySQL 1064.
+     */
+    @Test
+    void noteAloneIsSearchableAndCarriesNoteId() throws Exception {
+        Long noteId = insertNote(spaceId, "易混淆知识点笔记", "关于范式与函数依赖的个人总结");
+        String body = search("范式", "NOTE", 0, 20);
+        assertTrue(body.contains("\"type\":\"NOTE\""), body);
+        assertTrue(body.contains("\"noteId\":" + noteId), body);
+        assertTrue(body.contains("易混淆知识点笔记"), body);
+    }
+
+    /**
+     * SOURCE,NOTE used to render a DOUBLED separator (SOURCE closed with one
+     * and NOTE opened with one).
+     */
+    @Test
+    void sourceAndNoteTogetherIsWellFormed() throws Exception {
+        insertSource(spaceId, "范式理论教材");
+        insertNote(spaceId, "范式笔记", "规范化第一范式");
+        String body = search("范式", "SOURCE,NOTE", 0, 20);
+        assertTrue(body.contains("\"type\":\"SOURCE\""), body);
+        assertTrue(body.contains("\"type\":\"NOTE\""), body);
+    }
+
+    /**
+     * WRONG_QUESTION was the branch that omitted the trailing separator, so it
+     * only ever worked when it was not last.
+     */
+    @Test
+    void wrongQuestionAndNoteTogetherIsWellFormed() throws Exception {
+        Long questionId = insertQuestion(spaceId, "范式判断题？", "{\"correctOptionKey\":\"A\"}");
+        insertWrongQuestion(spaceId, questionId);
+        insertNote(spaceId, "范式错题笔记", "第三范式复习笔记");
+        String body = search("范式", "WRONG_QUESTION,NOTE", 0, 20);
+        assertTrue(body.contains("\"type\":\"WRONG_QUESTION\""), body);
+        assertTrue(body.contains("\"type\":\"NOTE\""), body);
+    }
+
+    /**
+     * No filter at all must keep all six branches in one valid UNION.
+     */
+    @Test
+    void noTypeFilterCoversEveryBranch() throws Exception {
+        String term = "统一检索标记";
+        Long sourceId = insertSource(spaceId, term + "教材");
+        Long assetId = insertAsset(spaceId, sourceId, "all.txt");
+        Long pageId = insertPage(spaceId, sourceId, assetId, 1, term + "全文");
+        insertBlock(spaceId, sourceId, pageId, 0, term + "正文块");
+        insertKnowledgePoint(spaceId, term + "知识点", "说明");
+        Long questionId = insertQuestion(spaceId, term + "题目？", "{\"correctOptionKey\":\"A\"}");
+        insertWrongQuestion(spaceId, questionId);
+        insertNote(spaceId, term + "笔记", "内容");
+
+        String body = search(term, null, 0, 20);
+        for (String type : List.of("SOURCE", "CONTENT_BLOCK", "KNOWLEDGE_POINT",
+                "QUESTION", "WRONG_QUESTION", "NOTE")) {
+            assertTrue(body.contains("\"type\":\"" + type + "\""), type + " missing: " + body);
+        }
+    }
+
+    // ==================== F-02: publish / permission visibility ====================
+
+    /**
+     * REGISTERED material has not been reviewed yet, so it must not surface in
+     * ordinary search (and therefore not in AI context either).
+     */
+    @Test
+    void registeredSourceIsNotSearchable() throws Exception {
+        insertSource(spaceId, "未审核教材甲", "REGISTERED");
+        String body = search("未审核教材甲", "SOURCE", 0, 20);
+        assertFalse(body.contains("未审核教材甲"), body);
+        assertTrue(body.contains("\"totalElements\":0"), body);
+    }
+
+    /** NEEDS_REVIEW is the other half of the unpublished lifecycle. */
+    @Test
+    void needsReviewSourceIsNotSearchable() throws Exception {
+        insertSource(spaceId, "待复核教材乙", "NEEDS_REVIEW");
+        assertFalse(search("待复核教材乙", "SOURCE", 0, 20).contains("待复核教材乙"));
+    }
+
+    /** The same row becomes visible once it is PUBLISHED. */
+    @Test
+    void publishedSourceIsSearchable() throws Exception {
+        insertSource(spaceId, "已发布教材丙", "PUBLISHED");
+        assertTrue(search("已发布教材丙", "SOURCE", 0, 20).contains("已发布教材丙"));
+    }
+
+    /** A DRAFT knowledge point stays invisible while a published sibling shows. */
+    @Test
+    void draftKnowledgePointIsHiddenButPublishedSiblingIsVisible() throws Exception {
+        insertKnowledgePoint(spaceId, "草稿隔离级别条目", "不应出现", "不应出现", "DRAFT");
+        insertKnowledgePoint(spaceId, "已发布隔离级别条目", "应当出现", "应当出现", "PUBLISHED");
+        String body = search("隔离级别条目", "KNOWLEDGE_POINT", 0, 20);
+        assertTrue(body.contains("已发布隔离级别条目"), body);
+        assertFalse(body.contains("草稿隔离级别条目"), body);
+    }
+
+    /** A DRAFT question stays invisible while a published sibling shows. */
+    @Test
+    void draftQuestionIsHiddenButPublishedSiblingIsVisible() throws Exception {
+        insertQuestion(spaceId, "草稿题目内容？", "{\"correctOptionKey\":\"A\"}", "DRAFT");
+        insertQuestion(spaceId, "已发布题目内容？", "{\"correctOptionKey\":\"A\"}", "PUBLISHED");
+        String body = search("题目内容", "QUESTION", 0, 20);
+        assertTrue(body.contains("已发布题目内容"), body);
+        assertFalse(body.contains("草稿题目内容"), body);
+    }
+
+    /**
+     * WRONG_QUESTION reads the Question through a join, so a withdrawn (DRAFT)
+     * stem must disappear from the wrong-answer list too.
+     */
+    @Test
+    void wrongQuestionOverDraftQuestionIsHidden() throws Exception {
+        Long draftId = insertQuestion(spaceId, "草稿错题题干？", "{\"correctOptionKey\":\"A\"}", "DRAFT");
+        insertWrongQuestion(spaceId, draftId);
+        assertFalse(search("草稿错题题干", "WRONG_QUESTION", 0, 20).contains("草稿错题题干"));
+
+        Long publishedId = insertQuestion(spaceId, "已发布错题题干？", "{\"correctOptionKey\":\"A\"}", "PUBLISHED");
+        insertWrongQuestion(spaceId, publishedId);
+        assertTrue(search("已发布错题题干", "WRONG_QUESTION", 0, 20).contains("已发布错题题干"));
+    }
+
+    /**
+     * Rows of a superseded extraction revision stay hidden once the Source
+     * points at a newer revision.
+     */
+    @Test
+    void contentBlockOfStaleRevisionIsHidden() throws Exception {
+        Long sourceId = insertSource(spaceId, "改版教材");
+        Long assetId = insertAsset(spaceId, sourceId, "rev.txt");
+        Long pageId = insertPage(spaceId, sourceId, assetId, 1, "当前版本全文", 77L);
+        insertBlock(spaceId, sourceId, pageId, 0, "规范化当前版本内容", 77L);
+        insertBlock(spaceId, sourceId, pageId, 1, "规范化陈旧版本内容", 78L);
+        setCurrentRevision(sourceId, 77L);
+
+        String body = search("规范化", "CONTENT_BLOCK", 0, 20);
+        assertTrue(body.contains("规范化当前版本内容"), body);
+        assertFalse(body.contains("规范化陈旧版本内容"), body);
+    }
+
+    /**
+     * Pre-V053 rows carry no revision id at all: with no current revision they
+     * MUST stay visible, which is why the revision predicate keeps an explicit
+     * IS NULL branch.
+     */
+    @Test
+    void contentBlockWithoutCurrentRevisionStaysVisible() throws Exception {
+        Long sourceId = insertSource(spaceId, "历史教材");
+        Long assetId = insertAsset(spaceId, sourceId, "legacy.txt");
+        Long pageId = insertPage(spaceId, sourceId, assetId, 1, "历史全文", null);
+        insertBlock(spaceId, sourceId, pageId, 0, "兼容性规范化内容", null);
+        setCurrentRevision(sourceId, null);
+        assertTrue(search("兼容性规范化", "CONTENT_BLOCK", 0, 20).contains("兼容性规范化内容"));
+    }
+
+    /**
+     * A note whose source is unpublished must disappear even though the block
+     * itself has no status column of its own.
+     */
+    @Test
+    void contentBlockOfUnpublishedSourceIsHidden() throws Exception {
+        Long sourceId = insertSource(spaceId, "未发布教材", "NEEDS_REVIEW");
+        Long assetId = insertAsset(spaceId, sourceId, "draft.txt");
+        Long pageId = insertPage(spaceId, sourceId, assetId, 1, "未发布正文全文");
+        insertBlock(spaceId, sourceId, pageId, 0, "未发布规范化正文");
+        assertFalse(search("未发布规范化", "CONTENT_BLOCK", 0, 20).contains("未发布规范化正文"));
+    }
+
+    /** Archived notes are out of scope for the caller's own search. */
+    @Test
+    void archivedNoteIsHidden() throws Exception {
+        insertNote(spaceId, "归档范式笔记", "内容", true);
+        assertFalse(search("归档范式", "NOTE", 0, 20).contains("归档范式笔记"));
+    }
+
+    // ==================== F-03: FULLTEXT relevance ====================
+
+    /**
+     * The V054 ngram indexes now decide relevance: a row whose title does not
+     * contain the query as a contiguous substring is still found, because the
+     * ngram tokens overlap. Before this change LIKE alone could never return it.
+     */
+    @Test
+    void chineseFulltextFindsRowsLikeCannotMatch() throws Exception {
+        insertSource(spaceId, "事务与隔离等级");
+        String body = search("事务隔离", "SOURCE", 0, 20);
+        assertTrue(body.contains("事务与隔离等级"),
+                "MATCH ... AGAINST should surface the ngram-token overlap: " + body);
+    }
+
+    /**
+     * Relevance ranking stays INSIDE the deterministic tiers: the richer
+     * document must not be pushed above an exact or prefix match, but it must
+     * outrank a same-tier document that mentions the term once.
+     */
+    @Test
+    void chineseFulltextRanksRelevanceWithinTheSameTier() throws Exception {
+        insertKnowledgePoint(spaceId, "深入规范化理论", "无关说明",
+                "规范化规范化规范化规范化规范化", "PUBLISHED");
+        insertKnowledgePoint(spaceId, "再谈规范化应用", "无关说明", "无关正文", "PUBLISHED");
+        String body = search("规范化", "KNOWLEDGE_POINT", 0, 20);
+        int rich = body.indexOf("深入规范化理论");
+        int thin = body.indexOf("再谈规范化应用");
+        assertTrue(rich >= 0 && thin >= 0, body);
+        assertTrue(rich < thin, "the term-denser document must rank first: " + body);
+    }
+
+    /**
+     * A term shorter than ngram_token_size has no index entry, so the LIKE
+     * fallback must still find it.
+     */
+    @Test
+    void singleCharacterQueryFallsBackToLike() throws Exception {
+        insertSource(spaceId, "数据库系统概论");
+        String body = search("据", "SOURCE", 0, 20);
+        assertTrue(body.contains("数据库系统概论"), body);
+    }
+
+    /**
+     * Punctuation-only / punctuation-bearing queries keep literal LIKE
+     * semantics: FULLTEXT ignores % and _ as delimiters, so it must never
+     * decide which rows are returned for such a query.
+     */
+    @Test
+    void punctuatedQueryKeepsLiteralLikeSemantics() throws Exception {
+        insertSource(spaceId, "50%折扣");
+        insertSource(spaceId, "50X折扣");
+        String body = search("%折扣", "SOURCE", 0, 20);
+        assertTrue(body.contains("50%折扣"), body);
+        assertFalse(body.contains("50X折扣"), "wildcard-like input must stay literal: " + body);
+    }
+
+    // ==================== F-04: noteId contract and count/page agreement ====
+
+    /**
+     * Only NOTE hits expose noteId; every other type must serialize it as null
+     * so a client cannot mistake another entity for a note.
+     */
+    @Test
+    void noteIdIsOnlyPresentOnNoteHits() throws Exception {
+        Long noteId = insertNote(spaceId, "契约笔记", "noteId 契约内容");
+        insertSource(spaceId, "契约教材");
+        String noteBody = search("契约", "NOTE", 0, 20);
+        assertTrue(noteBody.contains("\"noteId\":" + noteId), noteBody);
+
+        String sourceBody = search("契约", "SOURCE", 0, 20);
+        assertTrue(sourceBody.contains("\"type\":\"SOURCE\""), sourceBody);
+        assertTrue(sourceBody.contains("\"noteId\":null"), sourceBody);
+    }
+
+    /**
+     * totalElements must agree with the returned page: the count used to score
+     * a contains-only knowledge-point title against the PREFIX pattern, so it
+     * reported 0 for a row the page returned.
+     */
+    @Test
+    void totalElementsMatchesPageForContainsOnlyTitle() throws Exception {
+        insertKnowledgePoint(spaceId, "深入事务隔离理论", "无关说明", "无关正文", "PUBLISHED");
+        String body = search("事务隔离理论", "KNOWLEDGE_POINT", 0, 20);
+        assertTrue(body.contains("深入事务隔离理论"), body);
+        assertTrue(body.contains("\"totalElements\":1"), body);
+        assertTrue(body.contains("\"totalPages\":1"), body);
+    }
+
     // ==================== helpers ====================
 
     private String search(String q, String types, int page, int size) throws Exception {
@@ -308,13 +594,37 @@ class SearchIntegrationTest {
     }
 
     private Long insertSource(Long spaceId, String title) {
+        return insertSource(spaceId, title, "PUBLISHED");
+    }
+
+    /**
+     * Inserts a Source in an explicit lifecycle status.
+     *
+     * @param spaceId owning space
+     * @param title   source title
+     * @param status  REGISTERED / PROCESSING / NEEDS_REVIEW / PUBLISHED; only
+     *                PUBLISHED may be found by search (F-02)
+     * @return generated id
+     */
+    private Long insertSource(Long spaceId, String title, String status) {
         jdbcTemplate.update(
                 "INSERT INTO source (space_id, title, source_type, status, created_by_user_id, created_at, updated_at) "
-                        + "VALUES (?, ?, 'DESKTOP_UPLOAD', 'REGISTERED', ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
-                spaceId, title, OWNER);
+                        + "VALUES (?, ?, 'DESKTOP_UPLOAD', ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
+                spaceId, title, status, OWNER);
         return jdbcTemplate.queryForObject(
                 "SELECT id FROM source WHERE space_id=? AND title=? ORDER BY id DESC LIMIT 1",
                 Long.class, spaceId, title);
+    }
+
+    /**
+     * Points a Source at its current extraction revision (V053 ownership).
+     *
+     * @param sourceId   source to update
+     * @param revisionId revision id, or NULL for pre-V053 compatibility
+     */
+    private void setCurrentRevision(Long sourceId, Long revisionId) {
+        jdbcTemplate.update("UPDATE source SET current_extraction_revision_id = ? WHERE id = ?",
+                revisionId, sourceId);
     }
 
     private Long insertAsset(Long spaceId, Long sourceId, String name) {
@@ -328,34 +638,133 @@ class SearchIntegrationTest {
     }
 
     private Long insertPage(Long spaceId, Long sourceId, Long assetId, int pageNo, String text) {
+        return insertPage(spaceId, sourceId, assetId, pageNo, text, null);
+    }
+
+    /**
+     * @param spaceId    owning space
+     * @param sourceId   owning source
+     * @param assetId    provenance asset
+     * @param pageNo     page number
+     * @param text       extracted text
+     * @param revisionId extraction revision the page belongs to, or NULL for
+     *                   pre-V053 rows
+     * @return generated page id
+     */
+    private Long insertPage(Long spaceId, Long sourceId, Long assetId, int pageNo,
+                            String text, Long revisionId) {
         jdbcTemplate.update(
-                "INSERT INTO source_page (space_id, source_id, source_asset_id, source_page_number, page_order, page_type, order_status, extracted_text, created_at, updated_at) "
-                        + "VALUES (?, ?, ?, ?, ?, 'BODY', 'AUTO', ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
-                spaceId, sourceId, assetId, pageNo, pageNo, text);
+                "INSERT INTO source_page (space_id, source_id, source_asset_id, source_page_number, page_order, "
+                        + "page_type, order_status, extracted_text, extraction_revision_id, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, ?, ?, 'BODY', 'AUTO', ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
+                spaceId, sourceId, assetId, pageNo, pageNo, text, revisionId);
         return jdbcTemplate.queryForObject(
                 "SELECT id FROM source_page WHERE source_id=? AND source_page_number=? ORDER BY id DESC LIMIT 1",
                 Long.class, sourceId, pageNo);
     }
 
     private void insertBlock(Long spaceId, Long sourceId, Long pageId, int order, String text) {
+        insertBlock(spaceId, sourceId, pageId, order, text, null);
+    }
+
+    /**
+     * @param spaceId    owning space
+     * @param sourceId   owning source
+     * @param pageId     owning page
+     * @param order      block sort order
+     * @param text       normalized block text
+     * @param revisionId extraction revision the block belongs to, or NULL for
+     *                   pre-V053 rows
+     */
+    private void insertBlock(Long spaceId, Long sourceId, Long pageId, int order,
+                             String text, Long revisionId) {
         jdbcTemplate.update(
-                "INSERT INTO content_block (space_id, source_id, source_page_id, block_type, sort_order, normalized_text, created_at, updated_at) "
-                        + "VALUES (?, ?, ?, 'PARAGRAPH', ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
-                spaceId, sourceId, pageId, order, text);
+                "INSERT INTO content_block (space_id, source_id, source_page_id, block_type, sort_order, "
+                        + "normalized_text, extraction_revision_id, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, 'PARAGRAPH', ?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
+                spaceId, sourceId, pageId, order, text, revisionId);
     }
 
     private void insertKnowledgePoint(Long spaceId, String title, String summary) {
-        jdbcTemplate.update(
-                "INSERT INTO knowledge_point (space_id, title, summary, content, origin_type, status, created_at, updated_at) "
-                        + "VALUES (?, ?, ?, ?, 'USER_CURATED', 'PUBLISHED', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
-                spaceId, title, summary, summary);
+        insertKnowledgePoint(spaceId, title, summary, summary, "PUBLISHED");
     }
 
-    private void insertQuestion(Long spaceId, String stem, String answerJson) {
+    /**
+     * @param spaceId owning space
+     * @param title   knowledge point title
+     * @param summary summary text
+     * @param content body text
+     * @param status  DRAFT or PUBLISHED; only PUBLISHED is searchable (F-02)
+     */
+    private void insertKnowledgePoint(Long spaceId, String title, String summary,
+                                      String content, String status) {
+        jdbcTemplate.update(
+                "INSERT INTO knowledge_point (space_id, title, summary, content, origin_type, status, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, ?, 'USER_CURATED', ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
+                spaceId, title, summary, content, status);
+    }
+
+    private Long insertQuestion(Long spaceId, String stem, String answerJson) {
+        return insertQuestion(spaceId, stem, answerJson, "PUBLISHED");
+    }
+
+    /**
+     * @param spaceId     owning space
+     * @param stem        question stem
+     * @param answerJson  answer payload, never projected by search
+     * @param status      DRAFT or PUBLISHED; only PUBLISHED is searchable (F-02)
+     * @return generated question id
+     */
+    private Long insertQuestion(Long spaceId, String stem, String answerJson, String status) {
         jdbcTemplate.update(
                 "INSERT INTO question (space_id, question_type, stem, answer_data_json, origin_type, status, created_at, updated_at) "
-                        + "VALUES (?, 'SINGLE_CHOICE', ?, ?, 'USER_CURATED', 'PUBLISHED', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
-                spaceId, stem, answerJson);
+                        + "VALUES (?, 'SINGLE_CHOICE', ?, ?, 'USER_CURATED', ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
+                spaceId, stem, answerJson, status);
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM question WHERE space_id=? AND stem=? ORDER BY id DESC LIMIT 1",
+                Long.class, spaceId, stem);
+    }
+
+    /**
+     * @param spaceId owning space
+     * @param title   note title
+     * @param content note body
+     * @return generated note id
+     */
+    private Long insertNote(Long spaceId, String title, String content) {
+        return insertNote(spaceId, title, content, false);
+    }
+
+    /**
+     * @param spaceId  owning space
+     * @param title    note title
+     * @param content  note body
+     * @param archived when true the note is soft-archived and must not be found
+     * @return generated note id
+     */
+    private Long insertNote(Long spaceId, String title, String content, boolean archived) {
+        jdbcTemplate.update(
+                "INSERT INTO note (space_id, user_subject_id, title, content, content_format, "
+                        + "created_at, updated_at, archived_at) "
+                        + "VALUES (?, ?, ?, ?, 'PLAIN_TEXT', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6), ?)",
+                spaceId, OWNER, title, content,
+                archived ? java.sql.Timestamp.from(java.time.Instant.now()) : null);
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM note WHERE space_id=? AND title=? ORDER BY id DESC LIMIT 1",
+                Long.class, spaceId, title);
+    }
+
+    /**
+     * @param spaceId    owning space
+     * @param questionId question the caller answered wrongly
+     */
+    private void insertWrongQuestion(Long spaceId, Long questionId) {
+        jdbcTemplate.update(
+                "INSERT INTO wrong_question (user_subject, space_id, question_id, first_wrong_at, last_wrong_at, "
+                        + "wrong_count, status, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6), 1, 'ACTIVE', "
+                        + "CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
+                OWNER, spaceId, questionId);
     }
 
     private void clean() {

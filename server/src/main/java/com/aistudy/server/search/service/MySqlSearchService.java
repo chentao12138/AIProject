@@ -5,6 +5,7 @@ import com.aistudy.server.search.dto.SearchResult;
 import com.aistudy.server.search.mapper.SearchMapper;
 import com.aistudy.server.search.model.SearchProjection;
 import com.aistudy.server.search.type.SearchEntityType;
+import com.aistudy.server.search.util.SearchFulltextQuery;
 import com.aistudy.server.search.util.SearchLikeEscape;
 import com.aistudy.server.space.service.LearningSpaceService;
 import org.springframework.http.HttpStatus;
@@ -15,6 +16,19 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * MySQL-backed {@link SearchService}: ranks typed branches with
+ * {@link SearchMapper}, on top of the ngram FULLTEXT indexes of V054 with a
+ * deterministic LIKE ladder kept as fallback.
+ *
+ * <p>Visibility (published / current-revision / per-user) is NOT decided here
+ * but in the mapper statements, so the AI tutor path that reuses this service
+ * inherits exactly the same guarantees.
+ *
+ * <p>FAILURE MODE: returns {@code null} when the space is absent or not owned
+ * by {@code ownerSubject} (the controller maps that to 404); throws
+ * {@link ResponseStatusException} with 400 for a blank or over-long query.
+ */
 @Service
 public class MySqlSearchService implements SearchService {
 
@@ -33,6 +47,27 @@ public class MySqlSearchService implements SearchService {
         this.learningSpaceService = learningSpaceService;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Paging is over-fetch-by-one: {@code safeSize + 1} rows are requested
+     * so a next page can be detected without a second query, and the extra row
+     * is dropped before mapping. {@code size} is clamped to 1..100 and
+     * {@code page} to a minimum of 0.
+     *
+     * @param ownerSubject subject that must own {@code spaceId}
+     * @param userSubject  subject scoping NOTE and WRONG_QUESTION branches
+     * @param spaceId      LearningSpace id; {@code null} space yields {@code null}
+     * @param query        raw keyword, trimmed to 1..200 characters
+     * @param types        comma-separated {@link SearchEntityType} names, or
+     *                     {@code null} for every branch
+     * @param page         zero-based page index
+     * @param size         requested page size, clamped to 1..100
+     * @return an immutable page; {@code null} when the space is not visible to
+     *         {@code ownerSubject}
+     * @throws ResponseStatusException 400 when the query is blank or longer
+     *                                 than 200 characters
+     */
     @Override
     public SearchPageResponse search(String ownerSubject,
                                      String userSubject,
@@ -63,9 +98,21 @@ public class MySqlSearchService implements SearchService {
         String prefixPattern = escapedQuery + "%";
         String containsPattern = "%" + escapedQuery + "%";
 
+        // V054 ngram indexes only carry token runs of at least ngram_token_size
+        // word characters, so single-character or punctuation-only queries must
+        // stay on the LIKE path or they would return nothing at all.
+        boolean useFulltext = SearchFulltextQuery.isFulltextUsable(normalized);
+        // A punctuation-bearing query may be RANKED by FULLTEXT but must not be
+        // ROW-SELECTED by it: ngram drops % and _ as delimiters, which would
+        // match "100X完成" for the literal query "100%" and defeat
+        // SearchLikeEscape's wildcard guarantees.
+        boolean fulltextSelects = SearchFulltextQuery.selectsRowsByFulltext(normalized);
+        String matchQuery = SearchFulltextQuery.normalize(normalized);
+
         List<SearchProjection> projections = searchMapper.searchProjection(
                 spaceId, ownerSubject, userSubject, normalized,
-                prefixPattern, containsPattern, safeSize + 1, offset,
+                prefixPattern, containsPattern, matchQuery, useFulltext, fulltextSelects,
+                safeSize + 1, offset,
                 normalizedTypes);
 
         boolean hasNext = projections.size() > safeSize;
@@ -83,7 +130,8 @@ public class MySqlSearchService implements SearchService {
 
         long totalElements = searchMapper.searchCount(
                 spaceId, ownerSubject, userSubject, normalized,
-                prefixPattern, containsPattern, normalizedTypes);
+                prefixPattern, containsPattern, matchQuery, useFulltext, fulltextSelects,
+                normalizedTypes);
 
         int totalPages = (int) Math.max(1, Math.ceil((double) totalElements / safeSize));
 
@@ -96,6 +144,16 @@ public class MySqlSearchService implements SearchService {
         );
     }
 
+    /**
+     * Validates and normalizes the comma-separated {@code types} filter.
+     *
+     * @param types raw filter value; {@code null} or blank means all branches
+     * @return immutable list of canonical {@link SearchEntityType} names,
+     *         empty when no filter was supplied
+     * @throws IllegalArgumentException for an unknown token; the controller's
+     *                                  bean validation turns that into a 400
+     *                                  before it reaches this method
+     */
     private List<String> normalizedTypes(String types) {
         if (types == null || types.isBlank()) {
             return Collections.emptyList();

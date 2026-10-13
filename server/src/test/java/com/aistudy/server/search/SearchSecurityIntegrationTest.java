@@ -27,6 +27,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * BUSINESS-022 security: LearningSpace isolation, WrongQuestion user
  * isolation, and Question correctness leakage.
+ *
+ * <p>F-02 adds two more guarantees checked here: NOTE rows are scoped to the
+ * caller's own user_subject, and unpublished shared content is invisible even
+ * to the space owner. The Source fixture therefore inserts PUBLISHED rows;
+ * REGISTERED rows are covered as negative cases.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -124,6 +129,28 @@ class SearchSecurityIntegrationTest {
         assertFalse(body.contains("explanation"), body);
     }
 
+    /**
+     * F-02: NOTE is private per user_subject_id even inside one space, and
+     * unpublished shared content must not be reachable by the owner either.
+     */
+    @Test
+    void noteScopeIsPerUserAndUnpublishedSourceIsInvisible() throws Exception {
+        jdbcTemplate.update(
+                "INSERT INTO note (space_id, user_subject_id, title, content, content_format, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, ?, 'PLAIN_TEXT', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
+                spaceA, USER_B, "乙的私密笔记", "保密范围说明");
+        insertSource(spaceA, "待审核教材");
+        jdbcTemplate.update("UPDATE source SET status = 'NEEDS_REVIEW' WHERE title = ?", "待审核教材");
+
+        String body = search(spaceA, tokenA, "保密范围");
+        assertFalse(body.contains("乙的私密笔记"),
+                "another subject's note must never appear: " + body);
+
+        String unreviewed = search(spaceA, tokenA, "待审核教材");
+        assertFalse(unreviewed.contains("待审核教材"),
+                "the owner still may not search unreviewed material: " + unreviewed);
+    }
+
     private String search(Long spaceId, String token, String q) throws Exception {
         return search(spaceId, token, q, null);
     }
@@ -149,11 +176,29 @@ class SearchSecurityIntegrationTest {
                 Long.class, owner, name);
     }
 
+    /**
+     * Inserts a PUBLISHED source: the search visibility rule requires it, so a
+     * REGISTERED fixture would silently test nothing (F-02).
+     *
+     * @param spaceId owning space
+     * @param title   source title
+     * @return generated id
+     */
     private Long insertSource(Long spaceId, String title) {
+        return insertSource(spaceId, title, "PUBLISHED");
+    }
+
+    /**
+     * @param spaceId owning space
+     * @param title   source title
+     * @param status  lifecycle status; only PUBLISHED may be found by search
+     * @return generated id
+     */
+    private Long insertSource(Long spaceId, String title, String status) {
         jdbcTemplate.update(
                 "INSERT INTO source (space_id, title, source_type, status, created_by_user_id, created_at, updated_at) "
-                        + "VALUES (?, ?, 'DESKTOP_UPLOAD', 'REGISTERED', 'x', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
-                spaceId, title);
+                        + "VALUES (?, ?, 'DESKTOP_UPLOAD', ?, 'x', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
+                spaceId, title, status);
         return jdbcTemplate.queryForObject(
                 "SELECT id FROM source WHERE space_id=? AND title=? ORDER BY id DESC LIMIT 1",
                 Long.class, spaceId, title);
