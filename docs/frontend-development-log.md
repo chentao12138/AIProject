@@ -627,3 +627,61 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
   `api:check`（openapi.json ↔ api.d.ts ↔ manifest.json）并纳入 `npm run build`；
   记录 ADR-051 / ADR-052。
 - 门禁：lint OK / typecheck OK / test:run 449 passed (48 files) / build OK。
+
+## FE-AUDIT-2026-10-13（审计驱动的收口）
+
+- 输入是 `desktop/docs/AISTUDY-FRONTEND-REMAINING-REQUIREMENTS-AUDIT-2026-10-13.md`
+  （G01–G09 / W01–W18 / A1–A11 / C01–C15 / R01–R08 / B12）。纪律：本轮事项只分
+  A（本轮闭环）或 B（永久排除），单测绿不等于 E2E 通过，不允许假闭环。
+- G03/W04/W05/W06（考试答题）：逐题保存状态改为以服务端 `answeredAt` 为准
+  （`features/exams/exam-attempt-state.ts`），交卷/启动失败有可见错误，倒计时取
+  服务端 `deadlineAt` 而不是本地推算；侧栏题号用 `aria-label` 播报已答/保存中/未答
+  （5d5bccd），未评分不再显示"答错"（c308ffd）。
+- W01/W02/W03（练习）：已提交状态以服务端为真源镜像进缓存，逐题 pending/error 独立，
+  409 冲突后重读；`SHORT_ANSWER` 的 null 判定不再被当成 0 分。
+- G02/G04/G09（题库）：填空题文案按服务端判分规则（整串 trim 相等）改写（7580d06），
+  选项/答案校验前置，practice 数量范围放开到契约允许的 1–100（e12a047）。
+- W07/W08/W12/W13/W16：跨模块按真实 ID 直达练习（b65bd6a）、搜索 key 含
+  types/page/size、URL 与请求同源。
+- W10/W11（AI）：Provider 未就绪时不渲染会话列表与输入框；历史消息按页拉取，
+  按钮写"加载更多历史消息"而不是暗示时间序（契约未声明排序）。
+- 表单上限统一落进 `lib/format.ts` 常量并由契约测试逐个比对 `maxLength`/`maxItems`
+  （8facc06/b52a8f0）；上传限制、ingestion 错误码改为读服务器真实配置/枚举
+  （9be3570/a1d47d1），故意改坏即 fail。
+- 工具链：`api:generate` 增加 AIStudy 锚点校验，拒绝把别的项目的 OpenAPI 文档
+  抄进契约（f072c5f，起因是 `:8080` 上是 `identity-access-ms`）；`api:check` 的
+  sha256 归一化 CRLF + `.gitattributes` 固定生成物为 LF，消除 Windows 上永久假失败。
+- 门禁（当时）：65 files / 777 tests、lint 0、typecheck 0、`api:check` 同步、
+  `dist:win` 产出 111 MB 安装包（仅产出，未安装）。
+
+## FE-CONTRACT-WAVE-2026-10-14（后端起来之后）
+
+- 后端会话把 AIStudy 跑在 `:8081`（`:8080` 是别人的服务），据此重新生成契约：
+  路径 **67 → 195**。快照立刻揭出一个已上线缺陷：`CreateExamRequest` 服务端绑的是
+  `timeLimitMinutes`，前端按旧快照发 `durationMinutes`，于是每张考试都没有时长，
+  依赖 `deadlineAt` 的倒计时也就无从倒计时。改为 `timeLimitMinutes`，并把常量与
+  守卫一起改名（fa43298/a6fd7b2）。
+- 根治防回归：新增 `npm run api:live`（`check-api.mjs --live`），把已提交文档与运行中
+  服务器文档做**规范化内容比对**（键排序后哈希），零路径变化的纯字段改名也能测出；
+  比对前先拒绝非 AIStudy 文档。两次负向验证：字段改名 fixture 与新路径 fixture 都
+  让门禁 fail，真实服务器则 pass。
+- `packages/api-client`：补 Notes CRUD+archive、题目 update/archive/restore、练习答案
+  回读、考试 update/archive；并删掉 **28 处 `(client as any)`**——那些绕过契约类型的
+  调用正是 `durationMinutes` 不被 `tsc` 发现的原因，删除后包内 typecheck 0 error。
+- 题型闸门按新契约重新决策：`CreateQuestionRequest.correctOrder/matches` 与
+  `AnswerPayloadView.orderingAnswer/matchingAnswer` 已发布，且服务端确实判分
+  （`QuestionAnswerEvaluator:139/:152`）。排序位置是 **1-based**（payload items 带
+  `minimum: 1`，判分做整表 `equals`），配对是 `[{"left","right"}]` 的 JSON 串（做集合
+  比较）。ORDERING/MATCHING 因此可创建/可发布/可作答；仍缺的是读侧
+  （`QuestionAnswerView` 没有 `correctOrder`/`matchesJson`）→ 记为 C09b，只保留
+  回显缺失的提示，撤掉创建/作答的拒绝文案。
+- 服务端答案规则核对（`PracticeAnswerService:255-345`）：每种题型只允许携带自己那一个
+  字段，多余字段 400；practice 对 `orderingAnswer` 元素强制 `@Min(1)`，exam 侧既没有
+  `@Min` 又仍接受旧的 `selectedOptionKeys` 顺序——两条路径宽严不一致，已记入
+  `BACKEND-CONTRACT-REQUESTS.md`。
+- 文档：台账改为"以发布出来的契约为准"（不再以服务器源码为准），C06 只算半交付
+  （逐题回顾有了，历史成绩仍无处读）；冒烟步骤拆成"仍被契约阻塞"与"只缺运行"两张表；
+  ROUTE_MAP/README 补 Notes 路由与"如何把安装版指向真实后端"。
+- 本轮进行中：Notes 模块、题目编辑/归档、排序配对作答控件、练习刷新恢复、搜索类型
+  过滤与 NOTE 深链、来源/知识点跨模块入口由并行子 Agent 实施，主 Agent 负责路由/导航
+  接线（88c204f 已注册 Notes 两条路由并加导航与 A9.1 覆盖测试）与最终门禁、安装验收。
