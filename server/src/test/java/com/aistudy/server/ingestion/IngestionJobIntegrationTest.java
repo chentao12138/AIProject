@@ -1,6 +1,7 @@
 package com.aistudy.server.ingestion;
 
 import com.aistudy.server.auth.service.JwtAccessTokenService;
+import com.aistudy.server.testsupport.AsyncIngestionJobs;
 import com.aistudy.server.testsupport.OwnedSpaceReset;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -56,12 +57,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <h3>Coverage</h3>
  *
- * <p>Create for TXT asset → PENDING; create for valid ZIP → PENDING
- * (safety gate passed); create for traversal ZIP and corrupt ZIP →
- * FAILED with {@code ZIP_SAFETY_VIOLATION} + safe message (no stack
- * trace); DB row assertions; get/list owner + 404 matrix; retry
- * FAILED → PENDING (safety gate re-runs, retryCount++); retry on
- * non-FAILED → 409; missing assetId → 400; anonymous → 401.
+ * <p>Create for TXT asset → QUEUED then executed to its terminal status;
+ * create for valid ZIP → QUEUED (safety gate passed); traversal ZIP and
+ * corrupt ZIP → FAILED with {@code ZIP_SAFETY_VIOLATION} + safe message (no
+ * stack trace); DB row assertions; get/list owner + 404 matrix; retry
+ * FAILED → QUEUED (safety gate re-runs, retryCount++); retry on a non-FAILED
+ * job → 409; missing assetId → 400; anonymous → 401.
+ *
+ * <h3>Ingestion is asynchronous</h3>
+ *
+ * <p>{@code IngestionJobService.submit()} hands the job to the worker pool
+ * from an {@code afterCommit()} hook, so the create response reports QUEUED
+ * and the pipeline finishes on another thread: every status expectation here
+ * is waited for through {@link AsyncIngestionJobs} (architecture.md §6.2).
  *
  * <h3>Database safety</h3>
  *
@@ -99,6 +107,20 @@ class IngestionJobIntegrationTest {
             JOB_BASE + "/{jobId}";
     private static final String SOURCE_JOBS =
             "/api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs";
+
+    /**
+     * Terminal status of an ingestion whose assets all extracted, and the
+     * stage it reports.
+     *
+     * <p>This class originally expected {@code SUCCEEDED}/{@code PUBLISHED}/
+     * {@code PENDING}, which belong to the {@code PENDING/RUNNING/SUCCEEDED}
+     * set architecture.md §6.2 records as retired. The only live vocabulary is
+     * {@code IngestionJobService.IngestionStatus}, whose success terminal is
+     * {@code NEEDS_REVIEW} at stage {@code REVIEW} and whose initial state is
+     * {@code QUEUED} (see the {@code IngestionJob} lifecycle javadoc).
+     */
+    private static final String INGESTED = "NEEDS_REVIEW";
+    private static final String INGESTED_STAGE = "REVIEW";
 
     private static Path storageRoot;
 
@@ -302,16 +324,20 @@ class IngestionJobIntegrationTest {
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "note.txt", "text/plain", "hello txt".getBytes(StandardCharsets.UTF_8));
 
-        mockMvc.perform(post(SOURCE_JOBS, spaceId, sourceId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"assetId\":" + assetId + "}")
+        // The create response only ever reports QUEUED — the worker is
+        // dispatched from afterCommit — so the lifecycle assertions below run
+        // against the job read once it has reached its terminal status.
+        long jobId = AsyncIngestionJobs.createAndAwaitJobId(mockMvc, token, spaceId, sourceId,
+                assetId, INGESTED);
+
+        mockMvc.perform(get(JOB_DETAIL, spaceId, jobId)
                         .header("Authorization", "Bearer " + token))
-                .andExpect(status().isCreated())
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.spaceId").value(spaceId))
                 .andExpect(jsonPath("$.sourceId").value(sourceId))
                 .andExpect(jsonPath("$.assetId").value(assetId))
-                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
-                .andExpect(jsonPath("$.stage").value("PUBLISHED"))
+                .andExpect(jsonPath("$.status").value(INGESTED))
+                .andExpect(jsonPath("$.stage").value(INGESTED_STAGE))
                 .andExpect(jsonPath("$.progressPercent").value(100))
                 .andExpect(jsonPath("$.retryCount").value(0))
                 .andExpect(jsonPath("$.startedAt").isNotEmpty())
@@ -320,21 +346,23 @@ class IngestionJobIntegrationTest {
                 .andExpect(jsonPath("$.errorMessage").doesNotExist());
     }
 
-    /** (2) valid ZIP asset → job PENDING (safety gate passed). */
+    /** (2) valid ZIP asset → job QUEUED (safety gate passed, worker pending). */
     @Test
-    void createForValidZipYieldsPendingJob() throws Exception {
+    void createForValidZipYieldsQueuedJob() throws Exception {
         Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
         Long sourceId = insertFixtureSource(spaceId, "教程包");
         String token = tokenFor("biz-e2e-user-1");
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "book.zip", "application/zip", validZip());
 
+        // QUEUED is the job's initial state and the only one the create
+        // response can carry, so it is asserted on that response directly.
         mockMvc.perform(post(SOURCE_JOBS, spaceId, sourceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"assetId\":" + assetId + "}")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.status").value("QUEUED"))
                 .andExpect(jsonPath("$.errorCode").doesNotExist());
     }
 
@@ -347,11 +375,12 @@ class IngestionJobIntegrationTest {
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "evil.zip", "application/zip", traversalZip());
 
-        mockMvc.perform(post(SOURCE_JOBS, spaceId, sourceId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"assetId\":" + assetId + "}")
+        long jobId = AsyncIngestionJobs.createAndAwaitJobId(mockMvc, token, spaceId, sourceId,
+                assetId, "FAILED");
+
+        mockMvc.perform(get(JOB_DETAIL, spaceId, jobId)
                         .header("Authorization", "Bearer " + token))
-                .andExpect(status().isCreated())
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("FAILED"))
                 .andExpect(jsonPath("$.errorCode").value("ZIP_SAFETY_VIOLATION"))
                 .andExpect(jsonPath("$.errorMessage").isNotEmpty());
@@ -366,17 +395,18 @@ class IngestionJobIntegrationTest {
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "broken.zip", "application/zip", corruptZip());
 
-        mockMvc.perform(post(SOURCE_JOBS, spaceId, sourceId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"assetId\":" + assetId + "}")
+        long jobId = AsyncIngestionJobs.createAndAwaitJobId(mockMvc, token, spaceId, sourceId,
+                assetId, "FAILED");
+
+        mockMvc.perform(get(JOB_DETAIL, spaceId, jobId)
                         .header("Authorization", "Bearer " + token))
-                .andExpect(status().isCreated())
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("FAILED"))
                 .andExpect(jsonPath("$.errorCode").value("ZIP_SAFETY_VIOLATION"))
                 .andExpect(jsonPath("$.errorMessage").isNotEmpty());
     }
 
-    /** (5) the job row really exists with all lifecycle fields (valid ZIP → PENDING). */
+    /** (5) the job row really exists with all lifecycle fields (valid ZIP → QUEUED). */
     @Test
     void jobRowPersistedWithLifecycleFields() throws Exception {
         Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
@@ -384,19 +414,30 @@ class IngestionJobIntegrationTest {
         String token = tokenFor("biz-e2e-user-1");
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "book.zip", "application/zip", validZip());
-        Long jobId = createJob(token, spaceId, sourceId, assetId);
+
+        // The unstarted-job fields are asserted on the CREATE response, which
+        // is the snapshot IngestionJobService.create() wrote: the worker is
+        // dispatched from afterCommit, so reading the same fields back from the
+        // row would race a claim that already moved them on.
+        MvcResult created = mockMvc.perform(post(SOURCE_JOBS, spaceId, sourceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"assetId\":" + assetId + "}")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andExpect(jsonPath("$.stage").value("IMPORT"))
+                .andExpect(jsonPath("$.progressPercent").value(0))
+                .andExpect(jsonPath("$.retryCount").value(0))
+                .andExpect(jsonPath("$.startedAt").doesNotExist())
+                .andExpect(jsonPath("$.finishedAt").doesNotExist())
+                .andReturn();
+        Long jobId = extractJsonLong(created.getResponse().getContentAsString(), "id");
 
         Map<String, Object> row = jobRowById(jobId);
         assertEquals(spaceId, ((Number) row.get("space_id")).longValue());
         assertEquals(sourceId, ((Number) row.get("source_id")).longValue());
         assertEquals(assetId, ((Number) row.get("asset_id")).longValue());
-        assertEquals("PENDING", row.get("status"));
-        assertEquals("QUEUED", row.get("stage"));
-        assertEquals(0, ((Number) row.get("progress_percent")).intValue());
-        assertEquals(0, ((Number) row.get("retry_count")).intValue());
         assertEquals("biz-e2e-user-1", row.get("created_by_user_id"));
-        assertNull(row.get("started_at"), "PENDING job must not have started_at");
-        assertNull(row.get("finished_at"), "PENDING job must not have finished_at");
         assertNotNull(row.get("created_at"));
         assertNotNull(row.get("updated_at"));
     }
@@ -410,12 +451,8 @@ class IngestionJobIntegrationTest {
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "evil.zip", "application/zip", traversalZip());
 
-        String body = mockMvc.perform(post(SOURCE_JOBS, spaceId, sourceId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"assetId\":" + assetId + "}")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+        String body = AsyncIngestionJobs.createAndAwait(mockMvc, token, spaceId, sourceId,
+                assetId, "FAILED");
 
         assertTrue(body.contains("traversal"), "message should describe the violation: " + body);
         assertTrue(!body.contains(" at com.aistudy"),
@@ -527,12 +564,13 @@ class IngestionJobIntegrationTest {
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "note.txt", "text/plain", "x".getBytes(StandardCharsets.UTF_8));
         Long jobId = createJob(token, spaceId, sourceId, assetId);
+        AsyncIngestionJobs.awaitStatus(mockMvc, token, spaceId, jobId, INGESTED);
 
         mockMvc.perform(get(JOB_DETAIL, spaceId, jobId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(jobId))
-                .andExpect(jsonPath("$.status").value("SUCCEEDED"));
+                .andExpect(jsonPath("$.status").value(INGESTED));
     }
 
     /** (14) other user cannot read my job → 404. */
@@ -614,7 +652,7 @@ class IngestionJobIntegrationTest {
 
     // ==================== retry ====================
 
-    /** (19) FAILED job retried → PENDING (retryCount++), safety gate re-runs and fails again. */
+    /** (19) FAILED job retried → QUEUED (retryCount++), safety gate re-runs and fails again. */
     @Test
     void retryFailedJobResetsAndRerunsSafetyGate() throws Exception {
         Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
@@ -623,21 +661,23 @@ class IngestionJobIntegrationTest {
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "evil.zip", "application/zip", traversalZip());
 
-        String createBody = mockMvc.perform(post(SOURCE_JOBS, spaceId, sourceId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"assetId\":" + assetId + "}")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("FAILED"))
-                .andReturn().getResponse().getContentAsString();
-        Long jobId = extractJsonLong(createBody, "id");
+        long jobId = AsyncIngestionJobs.createAndAwaitJobId(mockMvc, token, spaceId, sourceId,
+                assetId, "FAILED");
 
+        // The retry response reports the re-queued job; the re-run reaches its
+        // own terminal state afterwards, exactly like the first attempt.
         mockMvc.perform(post(JOB_BASE + "/{jobId}/retry", spaceId, jobId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.retryCount").value(1))
-                .andExpect(jsonPath("$.errorCode").value("ZIP_SAFETY_VIOLATION"))
-                .andExpect(jsonPath("$.status").value("FAILED"));
+                .andExpect(jsonPath("$.status").value("QUEUED"));
+
+        AsyncIngestionJobs.awaitStatus(mockMvc, token, spaceId, jobId, "FAILED");
+        mockMvc.perform(get(JOB_DETAIL, spaceId, jobId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.errorCode").value("ZIP_SAFETY_VIOLATION"));
 
         Map<String, Object> row = jobRowById(jobId);
         assertEquals(1, ((Number) row.get("retry_count")).intValue());
@@ -645,7 +685,7 @@ class IngestionJobIntegrationTest {
         assertNotNull(row.get("finished_at"), "failed retry must set finished_at again");
     }
 
-    /** (20) retry of a PENDING (non-FAILED) job → 409. */
+    /** (20) retry of an ingested (non-FAILED) job → 409. */
     @Test
     void retryNonFailedJobReturns409() throws Exception {
         Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
@@ -654,6 +694,7 @@ class IngestionJobIntegrationTest {
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "note.txt", "text/plain", "x".getBytes(StandardCharsets.UTF_8));
         Long jobId = createJob(token, spaceId, sourceId, assetId);
+        AsyncIngestionJobs.awaitStatus(mockMvc, token, spaceId, jobId, INGESTED);
 
         mockMvc.perform(post(JOB_BASE + "/{jobId}/retry", spaceId, jobId)
                         .header("Authorization", "Bearer " + token))

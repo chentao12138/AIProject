@@ -1,6 +1,7 @@
 package com.aistudy.server.ingestion;
 
 import com.aistudy.server.auth.service.JwtAccessTokenService;
+import com.aistudy.server.testsupport.AsyncIngestionJobs;
 import com.aistudy.server.testsupport.OwnedSpaceReset;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -81,6 +82,14 @@ class PdfImageIngestionIntegrationTest {
     private static final String BLOCKS =
             "/api/v1/spaces/{spaceId}/sources/{sourceId}/content-blocks";
 
+    /**
+     * Terminal status of an ingestion whose assets all extracted, per the one
+     * live status vocabulary ({@code IngestionJobService.IngestionStatus});
+     * the {@code SUCCEEDED} this class used to expect belongs to the retired
+     * PENDING/RUNNING/SUCCEEDED set (architecture.md §6.2).
+     */
+    private static final String INGESTED = "NEEDS_REVIEW";
+
     private static Path storageRoot;
 
     @Autowired
@@ -150,7 +159,7 @@ class PdfImageIngestionIntegrationTest {
         byte[] pdf = twoPagePdf("PageOneAlpha", "PageTwoBeta");
         Long assetId = upload(fx.token, fx.spaceId, fx.sourceId, "book.pdf", "application/pdf", pdf);
 
-        String body = createJob(fx.token, fx.spaceId, fx.sourceId, assetId, "SUCCEEDED");
+        String body = createJob(fx.token, fx.spaceId, fx.sourceId, assetId, INGESTED);
 
         List<Map<String, Object>> pages = rows(
                 "SELECT source_page_number, page_order, page_type, extracted_text "
@@ -183,7 +192,7 @@ class PdfImageIngestionIntegrationTest {
         Fixture fx = newFixture("pdf-retry");
         Long assetId = upload(fx.token, fx.spaceId, fx.sourceId,
                 "book.pdf", "application/pdf", twoPagePdf("Alpha", "Beta"));
-        createJob(fx.token, fx.spaceId, fx.sourceId, assetId, "SUCCEEDED");
+        createJob(fx.token, fx.spaceId, fx.sourceId, assetId, INGESTED);
 
         Long jobId = jdbcTemplate.queryForObject(
                 "SELECT id FROM ingestion_job WHERE source_id = ? ORDER BY id DESC LIMIT 1",
@@ -195,7 +204,7 @@ class PdfImageIngestionIntegrationTest {
 
         Long pages = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM source_page WHERE source_id = ?", Long.class, fx.sourceId);
-        assertEquals(2L, pages, "retry on SUCCEEDED must not duplicate pages");
+        assertEquals(2L, pages, "retry on an already-ingested job must not duplicate pages");
     }
 
     @Test
@@ -241,7 +250,7 @@ class PdfImageIngestionIntegrationTest {
         Fixture fx = newFixture("png-ok");
         Long assetId = upload(fx.token, fx.spaceId, fx.sourceId,
                 "page.png", "image/png", tinyPng(8, 8));
-        createJob(fx.token, fx.spaceId, fx.sourceId, assetId, "SUCCEEDED");
+        createJob(fx.token, fx.spaceId, fx.sourceId, assetId, INGESTED);
 
         List<Map<String, Object>> pages = rows(
                 "SELECT source_page_number, page_order, page_type, extracted_text "
@@ -262,7 +271,7 @@ class PdfImageIngestionIntegrationTest {
         Fixture fx = newFixture("jpeg-ok");
         Long assetId = upload(fx.token, fx.spaceId, fx.sourceId,
                 "photo.jpg", "image/jpeg", tinyJpeg(8, 8));
-        createJob(fx.token, fx.spaceId, fx.sourceId, assetId, "SUCCEEDED");
+        createJob(fx.token, fx.spaceId, fx.sourceId, assetId, INGESTED);
 
         assertEquals(1L, countPages(fx.sourceId));
         assertEquals(0L, countBlocks(fx.sourceId));
@@ -373,15 +382,19 @@ class PdfImageIngestionIntegrationTest {
         return Long.parseLong(body.substring(start, end));
     }
 
+    /**
+     * Creates an ingestion job (201) and returns the body of the read that
+     * confirms {@code expectedStatus}.
+     *
+     * <p>Ingestion is asynchronous ({@code IngestionJobService.submit()}
+     * dispatches from an {@code afterCommit()} hook), so the status is polled
+     * on the job read endpoint rather than asserted on the create response —
+     * see {@link AsyncIngestionJobs}.
+     */
     private String createJob(String token, Long spaceId, Long sourceId,
                              Long assetId, String expectedStatus) throws Exception {
-        return mockMvc.perform(post(JOBS, spaceId, sourceId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"assetId\":" + assetId + "}")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value(expectedStatus))
-                .andReturn().getResponse().getContentAsString();
+        return AsyncIngestionJobs.createAndAwait(mockMvc, token, spaceId, sourceId, assetId,
+                expectedStatus);
     }
 
     private static byte[] twoPagePdf(String text1, String text2) throws IOException {

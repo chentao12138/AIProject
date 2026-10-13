@@ -1,6 +1,7 @@
 package com.aistudy.server.ingestion;
 
 import com.aistudy.server.auth.service.JwtAccessTokenService;
+import com.aistudy.server.testsupport.AsyncIngestionJobs;
 import com.aistudy.server.testsupport.OwnedSpaceReset;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -55,11 +56,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <h3>Coverage</h3>
  *
- * <p>TXT/MD ingestion → SUCCEEDED job + real source_page/content_block
- * rows with exact text, block types, order, locator line ranges;
- * invalid UTF-8 → FAILED ENCODING_ERROR with zero content rows; empty
- * doc → SUCCEEDED with zero blocks; oversize → FAILED
- * DOCUMENT_TOO_LARGE (1KB test limit); malformed PDF → job FAILED
+ * <p>TXT/MD ingestion → terminal NEEDS_REVIEW job + real
+ * source_page/content_block rows with exact text, block types, order,
+ * locator line ranges; invalid UTF-8 → FAILED ENCODING_ERROR with zero
+ * content rows; empty doc → terminal job with zero blocks; oversize →
+ * FAILED DOCUMENT_TOO_LARGE (1KB test limit); malformed PDF → job FAILED
  * INVALID_PDF / PDF_PARSE_FAILED; malformed PNG → job FAILED
  * INVALID_IMAGE; duplicate re-ingest → 409; FAILED allows new
  * attempt; retry re-runs pipeline; pages/blocks list + pageId filter +
@@ -95,6 +96,23 @@ class ContentIngestionIntegrationTest {
 
     /** Tiny text-ingestion limit so the oversize test needs no real MB file. */
     private static final long TEST_MAX_TEXT_BYTES = 1024L;
+
+    /**
+     * Terminal status of an ingestion whose assets all extracted:
+     * {@code NEEDS_REVIEW} at stage {@code REVIEW}.
+     *
+     * <p>This class originally expected {@code SUCCEEDED}/{@code PUBLISHED},
+     * which belong to the retired {@code PENDING/RUNNING/SUCCEEDED} vocabulary
+     * architecture.md §6.2 records as dead. The single live source of the
+     * status vocabulary is {@code IngestionJobService.IngestionStatus}, whose
+     * success terminal is {@code NEEDS_REVIEW} (see the {@code IngestionJob}
+     * lifecycle javadoc: {@code AI_PROCESSING} and {@code PUBLISHED} "are not
+     * written by ingestion today").
+     */
+    private static final String INGESTED = "NEEDS_REVIEW";
+
+    /** Stage an ingested job reports, per the same lifecycle javadoc. */
+    private static final String INGESTED_STAGE = "REVIEW";
 
     private static final String BLOCKS =
             "/api/v1/spaces/{spaceId}/sources/{sourceId}/content-blocks";
@@ -212,16 +230,19 @@ class ContentIngestionIntegrationTest {
         return extractJsonLong(result.getResponse().getContentAsString(), "id");
     }
 
-    /** Creates an ingestion job; expects 201 and returns the job body. */
+    /**
+     * Creates an ingestion job (201) and waits for it to reach
+     * {@code expectedStatus}, returning THAT final body.
+     *
+     * <p>Ingestion is asynchronous — {@code IngestionJobService.submit()}
+     * dispatches from an {@code afterCommit()} hook — so the create response
+     * only ever reports {@code QUEUED}. The status is polled on the job read
+     * endpoint instead; see {@link AsyncIngestionJobs}.
+     */
     private String createJobBody(String token, Long spaceId, Long sourceId, Long assetId,
                                  String expectedStatus) throws Exception {
-        return mockMvc.perform(post(JOBS, spaceId, sourceId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"assetId\":" + assetId + "}")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value(expectedStatus))
-                .andReturn().getResponse().getContentAsString();
+        return AsyncIngestionJobs.createAndAwait(mockMvc, token, spaceId, sourceId, assetId,
+                expectedStatus);
     }
 
     /** FK-aware scoped cleanup, deepest first. */
@@ -266,7 +287,7 @@ class ContentIngestionIntegrationTest {
 
     // ==================== TXT ingestion ====================
 
-    /** (1) TXT ingest → SUCCEEDED job + exact page/block rows. */
+    /** (1) TXT ingest → terminal NEEDS_REVIEW job + exact page/block rows. */
     @Test
     void txtIngestSucceedsAndPersistsPageAndBlocks() throws Exception {
         Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
@@ -276,14 +297,14 @@ class ContentIngestionIntegrationTest {
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "note.txt", "text/plain", content.getBytes(StandardCharsets.UTF_8));
 
-        String body = createJobBody(token, spaceId, sourceId, assetId, "SUCCEEDED");
+        String body = createJobBody(token, spaceId, sourceId, assetId, INGESTED);
         Long jobId = extractJsonLong(body, "id");
 
         // job row: lifecycle complete
         Map<String, Object> job = jdbcTemplate.queryForMap(
                 "SELECT * FROM ingestion_job WHERE id = ?", jobId);
-        assertEquals("SUCCEEDED", job.get("status"));
-        assertEquals("PUBLISHED", job.get("stage"));
+        assertEquals(INGESTED, job.get("status"));
+        assertEquals(INGESTED_STAGE, job.get("stage"));
         assertEquals(100, ((Number) job.get("progress_percent")).intValue());
         assertNotNull(job.get("started_at"));
         assertNotNull(job.get("finished_at"));
@@ -334,7 +355,7 @@ class ContentIngestionIntegrationTest {
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "note.md", "text/markdown", md.getBytes(StandardCharsets.UTF_8));
 
-        createJobBody(token, spaceId, sourceId, assetId, "SUCCEEDED");
+        createJobBody(token, spaceId, sourceId, assetId, INGESTED);
 
         List<Map<String, Object>> blocks = rows(
                 "SELECT * FROM content_block WHERE space_id = ? AND source_id = ? ORDER BY sort_order",
@@ -374,7 +395,7 @@ class ContentIngestionIntegrationTest {
 
     /**
      * (4) a semantically-empty document (whitespace-only, non-zero
-     * upload) → SUCCEEDED with a page and zero blocks. Deliberately
+     * upload) → terminal job with a page and zero blocks. Deliberately
      * NOT a 0-byte upload: BUSINESS-004 contract rejects empty
      * multipart files with 400, and that contract stays
      * (RUNTIME-FIX-02-C).
@@ -388,7 +409,7 @@ class ContentIngestionIntegrationTest {
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "blank.txt", "text/plain", whitespace.getBytes(StandardCharsets.UTF_8));
 
-        createJobBody(token, spaceId, sourceId, assetId, "SUCCEEDED");
+        createJobBody(token, spaceId, sourceId, assetId, INGESTED);
 
         List<Map<String, Object>> pages = rows(
                 "SELECT * FROM source_page WHERE space_id = ? AND source_id = ?",
@@ -459,7 +480,7 @@ class ContentIngestionIntegrationTest {
         assertEquals(0L, pageCount, "failed image must not persist pages");
     }
 
-    /** (8) re-ingesting a SUCCEEDED asset → 409, no duplicate content. */
+    /** (8) re-ingesting an already-ingested asset → 409, no duplicate content. */
     @Test
     void duplicateCreateOnSucceededAssetReturns409() throws Exception {
         Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
@@ -467,7 +488,7 @@ class ContentIngestionIntegrationTest {
         String token = tokenFor("biz-e2e-user-1");
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "note.txt", "text/plain", "once".getBytes(StandardCharsets.UTF_8));
-        createJobBody(token, spaceId, sourceId, assetId, "SUCCEEDED");
+        createJobBody(token, spaceId, sourceId, assetId, INGESTED);
 
         mockMvc.perform(post(JOBS, spaceId, sourceId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -512,13 +533,19 @@ class ContentIngestionIntegrationTest {
         String body = createJobBody(token, spaceId, sourceId, assetId, "FAILED");
         Long jobId = extractJsonLong(body, "id");
 
+        // The retry response reports the re-queued job — the re-run happens on
+        // the worker pool — so the retried run is awaited before its own
+        // status/errorCode are asserted.
         mockMvc.perform(post("/api/v1/spaces/{spaceId}/ingestion-jobs/{jobId}/retry",
                         spaceId, jobId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.retryCount").value(1))
-                .andExpect(jsonPath("$.status").value("FAILED"))
-                .andExpect(jsonPath("$.errorCode").value("ENCODING_ERROR"));
+                .andExpect(jsonPath("$.status").value("QUEUED"));
+
+        String rerun = AsyncIngestionJobs.awaitStatus(mockMvc, token, spaceId, jobId, "FAILED");
+        assertTrue(rerun.contains("\"errorCode\":\"ENCODING_ERROR\""),
+                "the re-run must report the same reason: " + rerun);
     }
 
     // ==================== authorization ====================
@@ -567,7 +594,7 @@ class ContentIngestionIntegrationTest {
         String content = "page text";
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "note.txt", "text/plain", content.getBytes(StandardCharsets.UTF_8));
-        createJobBody(token, spaceId, sourceId, assetId, "SUCCEEDED");
+        createJobBody(token, spaceId, sourceId, assetId, INGESTED);
 
         mockMvc.perform(get(PAGES, spaceId, sourceId)
                         .header("Authorization", "Bearer " + token))
@@ -599,7 +626,7 @@ class ContentIngestionIntegrationTest {
         String md = "# T\n\np1\n\np2\n";
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "n.md", "text/markdown", md.getBytes(StandardCharsets.UTF_8));
-        createJobBody(token, spaceId, sourceId, assetId, "SUCCEEDED");
+        createJobBody(token, spaceId, sourceId, assetId, INGESTED);
 
         mockMvc.perform(get(BLOCKS, spaceId, sourceId)
                         .header("Authorization", "Bearer " + token))
@@ -622,7 +649,7 @@ class ContentIngestionIntegrationTest {
         String token = tokenFor("biz-e2e-user-1");
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "note.txt", "text/plain", "x\ny".getBytes(StandardCharsets.UTF_8));
-        createJobBody(token, spaceId, sourceId, assetId, "SUCCEEDED");
+        createJobBody(token, spaceId, sourceId, assetId, INGESTED);
 
         Long pageId = jdbcTemplate.queryForObject(
                 "SELECT id FROM source_page WHERE space_id = ? AND source_id = ?",
@@ -645,7 +672,7 @@ class ContentIngestionIntegrationTest {
         String token = tokenFor("biz-e2e-user-1");
         Long assetA = uploadAsset(token, spaceId, sourceA,
                 "note.txt", "text/plain", "x".getBytes(StandardCharsets.UTF_8));
-        createJobBody(token, spaceId, sourceA, assetA, "SUCCEEDED");
+        createJobBody(token, spaceId, sourceA, assetA, INGESTED);
         Long pageInA = jdbcTemplate.queryForObject(
                 "SELECT id FROM source_page WHERE space_id = ? AND source_id = ?",
                 Long.class, spaceId, sourceA);
@@ -684,7 +711,7 @@ class ContentIngestionIntegrationTest {
         String md = "a\nb\n\nc";
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "n.md", "text/markdown", md.getBytes(StandardCharsets.UTF_8));
-        createJobBody(token, spaceId, sourceId, assetId, "SUCCEEDED");
+        createJobBody(token, spaceId, sourceId, assetId, INGESTED);
 
         List<Map<String, Object>> blocks = rows(
                 "SELECT block_type, normalized_text, locator_json FROM content_block "

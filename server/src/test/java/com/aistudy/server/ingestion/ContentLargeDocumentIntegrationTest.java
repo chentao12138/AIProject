@@ -1,6 +1,7 @@
 package com.aistudy.server.ingestion;
 
 import com.aistudy.server.auth.service.JwtAccessTokenService;
+import com.aistudy.server.testsupport.AsyncIngestionJobs;
 import com.aistudy.server.testsupport.OwnedSpaceReset;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -14,7 +15,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
@@ -84,8 +84,13 @@ class ContentLargeDocumentIntegrationTest {
             "biz-e2e-user-2"
     );
 
-    private static final String JOBS =
-            "/api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs";
+    /**
+     * Terminal status of an ingestion whose assets all extracted
+     * ({@code IngestionJobService.IngestionStatus}); {@code SUCCEEDED} —
+     * what this class used to expect — belongs to the retired
+     * PENDING/RUNNING/SUCCEEDED vocabulary (architecture.md §6.2).
+     */
+    private static final String INGESTED = "NEEDS_REVIEW";
 
     private static Path storageRoot;
 
@@ -227,12 +232,10 @@ class ContentLargeDocumentIntegrationTest {
         assertEquals(sourceId, ((Number) assetRow.get("source_id")).longValue(),
                 "asset must belong to the path source");
 
-        mockMvc.perform(post(JOBS, spaceId, sourceId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"assetId\":" + assetId + "}")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("SUCCEEDED"));
+        // Ingestion is asynchronous: create returns QUEUED, so the job is
+        // polled until it reaches its terminal status before the content
+        // rows are read back. See AsyncIngestionJobs for the vocabulary.
+        AsyncIngestionJobs.createAndAwait(mockMvc, token, spaceId, sourceId, assetId, INGESTED);
 
         Map<String, Object> page = jdbcTemplate.queryForMap(
                 "SELECT extracted_text FROM source_page WHERE space_id = ? AND source_id = ?",
