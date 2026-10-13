@@ -67,6 +67,21 @@ public class SourceAsset {
 
     private String sha256;
 
+    /**
+     * V059 / F-12 — ZIP re-extraction version of one
+     * (space, source, relative path). Plain uploads always use 1;
+     * re-extracting an entry with the same path but different bytes
+     * creates max + 1 and stamps the previous head superseded.
+     */
+    private Integer assetVersion;
+
+    /**
+     * V059 / F-12 — set when a newer version superseded this row
+     * (supersede-and-retain: rows are never deleted, provenance
+     * bindings to this id stay valid). {@code null} = active head.
+     */
+    private LocalDateTime supersededAt;
+
     private LocalDateTime createdAt;
 
     public Long getId() {
@@ -147,6 +162,22 @@ public class SourceAsset {
 
     public void setSha256(String sha256) {
         this.sha256 = sha256;
+    }
+
+    public Integer getAssetVersion() {
+        return assetVersion;
+    }
+
+    public void setAssetVersion(Integer assetVersion) {
+        this.assetVersion = assetVersion;
+    }
+
+    public LocalDateTime getSupersededAt() {
+        return supersededAt;
+    }
+
+    public void setSupersededAt(LocalDateTime supersededAt) {
+        this.supersededAt = supersededAt;
     }
 
     public LocalDateTime getCreatedAt() {
