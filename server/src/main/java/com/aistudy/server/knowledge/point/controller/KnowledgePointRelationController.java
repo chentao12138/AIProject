@@ -2,6 +2,7 @@ package com.aistudy.server.knowledge.point.controller;
 
 import com.aistudy.server.knowledge.point.entity.KnowledgePointRelation;
 import com.aistudy.server.knowledge.point.service.KnowledgePointRelationService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -23,6 +24,7 @@ public class KnowledgePointRelationController {
     public record AddRelationRequest(String relationType, Long targetKpId, Integer weight, String notes) {
     }
 
+    @Operation(description = "409 code: KP_RELATION_CYCLE when the new edge would close a cycle in the graph.")
     @PostMapping("/api/v1/spaces/{spaceId}/knowledge-points/{kpId}/relations")
     @org.springframework.web.bind.annotation.ResponseStatus(HttpStatus.CREATED)
     public KnowledgePointRelation add(@PathVariable Long spaceId,

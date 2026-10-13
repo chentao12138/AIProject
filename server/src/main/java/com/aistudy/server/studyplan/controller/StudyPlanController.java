@@ -4,6 +4,7 @@ import com.aistudy.server.studyplan.dto.StudyPlanDto.GenerateStudyPlanRequest;
 import com.aistudy.server.studyplan.dto.StudyPlanDto.StudyPlanView;
 import com.aistudy.server.studyplan.dto.StudyPlanDto.StudyTaskView;
 import com.aistudy.server.studyplan.service.StudyPlanService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -47,6 +48,7 @@ public class StudyPlanController {
         this.studyPlanService = studyPlanService;
     }
 
+    @Operation(description = "Builds a plan from pending review tasks and mastery evidence. 409 codes: STUDY_PLAN_ACTIVE_EXISTS (this space already has an ACTIVE plan), STUDY_PLAN_NO_CANDIDATES (nothing to plan yet).")
     @PostMapping(value = "/study-plan/generate",
             produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
@@ -66,6 +68,7 @@ public class StudyPlanController {
         return view;
     }
 
+    @Operation(description = "409 codes: STUDY_TASK_SKIPPED_NOT_COMPLETABLE, STUDY_TASK_ALREADY_CLOSED, STUDY_TASK_STALE (another request moved the task first).")
     @PostMapping(value = "/study-plan/tasks/{taskId}/complete",
             produces = MediaType.APPLICATION_JSON_VALUE)
     public StudyTaskView complete(@PathVariable Long spaceId,
@@ -74,6 +77,7 @@ public class StudyPlanController {
         return studyPlanService.complete(authentication.getName(), spaceId, taskId);
     }
 
+    @Operation(description = "409 codes: STUDY_TASK_ALREADY_CLOSED, STUDY_TASK_STALE.")
     @PostMapping(value = "/study-plan/tasks/{taskId}/skip",
             produces = MediaType.APPLICATION_JSON_VALUE)
     public StudyTaskView skip(@PathVariable Long spaceId,
@@ -82,6 +86,7 @@ public class StudyPlanController {
         return studyPlanService.skip(authentication.getName(), spaceId, taskId);
     }
 
+    @Operation(description = "409 codes: STUDY_TASK_NOT_SKIPPED, STUDY_TASK_STALE.")
     @PostMapping(value = "/study-plan/tasks/{taskId}/unskip",
             produces = MediaType.APPLICATION_JSON_VALUE)
     public StudyTaskView unskip(@PathVariable Long spaceId,
@@ -126,6 +131,7 @@ public class StudyPlanController {
             @NotBlank @Size(max = 16) String priority) {
     }
 
+    @Operation(description = "409 code: STUDY_TASK_REORDER_FAILED when a listed task is no longer in the plan.")
     @PostMapping(value = "/study-plan/{planId}/reorder",
             produces = MediaType.APPLICATION_JSON_VALUE)
     public StudyPlanView reorder(@PathVariable Long spaceId,
@@ -156,6 +162,7 @@ public class StudyPlanController {
             String reason) {
     }
 
+    @Operation(description = "409 codes: STUDY_PLAN_COMPLETED (a finished plan is kept for the record), STUDY_PLAN_NO_CANDIDATES.")
     @PostMapping(value = "/study-plan/{planId}/regenerate",
             produces = MediaType.APPLICATION_JSON_VALUE)
     public StudyPlanView regenerate(@PathVariable Long spaceId,

@@ -4,6 +4,7 @@ import com.aistudy.server.source.outline.dto.CreateOutlineNodeRequest;
 import com.aistudy.server.source.outline.dto.UpdateOutlineNodeRequest;
 import com.aistudy.server.source.outline.entity.SourceOutlineNode;
 import com.aistudy.server.source.outline.service.SourceOutlineNodeService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -64,6 +65,7 @@ public class SourceOutlineNodeController {
                 authentication.getName(), spaceId, sourceId, nodeId, request);
     }
 
+    @Operation(description = "409 code: OUTLINE_NODE_HAS_CHILDREN — reparent or delete the children first, so a subtree can never be orphaned by one click.")
     @DeleteMapping(value = "/{nodeId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long spaceId,

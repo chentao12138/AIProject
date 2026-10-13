@@ -2,6 +2,7 @@ package com.aistudy.server.mastery.controller;
 
 import com.aistudy.server.mastery.entity.MasteryCalibrationConfig;
 import com.aistudy.server.mastery.service.MasteryCalibrationConfigService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
@@ -75,6 +76,7 @@ public class MasteryCalibrationController {
         return CalibrationView.from(active);
     }
 
+    @Operation(description = "409 code: MASTERY_CALIBRATION_VERSION_EXISTS when that version is already stored.")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('ADMIN')")

@@ -116,7 +116,8 @@ public class AiTutorController {
                     + "the material the question is about. Only IDs are accepted: the server resolves "
                     + "them against this LearningSpace (unknown, foreign-space or soft-deleted IDs are a "
                     + "400 VALIDATION_ERROR), retrieves the material itself, and lets the pinned material "
-                    + "take precedence over automatic retrieval.")
+                    + "take precedence over automatic retrieval. 409 `code: "
+                    + "AI_CONVERSATION_NOT_ACTIVE` when the conversation is archived.")
     @PostMapping(value = "/conversations/{conversationId}/messages",
             consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
@@ -129,7 +130,9 @@ public class AiTutorController {
                 authentication.getName(), spaceId, conversationId, request);
     }
 
-    @Operation(summary = "Explain a submitted practice answer (post-submit only)")
+    @Operation(summary = "Explain a submitted practice answer (post-submit only)",
+            description = "409 `code: AI_EXPLANATION_NOT_READY` while the answer's session is not "
+                    + "SUBMITTED: an explanation of an unfinished attempt would leak grading.")
     @PostMapping("/explanations/practice-answers/{answerId}")
     public ExplanationResponse explainPracticeAnswer(
             @PathVariable Long spaceId,
@@ -139,7 +142,8 @@ public class AiTutorController {
                 authentication.getName(), spaceId, answerId);
     }
 
-    @Operation(summary = "Explain a submitted exam answer (post-submit only)")
+    @Operation(summary = "Explain a submitted exam answer (post-submit only)",
+            description = "409 `code: AI_EXPLANATION_NOT_READY` while the attempt is not submitted.")
     @PostMapping("/explanations/exam-answers/{answerId}")
     public ExplanationResponse explainExamAnswer(
             @PathVariable Long spaceId,

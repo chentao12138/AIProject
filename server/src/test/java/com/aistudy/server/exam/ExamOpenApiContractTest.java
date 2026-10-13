@@ -357,7 +357,24 @@ class ExamOpenApiContractTest {
                 "FOLDER_ENTRY_ALREADY_LINKED",
                 "FOLDER_ENTRY_NOT_PENDING",
                 "FOLDER_ENTRY_CHECKSUM_MISMATCH",
-                "FOLDER_ENTRY_STALE")) {
+                "FOLDER_ENTRY_STALE",
+                "AI_EXPLANATION_NOT_READY",
+                "AI_CONVERSATION_NOT_ACTIVE",
+                "AI_JOB_NOT_RETRYABLE",
+                "AI_JOB_STALE",
+                "EXAM_DIAGNOSIS_NOT_AVAILABLE",
+                "EXAM_DIAGNOSIS_MISSING",
+                "KP_RELATION_CYCLE",
+                "MASTERY_CALIBRATION_VERSION_EXISTS",
+                "OUTLINE_NODE_HAS_CHILDREN",
+                "STUDY_PLAN_ACTIVE_EXISTS",
+                "STUDY_PLAN_NO_CANDIDATES",
+                "STUDY_PLAN_COMPLETED",
+                "STUDY_TASK_SKIPPED_NOT_COMPLETABLE",
+                "STUDY_TASK_NOT_SKIPPED",
+                "STUDY_TASK_STALE",
+                "STUDY_TASK_REORDER_FAILED",
+                "STUDY_TASK_ALREADY_CLOSED")) {
             assertTrue(document.contains(code),
                     "the contract must name the conflict code " + code);
         }

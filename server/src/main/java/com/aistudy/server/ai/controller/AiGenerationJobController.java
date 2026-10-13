@@ -5,6 +5,7 @@ import com.aistudy.server.ai.service.AIGenerationJobService;
 import com.aistudy.server.ai.service.AIGenerationJobWorker;
 import com.aistudy.server.common.problem.ApiErrorCodes;
 import com.aistudy.server.common.problem.ApiException;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -113,6 +114,7 @@ public class AiGenerationJobController {
         return job;
     }
 
+    @Operation(description = "409 codes: AI_JOB_NOT_RETRYABLE (only FAILED jobs are retried), AI_JOB_STALE.")
     @PostMapping("/{jobId}/retry")
     public AIGenerationJob retry(@PathVariable Long spaceId,
                                  @PathVariable Long jobId,

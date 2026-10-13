@@ -2,6 +2,7 @@ package com.aistudy.server.exam.controller;
 
 import com.aistudy.server.exam.dto.ExamDiagnosisDto.ExamDiagnosisView;
 import com.aistudy.server.exam.service.ExamDiagnosisService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
@@ -32,6 +33,9 @@ public class ExamDiagnosisController {
         this.examDiagnosisService = examDiagnosisService;
     }
 
+    @Operation(description = "409 codes: EXAM_DIAGNOSIS_NOT_AVAILABLE while the attempt is not "
+            + "submitted, EXAM_DIAGNOSIS_MISSING when a submitted attempt has no diagnosis rows to "
+            + "show (an empty card must never read as 'no weak points').")
     @GetMapping(value = "/exam-attempts/{attemptId}/diagnosis",
             produces = MediaType.APPLICATION_JSON_VALUE)
     public ExamDiagnosisView get(@PathVariable Long spaceId,
