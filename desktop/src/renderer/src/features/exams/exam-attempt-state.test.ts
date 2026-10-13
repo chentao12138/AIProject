@@ -160,8 +160,19 @@ describe('buildAnswerBody (contract ExamAnswerRequest)', () => {
     expect(body.answer).toEqual({ selectedOptionKeys: ['A'] });
   });
 
-  it('defaults an untouched draft to the type empty value', () => {
-    expect(buildAnswerBody({ examQuestionId: 11, questionType: 'TRUE_FALSE' }, undefined))
-      .toEqual({ examQuestionId: 11, answer: { booleanAnswer: false } });
+  it('never invents a judgement for an untouched TRUE_FALSE draft', () => {
+    // The server answers 400 when booleanAnswer is missing
+    // (QuestionAnswerEvaluator: "TRUE_FALSE requires booleanAnswer"). Sending
+    // `false` would store a wrong answer the learner never chose, so the field
+    // stays unset and the rejection surfaces as what it is.
+    const body = buildAnswerBody(
+      { examQuestionId: 11, questionType: 'TRUE_FALSE' },
+      undefined
+    );
+    expect(body.answer.booleanAnswer).toBeUndefined();
+    expect(JSON.parse(JSON.stringify(body))).toEqual({
+      examQuestionId: 11,
+      answer: {},
+    });
   });
 });

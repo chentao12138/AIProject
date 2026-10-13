@@ -595,8 +595,18 @@ function ExamResult({
                 )}
               </p>
               <p>
-                {item.isCorrect ? '答对' : '答错'} ·
-                {item.score ?? 0} / {item.maxScore ?? 0}
+                {/* The server leaves `isCorrect` null for types it does not
+                    auto-grade (QuestionAnswerEvaluator returns
+                    GradeResult.ungraded() for SHORT_ANSWER). Treating null as
+                    答错 would invent a verdict the backend never gave. */}
+                {item.isCorrect === true
+                  ? '答对'
+                  : item.isCorrect === false
+                    ? '答错'
+                    : '未评分（需人工批改）'}{' '}
+                ·{' '}
+                {typeof item.score === 'number' ? item.score : '—'} /{' '}
+                {item.maxScore ?? 0}
               </p>
               {item.correctAnswer && (
                 <p className="muted">正确答案：{item.correctAnswer}</p>

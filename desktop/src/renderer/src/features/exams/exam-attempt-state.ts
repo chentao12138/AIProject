@@ -125,7 +125,10 @@ export function buildAnswerBody(
   if (type === 'SINGLE_CHOICE' || type === 'MULTIPLE_CHOICE') {
     answer.selectedOptionKeys = draft?.selectedOptionKeys ?? [];
   } else if (type === 'TRUE_FALSE') {
-    answer.booleanAnswer = draft?.booleanAnswer ?? false;
+    // Never fabricate `false` for an unselected answer: the server rejects a
+    // missing booleanAnswer with 400, and a silent false would be stored as a
+    // wrong judgement the learner never made.
+    answer.booleanAnswer = draft?.booleanAnswer;
   } else {
     answer.textAnswer = draft?.textAnswer ?? '';
   }

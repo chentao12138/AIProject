@@ -521,6 +521,51 @@ describe('ExamAttemptPage', () => {
   });
 
   // W04: a SUBMITTED attempt is read-only, with no way to write again.
+  it('shows an ungraded answer as 未评分 instead of claiming 答错', async () => {
+    renderAttempt({
+      getExamAttempt: vi.fn(async () =>
+        ok({
+          id: 5,
+          examId: 21,
+          status: 'SUBMITTED',
+          submittedAt: '2026-10-13T10:30:00',
+          questions: [QUESTION_1],
+        })
+      ),
+      getExamResult: vi.fn(async () =>
+        ok({
+          attemptId: 5,
+          status: 'SUBMITTED',
+          score: null,
+          maxScore: 10,
+          correctCount: 0,
+          wrongCount: 0,
+          unansweredCount: 0,
+          items: [
+            {
+              examQuestionId: 11,
+              questionId: 101,
+              // SHORT_ANSWER comes back from GradeResult.ungraded():
+              // isCorrect and score are null, i.e. awaiting manual grading.
+              isCorrect: null,
+              score: null,
+              maxScore: 10,
+              answered: true,
+            },
+          ],
+        })
+      ),
+      submitExamAnswer: vi.fn(),
+      submitExamAttempt: vi.fn(),
+    });
+
+    const row = await screen.findByText(/未评分/);
+    expect(row).toBeInTheDocument();
+    expect(row.textContent).not.toContain('答错');
+    // A null score is "not graded", never 0 points earned.
+    expect(row.textContent).toContain('—');
+  });
+
   it('renders a submitted attempt as read-only result', async () => {
     renderAttempt({
       getExamAttempt: vi.fn(async () =>
