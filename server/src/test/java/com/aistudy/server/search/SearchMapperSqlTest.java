@@ -213,7 +213,8 @@ class SearchMapperSqlTest {
             assertTrue(sql.contains("and q.status = 'published'"), sql);
             assertTrue(sql.contains("s.current_extraction_revision_id is null"), sql);
             assertTrue(sql.contains("or cb.extraction_revision_id = s.current_extraction_revision_id"), sql);
-            assertTrue(sql.contains("or sp.extraction_revision_id = s.current_extraction_revision_id"), sql);
+            assertFalse(sql.contains("sp.extraction_revision_id"),
+                    "the source_page join is provenance only and must not over-filter: " + sql);
             assertTrue(sql.contains("and kp.deleted_at is null"), sql);
             assertTrue(sql.contains("and q.deleted_at is null"), sql);
         }

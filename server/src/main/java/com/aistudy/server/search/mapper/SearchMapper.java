@@ -22,9 +22,11 @@ public interface SearchMapper {
      *
      * <p>Visibility is enforced per branch as pinned in the mapper XML
      * (SOURCE / CONTENT_BLOCK / KNOWLEDGE_POINT / QUESTION require
-     * {@code PUBLISHED}, page and block rows must additionally belong to the
+     * {@code PUBLISHED}, content-block rows must additionally belong to the
      * source's current extraction revision with a NULL-revision compatibility
-     * escape, NOTE and WRONG_QUESTION stay per-user with no publish gate).
+     * escape, and NOTE and WRONG_QUESTION stay per-user with no publish gate).
+     * The joined source_page row is provenance only and carries no predicate of
+     * its own.
      *
      * @param spaceId         LearningSpace scope; required by every branch
      * @param ownerSubject    space owner subject, guards cross-owner access

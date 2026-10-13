@@ -3,64 +3,67 @@
 <mapper namespace="com.aistudy.server.search.mapper.SearchMapper">
 
   <!--
-    ============================================================================
-    SearchMapper statements — UNION ALL assembly, visibility and scoring rules.
-    This block is the SINGLE SOURCE OF TRUTH for both rules below; the two
-    statements (searchProjection / searchCount) MUST stay in lock-step or
+    SearchMapper statements: UNION ALL assembly, visibility and scoring rules.
+    This block is the SINGLE SOURCE OF TRUTH for the rules below; the two
+    statements (searchProjection and searchCount) MUST stay in lock-step or
     totalElements will disagree with the returned page.
 
     1) UNION ALL assembly (F-01)
        Every type branch ENDS with `UNION ALL` and NO branch begins with one.
-       `<trim suffixOverrides="UNION ALL">` only strips a TRAILING separator,
-       so the last emitted branch is normalized and the SQL is valid for any
-       subset of `types`, including a single-type request such as types=[NOTE].
+       `trim` with suffixOverrides only strips a TRAILING separator, so the last
+       emitted branch is normalized and the SQL is valid for any subset of
+       `types`, including a single type request such as types=[NOTE].
 
-    2) Visibility / publish rule (F-02) — pinned project-wide rule
-       - source:                       s.status = 'PUBLISHED'
-       - source_page / content_block:  owning source is 'PUBLISHED' AND the row
-         belongs to the current extraction revision, expressed as
+    2) Visibility / publish rule (F-02), the pinned project-wide rule
+       source:                        s.status = 'PUBLISHED'
+       source_page / content_block:   the owning source is 'PUBLISHED' AND the
+         returned row belongs to the current extraction revision, expressed as
          (s.current_extraction_revision_id IS NULL
-          OR <row>.extraction_revision_id = s.current_extraction_revision_id).
-         The NULL branch is REQUIRED compatibility: rows written before V053
-         carry no extraction_revision_id and must stay visible.
-       - knowledge_point:              kp.status = 'PUBLISHED' + deleted_at IS NULL
-       - question:                     q.status  = 'PUBLISHED' + deleted_at IS NULL,
+          OR the row's extraction_revision_id = s.current_extraction_revision_id).
+         The NULL alternative is REQUIRED compatibility: rows written before
+         V053 carry no extraction_revision_id and must stay visible.
+         The source_page join in the CONTENT_BLOCK branch is PROVENANCE ONLY
+         (asset id plus page number) and deliberately carries no revision
+         predicate: a block is always joined to the page it was extracted with,
+         so the block's own revision check establishes currency, and gating the
+         page as well would hide legitimate current blocks whose page row
+         predates V053.
+       knowledge_point:               kp.status = 'PUBLISHED', keep deleted_at
+       question:                      q.status = 'PUBLISHED', keep deleted_at,
          including the question joined inside the WRONG_QUESTION branch.
-       - note / wrong_question:        per-user scope (user_subject /
-         user_subject_id) + archived_at IS NULL; deliberately NO publish gate,
-         they are private user content.
-       WHY: search results also feed the AI tutor context (AiLearningContext
-       Service reuses SearchService), so DRAFT / unreviewed / superseded
+       note / wrong_question:         per-user scope (user_subject /
+         user_subject_id) plus archived_at IS NULL; deliberately NO publish
+         gate, they are private user content.
+       WHY: search results also feed the AI tutor context, because AiLearning
+       ContextService reuses SearchService, so DRAFT, unreviewed or superseded
        material would otherwise leak into model answers. Admin review reads do
-       NOT go through this mapper (see SourceMapper#selectAdminList), so these
+       NOT go through this mapper (see SourceMapper selectAdminList), so these
        predicates never block an admin screen.
 
-    3) Scoring (F-03 / F-04)
+    3) Scoring (F-03 and F-04)
        Two flags from the service drive the FULLTEXT path:
-         useFulltext     - the ngram parser can tokenize this query at all
-                           (>= ngram_token_size word characters). When false no
-                           MATCH is evaluated anywhere and the statement is pure
-                           LIKE.
-         fulltextSelects - useFulltext AND the query is word-only (no
-                           punctuation / operators). Only then does
-                           MATCH(...) > 0 participate in the WHERE as an
-                           alternative to the LIKE predicate.
-       - Deterministic LIKE tiers (exact / prefix / contains) are unchanged and
-         remain the ordering backbone; `score > 0` is the row filter, so a row
-         scores 0 only when it matches nothing.
-       - The MATCH boost is capped at 9, strictly below the smallest tier gap
-         (10, in the CONTENT_BLOCK ladder), so relevance refines ranking INSIDE
-         a tier and can never reorder tiers.
-       - The escaped LIKE predicate stays in the WHERE in every mode: it is the
-         sole row filter for punctuation-bearing queries, because ngram ignores
-         % and _ as delimiters and would otherwise match "100X完成" for the
-         literal query "100%" (SearchLikeEscape semantics must not regress).
-       - MATCH arguments use the RAW normalized query (`matchQuery`), never the
-         LIKE-escaped one: a backslash is a literal character for the index.
-       - source_page and content_block additionally MUST match the same score
-         ladder in both statements (KNOWLEDGE_POINT tier 60 is a CONTAINS match
-         on kp.title, not a prefix match — the count used to get this wrong).
-    ============================================================================
+         useFulltext     the ngram parser can tokenize this query at all (at
+           least ngram_token_size word characters). When false, no MATCH is
+           evaluated anywhere and the statement is pure LIKE.
+         fulltextSelects useFulltext AND a word-only query (no punctuation or
+           operators). Only then may MATCH(...) greater than 0 participate in
+           the WHERE as an alternative to the LIKE predicate.
+       Deterministic LIKE tiers (exact, prefix, contains) are unchanged and
+       remain the ordering backbone; `score > 0` is the row filter, so a row
+       scores 0 only when it matches nothing.
+       The MATCH boost is capped at 9, strictly below the smallest tier gap
+       (10, in the CONTENT_BLOCK ladder), so relevance refines ranking INSIDE a
+       tier and can never reorder tiers.
+       The escaped LIKE predicate stays in the WHERE in every mode: it is the
+       sole row filter for punctuation-bearing queries, because ngram ignores
+       percent and underscore as delimiters and would otherwise match the title
+       "100X完成" for the literal query "100%", regressing the wildcard
+       behaviour SearchLikeEscape guarantees.
+       MATCH arguments use the RAW normalized query (`matchQuery`), never the
+       LIKE-escaped one: a backslash is a literal character for the index.
+       Both statements MUST emit the same score ladder (the KNOWLEDGE_POINT
+       tier 60 is a CONTAINS match on kp.title, not a prefix match; the count
+       used to get this wrong and under-reported the page).
   -->
 
   <select id="searchProjection" resultType="com.aistudy.server.search.model.SearchProjection">
@@ -138,8 +141,6 @@
           AND s.status = 'PUBLISHED'
           AND (s.current_extraction_revision_id IS NULL
                OR cb.extraction_revision_id = s.current_extraction_revision_id)
-          AND (s.current_extraction_revision_id IS NULL
-               OR sp.extraction_revision_id = s.current_extraction_revision_id)
           AND (
             cb.normalized_text LIKE #{containsPattern} ESCAPE '\\'
             <if test="fulltextSelects">OR MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
@@ -354,8 +355,6 @@
           AND s.status = 'PUBLISHED'
           AND (s.current_extraction_revision_id IS NULL
                OR cb.extraction_revision_id = s.current_extraction_revision_id)
-          AND (s.current_extraction_revision_id IS NULL
-               OR sp.extraction_revision_id = s.current_extraction_revision_id)
           AND (
             cb.normalized_text LIKE #{containsPattern} ESCAPE '\\'
             <if test="fulltextSelects">OR MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
