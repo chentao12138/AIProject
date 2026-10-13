@@ -16,6 +16,37 @@ Each item maps to a specific checklist section.
 | A8 Notes | Blocked | No `/notes` endpoints in `api.d.ts`. UI not implemented. |
 | A4.5 Question update | Blocked | No `PUT`/`PATCH` on `/questions/{questionId}`; the form is create-only and the edit route was removed. |
 | A5.3 Practice result | Blocked | `PracticeSessionDetail` carries no score; only the `finish` response does, so a past session cannot show its result. |
+| A6.2 Exam answer resume | Blocked | `ExamAnswerView` echoes no answer content, so a reload cannot rebuild what was saved. |
+| A4.3 ORDERING / MATCHING | Blocked | `AnswerPayloadView` and `QuestionAnswerView` cannot express an order or pairs. |
+| A4.2 Question paging | Blocked | `GET /questions` accepts no `page`/`size`; client-side full-list paging is forbidden by the checklist. |
+| A7.3 Search → Note | Blocked | `SearchResult.type` enum has no `NOTE`, so a note hit cannot be opened. |
+
+---
+
+## Contract verification, 2026-10-13
+
+Every row above was re-checked field by field against
+`packages/api-client/src/generated/openapi.json` (67 paths) rather than from
+memory. The precise deltas the backend has to close:
+
+| ID | Schema / endpoint as it exists today | What must be added |
+|----|--------------------------------------|--------------------|
+| C01 | no `/notes` path at all | `GET`+`POST /spaces/{spaceId}/notes`, `GET`+`PUT`+`DELETE /spaces/{spaceId}/notes/{noteId}`, `NoteView`/`NoteCreateRequest`/`NoteUpdateRequest` per the A8 section below |
+| C02 | `KnowledgePointSourceResponse{id,spaceId,knowledgePointId,contentBlockId,relationType,relevanceScore,createdAt}` | `sourceId`, `sourcePageId` |
+| C03 | `SendMessageRequest{content}` | optional `sourceId`, `sourcePageId`, `contentBlockId`, `knowledgePointId` |
+| C04 | `ContextReference{type,id,title,snippet,locator:string}` | structured `sourceId`/`sourcePageId`/`contentBlockId`; `locator` is free text and cannot be parsed safely |
+| C05 | `POST /questions`, `POST /questions/{id}/publish`, no update verb | `PUT /spaces/{spaceId}/questions/{questionId}`, DRAFT-only, 409 otherwise |
+| C06 | `PracticeSessionDetail{id,spaceId,status,questionCount,startedAt,finishedAt,createdAt,updatedAt,questions}` — no score | `GET .../practice-sessions/{sessionId}/result` returning `PracticeSubmitView` + `PracticeAnswerView[]` |
+| C09 | `AnswerPayloadView{selectedOptionKeys,booleanAnswer,textAnswer}`, `QuestionAnswerView{correctOptionKey,correctOptionKeys,correctBoolean,referenceAnswer}`, `QuestionOptionInput{optionKey,content,sortOrder}` | ordered answer + pair structures for ORDERING/MATCHING, multi-blank text for FILL_BLANK, and `questionType`/`status` as real enums |
+| C10 | `ExamAnswerView{id,examAttemptId,examQuestionId,gradingStatus,answeredAt}` | the submitted payload itself (same shape as `AnswerPayloadView`) plus a `submitted` flag, readable from `GET /exam-attempts/{attemptId}` |
+| C-Paging | `GET /questions{status,questionType,knowledgePointId}`, no paging params | `page`/`size` and a paged response envelope |
+| C-Search | `SearchResult.type ∈ [SOURCE, CONTENT_BLOCK, KNOWLEDGE_POINT, QUESTION, WRONG_QUESTION]` | `NOTE` plus a `noteId` so a note hit is openable |
+
+These requests were sent to the backend development session together with the
+running-service handover (restart + a login account for integration testing).
+Until they land in `api.d.ts`, the corresponding frontend flows stay gated —
+no field is invented to make a page look complete.
+
 
 ---
 
