@@ -58,8 +58,8 @@ Real command output, not a historical claim:
 | Lint | `npm run lint` | 0 errors, 0 warnings |
 | Typecheck | `npx tsc --noEmit -p tsconfig.node.json` / `-p tsconfig.web.json` | 0 errors |
 | Contract gate | `npm run api:check` | `openapi.json and api.d.ts are in sync` |
-| Unit | `npm run test:run` | 63 files / 755 tests passed |
-| Coverage | `npm run test:coverage` | statements 89.89% (7241/8055), branches 84.38%, functions 81.5% |
+| Unit | `npm run test:run` | 63 files / 758 tests passed |
+| Coverage | `npm run test:coverage` | statements 90% (7275/8083), branches 84.4%, functions 81.34% |
 | Build | `npm run build` | main 13.93 kB, preload 1.65 kB, renderer 775.91 kB |
 | Package | `npm run dist:win` (with the two mirror variables in README) | `dist/AIStudy Setup 0.1.0.exe`, 111 MB, timestamp matches the built commit |
 
@@ -73,6 +73,26 @@ What this does **not** prove, and remains open A-class work:
 - 755 passing tests cover renderer behaviour against mocked client responses.
   They cannot detect a contract that does not exist, so no E2E PASS is claimed
   from this table (see `docs/SMOKE-INSTRUCTIONS.md`).
+
+## Production security review (R07 / A11.4), 2026-10-13
+
+Checked against the **built** renderer (`npm run build` at this branch), not only
+the source:
+
+| Check | Result |
+|-------|--------|
+| CSP (`src/main/csp.ts`, production) | `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' <api-origin>; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`. The API origin comes from `resolveApiBaseUrl()` → `apiOriginFromBaseUrl()`, so it is always `scheme://host:port` and can never widen to `*`. `'unsafe-inline'` appears **only** in the dev branch, for Vite's inline preamble. |
+| Renderer → provider directly | None. `api.stepfun.com/v1` occurs twice in the bundle as the **AI Settings preset default/placeholder** (`features/ai/AiSettingsPage.tsx:31,191`) — a value the user may save into backend settings, never a fetch target. All traffic goes through `createApiClient(apiConfig.baseUrl, …)`. |
+| `localStorage` | 0 occurrences in the bundle and 0 in renderer source; the convention scan rejects `localStorage`/`sessionStorage`/`document.cookie` anywhere under `src/renderer/src` (ADR-026/037). |
+| `sessionStorage` (3 bundle hits) | Attributed to `react-router-dom` / `@remix-run/router` internals (34 and 45 occurrences in those packages); none in our source, none in `openapi-fetch`. |
+| `Bearer ` | Only the shared client's `Authorization` header builder, fed from the in-memory session, never from storage. |
+| `eval(` | 0 in the bundle. |
+| `dangerouslySetInnerHTML` | 0 in our source; the bundle count is React DOM's own prop name (`react-dom.production.min.js` contains it 8×). |
+| Node / Electron from renderer | Rejected by the convention scan (`from 'node:` / `require(` / `window.require` / `process.` across `src/renderer/src`), and the guard test bites. |
+
+Still not covered here, and open: verifying these headers and the network graph
+in a running packaged app (DevTools / real requests) needs the backend up, which
+is also what R02 install, R03 auth and R04/R05 E2E are waiting on.
 
 ## Out of scope (B-class)
 
