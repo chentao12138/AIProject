@@ -184,10 +184,11 @@ Work was built in parallel lanes (search / source lifecycle / asset-folder-RAW /
   (`FlywayMigrationIntegrationTest`, `SpikeRecordMapperIntegrationTest`). Stop the listener first, then restart it.
 
 ### Not done yet
-- F-30 tail: 8 classes still answer 409 with the generic `code:"CONFLICT"`, pinned as a shrink-only baseline in
-  `ErrorCodeRatchetTest` (admin/internal paths: `ai.explain`, `ai.service.AiConversationService`, `config.service`,
-  `exam.service.ExamDiagnosisService`, `knowledge.point...RelationService`, `mastery...CalibrationConfigService`,
-  `source.outline...SourceOutlineNodeService`, `studyplan.service.StudyPlanService`).
+- F-30: closed. The last 8 classes (study plan, AI conversation/explanation/job retry, system config, exam
+  diagnosis, knowledge-point relation cycle, mastery calibration, outline delete) now carry per-condition codes, and
+  `ErrorCodeRatchetTest` runs on an **empty baseline** — it rejects both an untyped 409 and any
+  `ApiException(..., ApiErrorCodes.CONFLICT, ...)`, so the generic answer cannot return. Codes are published in the
+  OpenAPI document and asserted by `conflictCodesArePublishedInTheContract`.
 - MATCHING pairs are still a JSON string on the wire (validated at authoring, parsed by the same parser grading
   uses); a typed pair structure was offered to the frontend and not yet requested.
 - Gates not executed: T-16 real textbook E2E, T-17 OCR on Windows+Docker, T-18 real StepFun/BYOK, T-21 container E2E,
@@ -237,6 +238,13 @@ Full suite on real MySQL again: **1056 tests / 0 failures / 0 errors / 2 skipped
   `status='NEEDS_REVIEW'` rows of that revision — so re-running a suggestion is safe and a human-confirmed node
   survives. The proposal comes from the document's headings, never from knowledge categories. Covered by
   `SourceOutlineProposalIntegrationTest` (6) and three new cases in `AiContentStructureIsolationTest`.
+
+## Round 2026-10-14 (fourth) — F-30 finished, codes published
+Converted the remaining ~30 untyped 409 sites, emptied the `ErrorCodeRatchetTest` baseline, and extended
+`conflictCodesArePublishedInTheContract` to the whole vocabulary (40 codes). Full suite: **1056 / 0 / 0 / 2**;
+`:8080` restarted on a5a7d97, api-client regenerated (descriptions only, no type breakage) and typechecked.
+Two AI tests that asserted the old exception type now assert `ApiException` plus the code. Frontend informed and the
+verification window re-opened (the shared schema was wiped by the final suite run, so data must be recreated).
 
 ## Git
 User owns all git writes.
