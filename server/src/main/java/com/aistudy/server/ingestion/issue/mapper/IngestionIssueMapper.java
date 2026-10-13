@@ -55,4 +55,21 @@ public interface IngestionIssueMapper extends BaseMapper<IngestionIssue> {
             + "ORDER BY ii.created_at DESC, ii.id DESC")
     List<IngestionIssue> selectBySpaceAndSource(@Param("spaceId") Long spaceId,
                                                 @Param("sourceId") Long sourceId);
+
+    /**
+     * Append-only addition for the Source publish gate (checklist §3.14:
+     * blocker issues must forbid publish).
+     *
+     * <p>Counts the rows the pipeline itself produces as blockers:
+     * {@code severity = 'HIGH'} (what {@code IngestionIssueService} writes for
+     * {@code EXTRACTION_PARTIAL_FAILURE}) and {@code status = 'OPEN'} (the
+     * V042 column default, cleared only by {@code resolve} / {@code ignore},
+     * which write RESOLVED / IGNORED). Literals rather than parameters so the
+     * blocker definition cannot be widened by a caller.
+     */
+    @Select("SELECT COUNT(*) FROM ingestion_issue ii "
+            + "WHERE ii.space_id = #{spaceId} AND ii.source_id = #{sourceId} "
+            + "  AND ii.severity = 'HIGH' AND ii.status = 'OPEN'")
+    int countOpenBlockersBySource(@Param("spaceId") Long spaceId,
+                                  @Param("sourceId") Long sourceId);
 }

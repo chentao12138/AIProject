@@ -76,9 +76,23 @@ public interface ContentBlockMapper extends BaseMapper<ContentBlock> {
     List<ContentBlock> selectByRevision(@Param("revisionId") Long revisionId,
                                         @Param("spaceId") Long spaceId);
 
+    /**
+     * Blocks extracted from one asset, owner-scoped.
+     *
+     * <p>{@code content_block} has no {@code source_asset_id} column (V011
+     * creates the table without it and V053 only adds
+     * {@code extraction_revision_id}), so the asset is reached through the
+     * page the block belongs to — the same join
+     * {@link #deleteBySpaceSourceAsset} uses. A previous version of this
+     * statement filtered on {@code cb.source_asset_id} and therefore failed
+     * with "Unknown column" the first time it was ever executed;
+     * {@code ContentBlockMapperColumnGuardTest} now checks every column this
+     * mapper names against the migration chain.
+     */
     @Select("SELECT cb.* FROM content_block cb "
+            + "JOIN source_page sp ON sp.id = cb.source_page_id "
             + "JOIN learning_space ls ON ls.id = cb.space_id "
-            + "WHERE cb.source_asset_id = #{sourceAssetId} AND cb.space_id = #{spaceId} "
+            + "WHERE sp.source_asset_id = #{sourceAssetId} AND cb.space_id = #{spaceId} "
             + "  AND ls.owner_subject = #{ownerSubject} "
             + "ORDER BY cb.sort_order ASC, cb.id ASC")
     List<ContentBlock> selectBySpaceSourceAssetOwner(@Param("sourceAssetId") Long sourceAssetId,

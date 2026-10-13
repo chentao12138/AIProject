@@ -1,23 +1,29 @@
 package com.aistudy.server.admin.source.controller;
 
+import com.aistudy.server.admin.source.dto.CreateManualSourceRequest;
 import com.aistudy.server.admin.source.service.AdminSourceIngestionService;
 import com.aistudy.server.admin.source.service.AdminSourceIngestionService.RawAsset;
 import com.aistudy.server.ingestion.issue.entity.IngestionIssue;
 import com.aistudy.server.ingestion.revision.entity.ExtractionRevision;
+import com.aistudy.server.source.dto.SourceResponse;
 import com.aistudy.server.source.page.entity.SourcePage;
 import com.aistudy.server.storage.StorageService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import jakarta.validation.Valid;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -52,6 +58,29 @@ public class AdminSourceIngestionController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return governance.listSources(q, spaceId, page, size);
+    }
+
+    /**
+     * Creates an ADMIN_MANUAL source whose typed body really becomes content
+     * (F-04): source row + extraction revision + one BODY page + ordered
+     * content blocks, in {@code NEEDS_REVIEW}, reachable by the ordinary
+     * review → publish → page/block → Search/AI chain without touching the
+     * database by hand.
+     *
+     * <p>{@code spaceId} is a query parameter to match this controller's other
+     * space-addressed routes; the space must be one the caller owns, since the
+     * governance lane has no cross-owner space write today (404 otherwise).
+     * Size and encoding failures of the body are the shared text-ingestion
+     * limits: 413 {@code SOURCE_BODY_TOO_LARGE} and 400.
+     */
+    @PostMapping(value = "/manual", produces = MediaType.APPLICATION_JSON_VALUE,
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    public SourceResponse createManual(@RequestParam Long spaceId,
+                                       @Valid @RequestBody CreateManualSourceRequest request,
+                                       Authentication authentication) {
+        return SourceResponse.from(governance.createManualSource(
+                authentication.getName(), spaceId, request));
     }
 
     @GetMapping("/{sourceId}")
