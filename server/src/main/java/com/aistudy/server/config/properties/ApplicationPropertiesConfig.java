@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Configuration;
         OperationsProperties.class,
         BootstrapAdminProperties.class,
         IngestionWorkerProperties.class,
+        IngestionReviewProperties.class,
         AiProperties.class
 })
 public class ApplicationPropertiesConfig {

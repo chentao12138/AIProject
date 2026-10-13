@@ -28,6 +28,14 @@ public interface SourceOutlineNodeMapper extends BaseMapper<SourceOutlineNode> {
     List<SourceOutlineNode> selectByRevision(@Param("revisionId") Long revisionId,
                                              @Param("spaceId") Long spaceId);
 
+    /** Nodes of one revision whose extraction confidence is below the threshold. */
+    @Select("SELECT COUNT(*) FROM source_outline_node "
+            + "WHERE space_id = #{spaceId} AND extraction_revision_id = #{revisionId} "
+            + "  AND confidence IS NOT NULL AND confidence < #{threshold}")
+    int countLowConfidenceByRevision(@Param("spaceId") Long spaceId,
+                                     @Param("revisionId") Long revisionId,
+                                     @Param("threshold") double threshold);
+
     /** Direct children count used to refuse delete-with-children (409). */
     @Select("SELECT COUNT(*) FROM source_outline_node WHERE parent_id = #{nodeId}")
     int countChildren(@Param("nodeId") Long nodeId);

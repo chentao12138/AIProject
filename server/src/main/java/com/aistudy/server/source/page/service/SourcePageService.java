@@ -76,6 +76,11 @@ public class SourcePageService {
      * <p>The caller must already have proved it owns {@code spaceId}; the page
      * row itself is checked against that space here.
      */
+    /** Low-confidence pages of one revision, in page order. Audit F-06. */
+    public List<SourcePage> listLowOrderConfidence(Long spaceId, Long revisionId, double threshold) {
+        return sourcePageMapper.selectLowOrderConfidenceByRevision(spaceId, revisionId, threshold);
+    }
+
     public SourcePage getMine(String ownerSubject, Long spaceId, Long pageId) {
         if (pageId == null || spaceId == null) {
             return null;

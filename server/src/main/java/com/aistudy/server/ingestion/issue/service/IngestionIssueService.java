@@ -70,6 +70,65 @@ public class IngestionIssueService {
     }
 
     /**
+     * Pipeline producer for the ordering and outline issues (audit F-06).
+     *
+     * <p>Only OCR confidence and partial extraction were ever produced
+     * automatically, so the requirement's "low ordering confidence / low outline
+     * confidence goes to review" had no path: a source could be published with a
+     * scrambled page order nobody was ever told about. The scan lives in
+     * {@link StructuringReviewSignals}, which reads the owning services and caps
+     * the page-level rows; this method only writes what it is handed.
+     *
+     * <p>Severity is {@code MEDIUM} on purpose: these need a reviewer decision
+     * (resolve or ignore), but they do not block publication the way a
+     * {@code HIGH} {@code EXTRACTION_PARTIAL_FAILURE} does.
+     *
+     * @return rows written
+     */
+    @Transactional
+    public int recordOrderingIssues(Long spaceId, Long sourceId, Long jobId, Long revisionId,
+                                    java.util.List<Long> lowConfidencePageIds, int omittedPageCount,
+                                    int lowConfidenceOutlineNodes) {
+        LocalDateTime now = LocalDateTime.now();
+        int written = 0;
+        for (Long pageId : lowConfidencePageIds) {
+            String suffix = omittedPageCount > 0
+                    ? " (plus " + omittedPageCount + " more pages below the same threshold)"
+                    : "";
+            insert(spaceId, sourceId, jobId, revisionId, pageId, "ORDER_LOW_CONFIDENCE", "MEDIUM",
+                    "Page order confidence below threshold for "
+                            + "aistudy.ingestion.review.order-confidence-threshold" + suffix,
+                    "Page ordering needs review" + suffix, now);
+            written++;
+        }
+        if (lowConfidenceOutlineNodes > 0) {
+            insert(spaceId, sourceId, jobId, revisionId, null, "OUTLINE_LOW_CONFIDENCE", "MEDIUM",
+                    lowConfidenceOutlineNodes + " outline node(s) below the confidence threshold",
+                    "Extracted outline needs review", now);
+            written++;
+        }
+        return written;
+    }
+
+    private void insert(Long spaceId, Long sourceId, Long jobId, Long revisionId, Long pageId,
+                        String issueType, String severity, String message, String safeMessage,
+                        LocalDateTime now) {
+        IngestionIssue issue = new IngestionIssue();
+        issue.setSpaceId(spaceId);
+        issue.setSourceId(sourceId);
+        issue.setIngestionJobId(jobId);
+        issue.setExtractionRevisionId(revisionId);
+        issue.setSourcePageId(pageId);
+        issue.setIssueType(issueType);
+        issue.setSeverity(severity);
+        issue.setStatus("OPEN");
+        issue.setMessage(message);
+        issue.setSafeMessage(safeMessage);
+        issue.setCreatedAt(now);
+        ingestionIssueMapper.insert(issue);
+    }
+
+    /**
      * Pipeline producer for automatic issues (C-5.10).
      * Low OCR confidence → OCR_LOW_CONFIDENCE; partial extraction → EXTRACTION_PARTIAL_FAILURE.
      */

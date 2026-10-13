@@ -65,6 +65,7 @@ public class IngestionJobService {
     private final ExtractionRevisionService extractionRevisionService;
     private final StorageService storageService;
     private final com.aistudy.server.ingestion.issue.service.IngestionIssueService ingestionIssueService;
+    private final com.aistudy.server.ingestion.issue.service.StructuringReviewSignals structuringReviewSignals;
     private final ZipEntryAssetExtractor zipEntryAssetExtractor;
 
     public IngestionJobService(IngestionJobMapper ingestionJobMapper,
@@ -84,6 +85,7 @@ public class IngestionJobService {
                                ExtractionRevisionService extractionRevisionService,
                                StorageService storageService,
                                com.aistudy.server.ingestion.issue.service.IngestionIssueService ingestionIssueService,
+                               com.aistudy.server.ingestion.issue.service.StructuringReviewSignals structuringReviewSignals,
                                ZipEntryAssetExtractor zipEntryAssetExtractor) {
         this.ingestionJobMapper = ingestionJobMapper;
         this.sourceAssetMapper = sourceAssetMapper;
@@ -101,6 +103,7 @@ public class IngestionJobService {
         this.extractionRevisionService = extractionRevisionService;
         this.storageService = storageService;
         this.ingestionIssueService = ingestionIssueService;
+        this.structuringReviewSignals = structuringReviewSignals;
         this.zipEntryAssetExtractor = zipEntryAssetExtractor;
     }
 
@@ -275,6 +278,13 @@ public class IngestionJobService {
             ingestionIssueService.recordIfLowConfidence(
                     job.getSpaceId(), job.getSourceId(), job.getId(),
                     revision.getId(), anyLowConfidence, failed > 0);
+            // F-06: page ordering and outline confidence were only ever data on
+            // the rows. Turning them into issues is what makes them a review step.
+            com.aistudy.server.ingestion.issue.service.StructuringReviewSignals.Signals reviewSignals =
+                    structuringReviewSignals.scan(job.getSpaceId(), revision.getId());
+            ingestionIssueService.recordOrderingIssues(job.getSpaceId(), job.getSourceId(),
+                    job.getId(), revision.getId(), reviewSignals.lowConfidencePageIds(),
+                    reviewSignals.omittedPageCount(), reviewSignals.lowConfidenceOutlineNodes());
             ingestionJobMapper.markStageComplete(jobId, "EXTRACT", LocalDateTime.now());
 
             // Terminal for this job either way: the failure path stamps finished_at

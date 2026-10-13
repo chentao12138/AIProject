@@ -83,6 +83,19 @@ public interface SourcePageMapper extends BaseMapper<SourcePage> {
     List<SourcePage> selectByRevision(@Param("revisionId") Long revisionId,
                                       @Param("spaceId") Long spaceId);
 
+    /**
+     * Pages of one revision whose ordering confidence is below the review
+     * threshold. A null confidence is "no signal", not a bad order, so it is
+     * deliberately not selected (audit F-06).
+     */
+    @Select("SELECT sp.* FROM source_page sp "
+            + "WHERE sp.space_id = #{spaceId} AND sp.extraction_revision_id = #{revisionId} "
+            + "  AND sp.order_confidence IS NOT NULL AND sp.order_confidence < #{threshold} "
+            + "ORDER BY sp.page_order ASC, sp.id ASC")
+    List<SourcePage> selectLowOrderConfidenceByRevision(@Param("spaceId") Long spaceId,
+                                                        @Param("revisionId") Long revisionId,
+                                                        @Param("threshold") double threshold);
+
     /** Single page inside one space (ADMIN governance read; no owner predicate). */
     @Select("SELECT sp.* FROM source_page sp WHERE sp.id = #{pageId} AND sp.space_id = #{spaceId}")
     SourcePage selectByIdAndSpace(@Param("pageId") Long pageId,

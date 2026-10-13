@@ -55,6 +55,15 @@ aistudy:
       max-entry-uncompressed-bytes: ${AISTUDY_INGESTION_ZIP_MAX_ENTRY_BYTES:4GB}
       max-total-uncompressed-bytes: ${AISTUDY_INGESTION_ZIP_MAX_TOTAL_BYTES:16GB}
       max-compression-ratio: ${AISTUDY_INGESTION_ZIP_MAX_RATIO:200}
+    review:
+      # Audit F-06: rows below these confidences become MEDIUM review issues.
+      # null confidence means "no signal" (text-layer PDF, non-OCR asset) and is
+      # never flagged.
+      order-confidence-threshold: ${AISTUDY_ORDER_CONFIDENCE_THRESHOLD:0.7}
+      outline-confidence-threshold: ${AISTUDY_OUTLINE_CONFIDENCE_THRESHOLD:0.6}
+      # Cap on ORDER_LOW_CONFIDENCE rows per revision; the first issue says how
+      # many more pages exist so the review screen cannot look complete by accident.
+      max-issues-per-revision: ${AISTUDY_INGESTION_REVIEW_MAX_ISSUES:50}
     text:
       max-document-bytes: ${AISTUDY_INGESTION_TEXT_MAX_DOCUMENT_BYTES:64MB}
     pdf:

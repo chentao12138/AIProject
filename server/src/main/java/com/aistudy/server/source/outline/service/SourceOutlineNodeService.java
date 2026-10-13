@@ -50,6 +50,11 @@ public class SourceOutlineNodeService {
     }
 
     @Transactional
+    /** How many nodes of one revision were extracted with low confidence (F-06). */
+    public int countLowConfidence(Long spaceId, Long revisionId, double threshold) {
+        return sourceOutlineNodeMapper.countLowConfidenceByRevision(spaceId, revisionId, threshold);
+    }
+
     /** Nodes of one revision. Read through the owning module for version compare. */
     public List<SourceOutlineNode> listByRevision(Long spaceId, Long revisionId) {
         return sourceOutlineNodeMapper.selectByRevision(revisionId, spaceId);
