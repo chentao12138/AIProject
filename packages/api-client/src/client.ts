@@ -68,9 +68,6 @@ type CreateExamRequest =
 type ExamAnswerRequest =
   components['schemas']['ExamAnswerRequest'];
 
-type UpdateExamRequest =
-  components['schemas']['UpdateExamRequest'];
-
 type UpdateQuestionRequest =
   components['schemas']['UpdateQuestionRequest'];
 
@@ -759,30 +756,6 @@ export function createApiClient(
     async publishExam(spaceId: number, examId: number) {
       return client.POST(
         '/api/v1/spaces/{spaceId}/exams/{examId}/publish',
-        {
-          params: { path: { spaceId, examId } },
-          headers: await bearerHeaders(tokenProvider),
-        }
-      );
-    },
-
-    /**
-     * PUT .../exams/{examId} — edit a DRAFT exam.
-     */
-    async updateExam(spaceId: number, examId: number, body: UpdateExamRequest) {
-      return client.PUT('/api/v1/spaces/{spaceId}/exams/{examId}', {
-        params: { path: { spaceId, examId } },
-        body,
-        headers: await bearerHeaders(tokenProvider),
-      });
-    },
-
-    /**
-     * POST .../exams/{examId}/archive — retire an exam.
-     */
-    async archiveExam(spaceId: number, examId: number) {
-      return client.POST(
-        '/api/v1/spaces/{spaceId}/exams/{examId}/archive',
         {
           params: { path: { spaceId, examId } },
           headers: await bearerHeaders(tokenProvider),

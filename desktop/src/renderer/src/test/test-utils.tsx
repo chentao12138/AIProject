@@ -102,8 +102,6 @@ export function createMockApiClient(): ApiClient {
     createExam: vi.fn(async () => noData),
     getExam: vi.fn(async () => noData),
     publishExam: vi.fn(async () => noData),
-    updateExam: vi.fn(async () => noData),
-    archiveExam: vi.fn(async () => noData),
     createExamAttempt: vi.fn(async () => noData),
     startExamAttempt: vi.fn(async () => noData),
     getExamAttempt: vi.fn(async () => noData),

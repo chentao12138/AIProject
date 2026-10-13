@@ -161,6 +161,7 @@ not the same as requested:
 | `/study-plan/*`, `/review-tasks/*`, `/mastery/calibration/*`, `/ai/usage`, `/exam-blueprints/*` | No A-item names a study-plan, review-queue, calibration, usage-meter or blueprint surface. |
 | `POST /practice-sessions/{id}/questions/{id}/variant` | Variant generation is an AI-produces-new-question feature; A5 asks for answer/progress/resume/finish, not derivation. |
 | `/admin/**` (~25 endpoints) | B12.7 — the admin web is a separate project; the desktop client must not become it. |
+| `PUT /exams/{examId}`, `POST /exams/{examId}/archive` | A6.1 asks for exam setup / list / detail / start and A6.3 for result / review; nothing in A1–A11 asks to edit or retire a paper. `UpdateExamRequest` exists, but a draft that needs different questions is rebuilt in the create form, which is what the audit describes. These wrappers were added when the contract landed and **removed again** after a call-site check found nothing using them — an endpoint existing is not a requirement. |
 | `/auth/me/password`, `/admin/users/{subject}/reset-password` | B12.8 — self-service password reset / registration is excluded. |
 | `/sources/{id}/folder-sync/*`, `/versions/compare`, `/outline/*`, `/revisions` | Ingestion authoring surfaces belong to the admin/ingestion lane; A2.3 asks the client to verify upload → pages → blocks for the five supported formats, which it does. |
 
