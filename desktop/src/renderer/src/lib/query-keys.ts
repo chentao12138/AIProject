@@ -111,6 +111,24 @@ export const queryKeys = {
    */
   practiceSubmit: (spaceId: number | null, sessionId: number | null) =>
     ['practice-submit', part(spaceId), part(sessionId)] as const,
+  /**
+   * Answers the server already holds for a session. Keyed apart from the
+   * session detail because a refreshed page reads this to resume, and submitting
+   * an answer must not invalidate the question snapshot.
+   */
+  practiceAnswers: (spaceId: number | null, sessionId: number | null) =>
+    ['practice-answers', part(spaceId), part(sessionId)] as const,
+  // G01 — Notes. The list is paged, so the page belongs in the key.
+  notes: (
+    spaceId: number | null,
+    filters: { page?: number; size?: number; keyword?: string } = {}
+  ) => ['notes', part(spaceId), ...labelled(filters)] as const,
+  note: (spaceId: number | null, noteId: number | null) =>
+    ['note', part(spaceId), part(noteId)] as const,
+  noteKnowledgePoints: (spaceId: number | null, noteId: number | null) =>
+    ['note-knowledge-points', part(spaceId), part(noteId)] as const,
+  noteSourceBlocks: (spaceId: number | null, noteId: number | null) =>
+    ['note-source-blocks', part(spaceId), part(noteId)] as const,
   exams: (spaceId: number | null) => ['exams', part(spaceId)] as const,
   exam: (spaceId: number | null, examId: number | null) =>
     ['exam', part(spaceId), part(examId)] as const,

@@ -52,12 +52,13 @@ export type QuestionType = (typeof QUESTION_TYPES)[number];
  * from contract fields, so publishing it is not a lie.
  * `answerable` — `QuestionRenderer` collects an answer for it.
  *
- * ORDERING and MATCHING are false everywhere except `answerable` for ORDERING
- * because the contract has no way to carry a correct order or a pair set.
- * `question-type-contract.test.ts` asserts the two "cannot" claims by proving
- * the fields stay ABSENT from openapi.json; the day the backend publishes
- * `correctOrder` / a pair structure, that guard fails on purpose and this
- * matrix has to be re-decided.
+ * ORDERING and MATCHING became authorable when the published contract grew
+ * `correctOrder` / `matches` (create) and `orderingAnswer` / `matchingAnswer`
+ * (answer). What is still one-way is the read side — `QuestionAnswerView` has
+ * no order or pair field — which is why those two keep a review-only notice in
+ * `QUESTION_TYPE_DISPLAY_GAP`. `question-type-contract.test.ts` asserts the
+ * matrix against the contract fields themselves, so removing either side of the
+ * wire format fails the guard instead of silently closing the loop.
  */
 export interface QuestionTypeSupport {
   authorable: boolean;
@@ -79,6 +80,8 @@ export const AUTHORABLE_QUESTION_TYPES = [
   'TRUE_FALSE',
   'SHORT_ANSWER',
   'FILL_BLANK',
+  'ORDERING',
+  'MATCHING',
 ] as const satisfies readonly QuestionType[];
 
 export type AuthorableQuestionType =
@@ -90,18 +93,14 @@ export type AuthorableQuestionType =
  * can tell "not built yet" apart from "the contract cannot express it".
  */
 export const CONTRACT_GAP_NOTICES = {
-  ORDERING_AUTHORING:
-    '排序题暂不能在本题库创建：契约的 CreateQuestionRequest 没有任何表达标准顺序的字段（后端 Java 侧的 correctOrder 未进入已发布契约，缺口 C09）。没有标准顺序就无法判分，所以这里不把「能创建」说成「能发布」。',
-  ORDERING_ANSWER:
-    '排序题作答：你的顺序通过 AnswerPayloadView.selectedOptionKeys（有序数组）表达。契约无法提交标准顺序，后端目前无法判分（缺口 C09）。',
   ORDERING_REVIEW:
-    '无法显示标准顺序：QuestionAnswerView 只有 correctOptionKey / correctOptionKeys / correctBoolean / referenceAnswer，没有顺序字段（缺口 C09）。下面展示的是你提交的顺序（来自 AnswerPayloadView.selectedOptionKeys 的数组下标）。',
-  MATCHING:
-    '配对题暂不能创建、也不能作答：契约里不存在配对结构 —— CreateQuestionRequest 没有 matches、AnswerPayloadView 没有配对字段、QuestionAnswerView 没有 pairs。当前只读展示题干与选项。',
+    '无法回显标准顺序：契约的读侧 QuestionAnswerView 只有 correctOptionKey / correctOptionKeys / correctBoolean / referenceAnswer，没有 correctOrder，所以题库详情看不到创建时设的顺序（缺口 C09b）。批改结果里的 correctAnswer 仍会给出服务端判分用的顺序。',
+  MATCHING_REVIEW:
+    '无法回显标准配对：QuestionAnswerView 不携带 matchesJson，创建时设定的配对读不回来（缺口 C09b）。批改结果里的 correctAnswer 仍会给出服务端的配对。',
   QUESTION_PAGING:
     '列表没有分页：GET /questions 只接受 status / questionType / knowledgePointId，没有 page / size（缺口 C-Paging）。前端不会拉全量自己做假分页。',
-  QUESTION_UPDATE:
-    '题目不能编辑也不能删除或归档：契约在这里只有 GET 与 POST（含 /publish），没有 PUT /questions/{questionId}，也没有 DELETE / archive（缺口 G04 / G09）。用「新建」代替编辑会复制出一道新题，所以不提供。',
+  QUESTION_UPDATE_FIELDS:
+    '编辑只能改题干 / 解析 / 难度：契约的 UpdateQuestionRequest 只有 stem、explanation、difficulty 三个字段，选项与正确答案无法修改。要改答案只能新建一道题。',
 } as const;
 
 /** Per-type support matrix — the single source for every gate in this line. */
@@ -138,16 +137,16 @@ export const QUESTION_TYPE_SUPPORT: Record<QuestionType, QuestionTypeSupport> =
       gap: null,
     },
     ORDERING: {
-      authorable: false,
-      publishable: false,
+      authorable: true,
+      publishable: true,
       answerable: true,
-      gap: CONTRACT_GAP_NOTICES.ORDERING_AUTHORING,
+      gap: null,
     },
     MATCHING: {
-      authorable: false,
-      publishable: false,
-      answerable: false,
-      gap: CONTRACT_GAP_NOTICES.MATCHING,
+      authorable: true,
+      publishable: true,
+      answerable: true,
+      gap: null,
     },
   };
 
@@ -180,23 +179,16 @@ export function questionTypeGap(type?: string | null): string | null {
 }
 
 /**
- * Copy for the display of a type the contract cannot close, per surface:
- * `gap` is the authoring-side sentence (what the create form must refuse and
- * why), `reviewGap` is what a reader of a stored question is owed. They differ
- * because a question can already exist (imported, AI-derived) while the form
- * still cannot make one.
+ * Copy for the display of a type the contract cannot close, per surface.
+ * Answering is complete for every type now, so only the review of a *stored*
+ * question still owes the user an explanation: `QuestionAnswerView` has no
+ * `correctOrder` / `matchesJson`, so what the author set cannot be read back.
  */
 export const QUESTION_TYPE_DISPLAY_GAP: Partial<
-  Record<QuestionType, { answer: string; review: string }>
+  Record<QuestionType, { review: string }>
 > = {
-  ORDERING: {
-    answer: CONTRACT_GAP_NOTICES.ORDERING_ANSWER,
-    review: CONTRACT_GAP_NOTICES.ORDERING_REVIEW,
-  },
-  MATCHING: {
-    answer: CONTRACT_GAP_NOTICES.MATCHING,
-    review: CONTRACT_GAP_NOTICES.MATCHING,
-  },
+  ORDERING: { review: CONTRACT_GAP_NOTICES.ORDERING_REVIEW },
+  MATCHING: { review: CONTRACT_GAP_NOTICES.MATCHING_REVIEW },
 };
 
 /**
@@ -219,6 +211,12 @@ export const QUESTION_FIELD_LIMITS = {
   /** `maxItems` of AnswerPayloadView.selectedOptionKeys. */
   selectedOptionKeys: 16,
   textAnswer: 4000,
+  /** `maxItems` of CreateQuestionRequest.correctOrder / AnswerPayloadView.orderingAnswer. */
+  correctOrder: 100,
+  orderingAnswer: 100,
+  /** `maxLength` of CreateQuestionRequest.matches (a JSON pair array) and of the answer. */
+  matches: 4000,
+  matchingAnswer: 10000,
 } as const;
 
 /**
@@ -239,9 +237,24 @@ export const PRACTICE_COUNT_LIMITS = { min: 1, max: 100 } as const;
 export const EXAM_FORM_LIMITS = {
   titleMaxLength: 255,
   descriptionMaxLength: 1000,
-  durationMinMinutes: 1,
+  timeLimitMinMinutes: 1,
   maxQuestions: 100,
   questionScoreMin: 1,
+} as const;
+
+/**
+ * Notes form bounds (G01). `titleMaxLength` / `contentMaxLength` are the
+ * contract's `maxLength` on `NoteCreateRequest`; `contentFormats` is NOT in the
+ * contract (the field is a plain string) — it is the server's own
+ * `NoteService.CONTENT_FORMATS`, and anything else comes back as a 400.
+ */
+export const NOTE_FORM_LIMITS = {
+  titleMaxLength: 255,
+  contentMaxLength: 16000,
+  contentFormats: ['MARKDOWN', 'PLAIN_TEXT'] as const,
+  defaultContentFormat: 'PLAIN_TEXT',
+  /** `size` default declared on GET /notes. */
+  pageSize: 20,
 } as const;
 
 /**

@@ -102,7 +102,7 @@ describe('ExamsPage', () => {
       expect(createExam).toHaveBeenCalledWith(7, {
         title: '期中考',
         description: '第 1-3 章',
-        durationMinutes: 60,
+        timeLimitMinutes: 60,
         questions: [{ questionId: 29, score: 5 }],
       });
     });

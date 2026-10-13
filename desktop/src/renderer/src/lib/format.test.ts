@@ -70,15 +70,17 @@ describe('AUTHORABLE_QUESTION_TYPES (G02)', () => {
     }
   });
 
-  it('refuses ORDERING and MATCHING instead of pretending to publish them', () => {
-    expect(AUTHORABLE_QUESTION_TYPES).not.toContain('ORDERING');
-    expect(AUTHORABLE_QUESTION_TYPES).not.toContain('MATCHING');
-    expect(isAuthorableQuestionType('ORDERING')).toBe(false);
-    expect(isPublishableQuestionType('ORDERING')).toBe(false);
-    expect(isPublishableQuestionType('MATCHING')).toBe(false);
-    // ORDERING still has a usable interaction: selectedOptionKeys is ordered.
+  it('opens ORDERING and MATCHING now that the wire format exists', () => {
+    // `question-type-contract.test.ts` is what proves the contract really
+    // carries correctOrder / matches / orderingAnswer / matchingAnswer; this
+    // only pins that the matrix agrees with it.
+    expect(AUTHORABLE_QUESTION_TYPES).toContain('ORDERING');
+    expect(AUTHORABLE_QUESTION_TYPES).toContain('MATCHING');
+    expect(isAuthorableQuestionType('ORDERING')).toBe(true);
+    expect(isPublishableQuestionType('ORDERING')).toBe(true);
+    expect(isPublishableQuestionType('MATCHING')).toBe(true);
     expect(questionTypeSupport('ORDERING')?.answerable).toBe(true);
-    expect(questionTypeSupport('MATCHING')?.answerable).toBe(false);
+    expect(questionTypeSupport('MATCHING')?.answerable).toBe(true);
   });
 
   it('treats an unknown questionType as no opinion at all', () => {
@@ -100,35 +102,40 @@ describe('AUTHORABLE_QUESTION_TYPES (G02)', () => {
 });
 
 describe('contract-gap copy', () => {
-  it('names the missing fields instead of saying "not supported"', () => {
-    expect(CONTRACT_GAP_NOTICES.ORDERING_AUTHORING).toContain('CreateQuestionRequest');
-    expect(CONTRACT_GAP_NOTICES.ORDERING_AUTHORING).toContain('C09');
-    expect(CONTRACT_GAP_NOTICES.MATCHING).toContain('pairs');
+  it('names the fields it is talking about instead of saying "not supported"', () => {
+    expect(CONTRACT_GAP_NOTICES.ORDERING_REVIEW).toContain('QuestionAnswerView');
+    expect(CONTRACT_GAP_NOTICES.ORDERING_REVIEW).toContain('correctOrder');
+    expect(CONTRACT_GAP_NOTICES.MATCHING_REVIEW).toContain('matchesJson');
     expect(CONTRACT_GAP_NOTICES.QUESTION_PAGING).toContain('page');
-    expect(CONTRACT_GAP_NOTICES.QUESTION_UPDATE).toContain('PUT');
+    expect(CONTRACT_GAP_NOTICES.QUESTION_UPDATE_FIELDS).toContain(
+      'UpdateQuestionRequest'
+    );
   });
 
-  it('attaches the copy to the types it belongs to', () => {
-    expect(questionTypeGap('ORDERING')).toBe(CONTRACT_GAP_NOTICES.ORDERING_AUTHORING);
-    expect(questionTypeGap('MATCHING')).toBe(CONTRACT_GAP_NOTICES.MATCHING);
+  it('has no authoring gap left to attach', () => {
+    // Every type the contract can carry is now creatable, so nothing shows a
+    // refusal banner on the create form.
+    for (const type of AUTHORABLE_QUESTION_TYPES) {
+      expect(questionTypeGap(type), `${type} still refuses authoring`).toBeNull();
+    }
     expect(questionTypeGap('FILL_BLANK')).toBeNull();
     expect(questionTypeGap('SINGLE_CHOICE')).toBeNull();
   });
 
-  it('separates the authoring sentence from the display sentence', () => {
-    // A stored ORDERING question can be shown even though it cannot be
-    // created, so the renderer needs the review wording, not the create-form
-    // wording.
-    expect(QUESTION_TYPE_DISPLAY_GAP.ORDERING?.answer).toBe(
-      CONTRACT_GAP_NOTICES.ORDERING_ANSWER
-    );
+  it('keeps the read-side sentence on the review surface only', () => {
+    // Authoring and answering close the loop, but a stored question's standard
+    // order / pair set cannot be read back, so only the reader is owed a note.
     expect(QUESTION_TYPE_DISPLAY_GAP.ORDERING?.review).toBe(
       CONTRACT_GAP_NOTICES.ORDERING_REVIEW
     );
-    expect(QUESTION_TYPE_DISPLAY_GAP.ORDERING?.review).toContain('selectedOptionKeys');
     expect(QUESTION_TYPE_DISPLAY_GAP.MATCHING?.review).toBe(
-      CONTRACT_GAP_NOTICES.MATCHING
+      CONTRACT_GAP_NOTICES.MATCHING_REVIEW
     );
+    expect(
+      Object.values(QUESTION_TYPE_DISPLAY_GAP).every(
+        (entry) => entry !== undefined && 'review' in entry
+      )
+    ).toBe(true);
     // Nothing to flag for a type the contract closes.
     expect(QUESTION_TYPE_DISPLAY_GAP.FILL_BLANK).toBeUndefined();
     expect(QUESTION_TYPE_DISPLAY_GAP.SHORT_ANSWER).toBeUndefined();

@@ -25,6 +25,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EXAM_ATTEMPT_STATUSES,
   KNOWLEDGE_ORIGIN_TYPES,
+  NOTE_FORM_LIMITS,
   PRACTICE_SESSION_STATUSES,
   QUESTION_TYPES,
 } from './format';
@@ -58,6 +59,17 @@ const VOCABULARIES = {
     read: (src: string) =>
       [...src.matchAll(/String\s+STATUS_[A-Z_]+\s*=\s*"([A-Z_]+)"/g)].map((m) => m[1]),
     frontend: Object.values(PRACTICE_SESSION_STATUSES) as string[],
+  },
+  'note content format': {
+    // Not an enum in the contract — `contentFormat` is a plain string there,
+    // and the server 400s anything outside its own Set.of(...). The only way to
+    // know the accepted values is to read them from the code that enforces them.
+    file: join(SERVER, 'note', 'service', 'NoteService.java'),
+    read: (src: string) =>
+      [...src.matchAll(/CONTENT_FORMATS\s*=\s*Set\.of\(([^)]*)\)/g)].flatMap((m) =>
+        [...m[1].matchAll(/"([A-Z_]+)"/g)].map((q) => q[1])
+      ),
+    frontend: [...NOTE_FORM_LIMITS.contentFormats],
   },
   'knowledge origin type': {
     file: join(SERVER, 'knowledge', 'point', 'service', 'KnowledgePointService.java'),

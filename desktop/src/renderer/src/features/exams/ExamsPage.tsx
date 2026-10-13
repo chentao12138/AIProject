@@ -32,7 +32,7 @@ export function ExamsPage() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState(60);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(60);
   /** questionId -> score. The backend rejects an exam with no questions, and
    * a question without a score, so the form cannot submit either. */
   const [selected, setSelected] = useState<Record<number, number>>({});
@@ -72,10 +72,12 @@ export function ExamsPage() {
     formErrors.push(`说明最多 ${EXAM_FORM_LIMITS.descriptionMaxLength} 个字符。`);
   }
   if (
-    !Number.isInteger(durationMinutes) ||
-    durationMinutes < EXAM_FORM_LIMITS.durationMinMinutes
+    !Number.isInteger(timeLimitMinutes) ||
+    timeLimitMinutes < EXAM_FORM_LIMITS.timeLimitMinMinutes
   ) {
-    formErrors.push(`时长至少为 ${EXAM_FORM_LIMITS.durationMinMinutes} 分钟的整数。`);
+    formErrors.push(
+      `时长至少为 ${EXAM_FORM_LIMITS.timeLimitMinMinutes} 分钟的整数。`
+    );
   }
   if (questions.length === 0) {
     formErrors.push('至少选择一道题目。');
@@ -90,7 +92,7 @@ export function ExamsPage() {
         .createExam(requireId(spaceId, 'space id'), {
           title,
           description: description || undefined,
-          durationMinutes,
+          timeLimitMinutes,
           questions,
         })
         .then(unwrap),
@@ -139,7 +141,7 @@ export function ExamsPage() {
           </div>
           <div className="form__field">
             <label htmlFor="e-duration" className="form__label">时长（分钟）</label>
-            <input id="e-duration" className="input" type="number" min={EXAM_FORM_LIMITS.durationMinMinutes} value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))} />
+            <input id="e-duration" className="input" type="number" min={EXAM_FORM_LIMITS.timeLimitMinMinutes} value={timeLimitMinutes} onChange={(e) => setTimeLimitMinutes(Number(e.target.value))} />
           </div>
 
           <div className="form__field">

@@ -86,6 +86,9 @@ export function createMockApiClient(): ApiClient {
     getQuestion: vi.fn(async () => noData),
     createQuestion: vi.fn(async () => noData),
     publishQuestion: vi.fn(async () => noData),
+    updateQuestion: vi.fn(async () => noData),
+    archiveQuestion: vi.fn(async () => noData),
+    restoreQuestion: vi.fn(async () => noData),
     // Practice
     listPracticeSessions: vi.fn(async () => noData),
     createPracticeSession: vi.fn(async () => noData),
@@ -93,11 +96,14 @@ export function createMockApiClient(): ApiClient {
     startPracticeSession: vi.fn(async () => noData),
     finishPracticeSession: vi.fn(async () => noData),
     submitPracticeAnswer: vi.fn(async () => noData),
+    listPracticeAnswers: vi.fn(async () => noData),
     // Exams
     listExams: vi.fn(async () => noData),
     createExam: vi.fn(async () => noData),
     getExam: vi.fn(async () => noData),
     publishExam: vi.fn(async () => noData),
+    updateExam: vi.fn(async () => noData),
+    archiveExam: vi.fn(async () => noData),
     createExamAttempt: vi.fn(async () => noData),
     startExamAttempt: vi.fn(async () => noData),
     getExamAttempt: vi.fn(async () => noData),
@@ -111,6 +117,19 @@ export function createMockApiClient(): ApiClient {
     studyCoach: vi.fn(async () => noData),
     explainPracticeAnswer: vi.fn(async () => noData),
     explainExamAnswer: vi.fn(async () => noData),
+    // Notes (G01)
+    listNotes: vi.fn(async () => noData),
+    createNote: vi.fn(async () => noData),
+    getNote: vi.fn(async () => noData),
+    updateNote: vi.fn(async () => noData),
+    deleteNote: vi.fn(async () => noData),
+    archiveNote: vi.fn(async () => noData),
+    addNoteKnowledgePoints: vi.fn(async () => noData),
+    listNoteKnowledgePoints: vi.fn(async () => noData),
+    removeNoteKnowledgePoint: vi.fn(async () => noData),
+    addNoteSourceBlocks: vi.fn(async () => noData),
+    listNoteSourceBlocks: vi.fn(async () => noData),
+    removeNoteSourceBlock: vi.fn(async () => noData),
   } as unknown as ApiClient;
 }
 

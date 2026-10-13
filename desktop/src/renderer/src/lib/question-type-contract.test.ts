@@ -35,6 +35,8 @@ import {
   SPACE_FORM_LIMITS,
   KNOWLEDGE_FORM_LIMITS,
   SOURCE_FORM_LIMITS,
+  NOTE_FORM_LIMITS,
+  QUESTION_TYPE_DISPLAY_GAP,
   isAuthorableQuestionType,
   isPublishableQuestionType,
 } from './format';
@@ -78,6 +80,7 @@ interface ContractSchema {
   maximum?: number;
   items?: ContractSchema;
   properties?: Record<string, ContractSchema>;
+  required?: string[];
   parameters?: Array<{ name: string; in?: string }>;
 }
 
@@ -115,7 +118,7 @@ describe.skipIf(!hasContract)('exam form limits follow the contract', () => {
     const input = schema('ExamQuestionInput').properties ?? {};
     expect(EXAM_FORM_LIMITS.titleMaxLength).toBe(exam.title?.maxLength);
     expect(EXAM_FORM_LIMITS.descriptionMaxLength).toBe(exam.description?.maxLength);
-    expect(EXAM_FORM_LIMITS.durationMinMinutes).toBe(exam.durationMinutes?.minimum);
+    expect(EXAM_FORM_LIMITS.timeLimitMinMinutes).toBe(exam.timeLimitMinutes?.minimum);
     expect(EXAM_FORM_LIMITS.maxQuestions).toBe(exam.questions?.maxItems);
     expect(EXAM_FORM_LIMITS.questionScoreMin).toBe(input.score?.minimum);
   });
@@ -153,6 +156,28 @@ describe.skipIf(!hasContract)('space / knowledge / source form limits follow the
   });
 });
 
+/**
+ * Notes creation bounds (G01). `content` is the only required field in the
+ * contract, and the list endpoint is paged — unlike questions, which still has
+ * no paging params at all.
+ */
+describe.skipIf(!hasContract)('note form limits follow the contract', () => {
+  it('matches NoteCreateRequest and the paged list endpoint', () => {
+    const note = schema('NoteCreateRequest').properties ?? {};
+    expect(NOTE_FORM_LIMITS.titleMaxLength).toBe(note.title?.maxLength);
+    expect(NOTE_FORM_LIMITS.contentMaxLength).toBe(note.content?.maxLength);
+    expect(schema('NoteCreateRequest').required).toEqual(['content']);
+
+    const params =
+      (contract?.paths?.['/api/v1/spaces/{spaceId}/notes']?.get as
+        { parameters?: Array<{ name: string; schema?: { default?: number } }> })
+        ?.parameters ?? [];
+    const size = params.find((p) => p.name === 'size');
+    expect(size).toBeDefined();
+    expect(NOTE_FORM_LIMITS.pageSize).toBe(size?.schema?.default);
+  });
+});
+
 /** Every `body.<field> =` the create form assigns. */
 function fieldsWrittenByTheForm(): string[] {
   const source = readFileSync(FORM_PATH, 'utf8');
@@ -180,36 +205,47 @@ describe.skipIf(!hasContract)('question authoring body matches the contract', ()
     expect(written.filter((f) => !contractFields.has(f))).toEqual([]);
   });
 
-  it('cannot express a correct order or a pair set, so the gate stays closed', () => {
-    // C09: the backend Java record has `correctOrder` / `matches` and an
-    // `orderingAnswer` / `matchingAnswer` payload; neither reached the
-    // published contract, so the renderer must not pretend otherwise.
-    expect(fieldNames('CreateQuestionRequest')).not.toContain('correctOrder');
-    expect(fieldNames('CreateQuestionRequest')).not.toContain('matches');
-    expect(fieldNames('AnswerPayloadView')).toEqual([
+  it('carries the order and pair wire format, which is why both gates are open', () => {
+    const create = schema('CreateQuestionRequest').properties ?? {};
+    const payload = schema('AnswerPayloadView').properties ?? {};
+    expect(Object.keys(payload)).toEqual([
       'selectedOptionKeys',
       'booleanAnswer',
       'textAnswer',
+      'orderingAnswer',
+      'matchingAnswer',
     ]);
+    expect(create.correctOrder?.type).toBe('array');
+    expect(create.matches?.type).toBe('string');
+    expect(isAuthorableQuestionType('ORDERING')).toBe(true);
+    expect(isPublishableQuestionType('ORDERING')).toBe(true);
+    expect(isAuthorableQuestionType('MATCHING')).toBe(true);
+    expect(isPublishableQuestionType('MATCHING')).toBe(true);
+  });
+
+  it('numbers ordering positions from 1, so the renderer must not send 0', () => {
+    // AnswerPayloadView.orderingAnswer items carry `minimum: 1` and the server
+    // grades ORDERING by exact list equality against the stored correctOrder,
+    // so author and answerer share one index space: 1-based option positions.
+    const ordering = schema('AnswerPayloadView').properties?.orderingAnswer ?? {};
+    expect(ordering.items?.minimum).toBe(1);
+  });
+
+  it('cannot read a stored order or pair set back, so the review notice stays', () => {
+    // C09b: the write side grew correctOrder / matches, the read side did not.
     expect(fieldNames('QuestionAnswerView')).toEqual([
       'correctOptionKey',
       'correctOptionKeys',
       'correctBoolean',
       'referenceAnswer',
     ]);
-    expect(isAuthorableQuestionType('ORDERING')).toBe(false);
-    expect(isPublishableQuestionType('ORDERING')).toBe(false);
-    expect(isAuthorableQuestionType('MATCHING')).toBe(false);
-    expect(isPublishableQuestionType('MATCHING')).toBe(false);
-  });
-
-  it('has no pair structure anywhere in the contract', () => {
-    const json = JSON.stringify(schemas);
-    for (const invented of ['pairs', 'matchesJson', 'orderingAnswer', 'matchingAnswer', 'correctOrder']) {
-      expect(json, `contract unexpectedly declares ${invented}`).not.toContain(
-        `"${invented}"`
-      );
-    }
+    expect(QUESTION_TYPE_DISPLAY_GAP.ORDERING?.review).toContain(
+      'QuestionAnswerView'
+    );
+    expect(QUESTION_TYPE_DISPLAY_GAP.MATCHING?.review).toContain(
+      'QuestionAnswerView'
+    );
+    expect(QUESTION_TYPE_DISPLAY_GAP.SINGLE_CHOICE).toBeUndefined();
   });
 
   it('carries FILL_BLANK end to end, which is why it is authorable', () => {
@@ -239,6 +275,10 @@ describe.skipIf(!hasContract)('question field limits equal the contract limits',
     referenceAnswer: maxLengthOf('CreateQuestionRequest', 'referenceAnswer'),
     selectedOptionKeys: maxItemsOf('AnswerPayloadView', 'selectedOptionKeys'),
     textAnswer: maxLengthOf('AnswerPayloadView', 'textAnswer'),
+    correctOrder: maxItemsOf('CreateQuestionRequest', 'correctOrder'),
+    matches: maxLengthOf('CreateQuestionRequest', 'matches'),
+    orderingAnswer: maxItemsOf('AnswerPayloadView', 'orderingAnswer'),
+    matchingAnswer: maxLengthOf('AnswerPayloadView', 'matchingAnswer'),
   } as const;
 
   it('pins every declared limit', () => {
@@ -265,14 +305,26 @@ describe.skipIf(!hasContract)('question routes offer exactly the verbs the rende
   const collection = '/api/v1/spaces/{spaceId}/questions';
   const item = '/api/v1/spaces/{spaceId}/questions/{questionId}';
 
-  it('has no update, delete or archive verb (G04 / G09)', () => {
+  it('has update, archive and restore, and pins what update may change', () => {
     expect(Object.keys(contract?.paths[collection] ?? {})).toEqual(['get', 'post']);
-    expect(Object.keys(contract?.paths[item] ?? {})).toEqual(['get']);
+    expect(Object.keys(contract?.paths[item] ?? {}).sort()).toEqual(['get', 'put']);
     expect(
-      Object.keys(
-        contract?.paths[`${item}/publish`] ?? {}
-      )
+      Object.keys(contract?.paths[`${item}/publish`] ?? {})
     ).toEqual(['post']);
+    expect(
+      Object.keys(contract?.paths[`${item}/archive`] ?? {})
+    ).toEqual(['post']);
+    expect(
+      Object.keys(contract?.paths[`${item}/restore`] ?? {})
+    ).toEqual(['post']);
+
+    // G04: the edit form may only offer what UpdateQuestionRequest carries.
+    // Options and the correct answer are not editable — the detail page says so.
+    expect(fieldNames('UpdateQuestionRequest').sort()).toEqual([
+      'difficulty',
+      'explanation',
+      'stem',
+    ]);
   });
 
   it('has no paging params, so the list page must not fake a pager (C-Paging)', () => {
