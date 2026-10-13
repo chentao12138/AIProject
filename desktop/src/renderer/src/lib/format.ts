@@ -221,6 +221,14 @@ export const QUESTION_FIELD_LIMITS = {
   textAnswer: 4000,
 } as const;
 
+/**
+ * Practice session size bounds, copied from `CreatePracticeSessionRequest.count`
+ * (`minimum`/`maximum`) in the generated contract. The contract guard compares
+ * these numbers against openapi.json, so a deployment that widens the range
+ * fails the guard instead of leaving the form silently tighter than the server.
+ */
+export const PRACTICE_COUNT_LIMITS = { min: 1, max: 100 } as const;
+
 /** Backend question types -> display copy. Unknown values show as-is. */
 const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   SINGLE_CHOICE: '单选',

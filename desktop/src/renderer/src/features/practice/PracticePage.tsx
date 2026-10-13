@@ -19,7 +19,7 @@ import { spaceQuery } from '../../lib/queries';
 import { useSpaceId, requireId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { parseOptionalPositiveId } from '../../lib/ids';
-import { formatDateTime } from '../../lib/format';
+import { formatDateTime, PRACTICE_COUNT_LIMITS } from '../../lib/format';
 import type { CreatePracticeSessionBody } from '../../lib/types';
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
@@ -34,6 +34,10 @@ export function PracticePage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [count, setCount] = useState(10);
+  const countInvalid =
+    !Number.isInteger(count) ||
+    count < PRACTICE_COUNT_LIMITS.min ||
+    count > PRACTICE_COUNT_LIMITS.max;
   // W16/A9.2: arriving from a question or knowledge point passes the id in the
   // URL, so it is the source of truth for the selector instead of component
   // state that a link could never reach.
@@ -89,6 +93,9 @@ export function PracticePage() {
           className="form"
           onSubmit={(e) => {
             e.preventDefault();
+            if (countInvalid) {
+              return;
+            }
             start.mutate();
           }}
         >
@@ -98,11 +105,19 @@ export function PracticePage() {
               id="p-count"
               className="input"
               type="number"
-              min={1}
-              max={50}
+              min={PRACTICE_COUNT_LIMITS.min}
+              max={PRACTICE_COUNT_LIMITS.max}
               value={count}
               onChange={(e) => setCount(Number(e.target.value))}
             />
+            {/* `max` on a number input is not enforced while typing, so an
+                out-of-range value would only surface as a server 400. */}
+            {countInvalid && (
+              <p className="form__error" role="alert">
+                题目数量需为 {PRACTICE_COUNT_LIMITS.min}–{PRACTICE_COUNT_LIMITS.max}{' '}
+                之间的整数。
+              </p>
+            )}
           </div>
           <div className="form__field">
             <label htmlFor="p-kp" className="form__label">限定知识点（可选）</label>
@@ -124,7 +139,11 @@ export function PracticePage() {
             </p>
           )}
           <div className="form__actions">
-            <Button type="submit" variant="primary" disabled={start.isPending}>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={start.isPending || countInvalid}
+            >
               {start.isPending ? '创建中…' : '开始练习'}
             </Button>
           </div>

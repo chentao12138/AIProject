@@ -30,6 +30,7 @@ import {
   QUESTION_FIELD_LIMITS,
   QUESTION_TYPES,
   QUESTION_TYPE_SUPPORT,
+  PRACTICE_COUNT_LIMITS,
   isAuthorableQuestionType,
   isPublishableQuestionType,
 } from './format';
@@ -68,6 +69,9 @@ interface ContractSchema {
   maxLength?: number;
   minLength?: number;
   maxItems?: number;
+  minItems?: number;
+  minimum?: number;
+  maximum?: number;
   items?: ContractSchema;
   properties?: Record<string, ContractSchema>;
   parameters?: Array<{ name: string; in?: string }>;
@@ -80,6 +84,21 @@ const maxLengthOf = (name: string, field: string): number | undefined =>
   schema(name).properties?.[field]?.maxLength;
 const maxItemsOf = (name: string, field: string): number | undefined =>
   schema(name).properties?.[field]?.maxItems;
+
+/**
+ * The practice start form's own numeric bounds, pinned the same way as the
+ * question field limits: the form used to hard-code 1..50 while the contract
+ * says 1..100, which silently denied a legitimate session size.
+ */
+describe.skipIf(!hasContract)('practice count bounds follow the contract', () => {
+  it('offers exactly the range CreatePracticeSessionRequest.count allows', () => {
+    const count = schema('CreatePracticeSessionRequest').properties?.count ?? {};
+    expect(count.minimum).toBeDefined();
+    expect(count.maximum).toBeDefined();
+    expect(PRACTICE_COUNT_LIMITS.min).toBe(count.minimum);
+    expect(PRACTICE_COUNT_LIMITS.max).toBe(count.maximum);
+  });
+});
 
 /** Every `body.<field> =` the create form assigns. */
 function fieldsWrittenByTheForm(): string[] {
