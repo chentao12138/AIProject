@@ -25,6 +25,7 @@ import { AiSettingsPage } from '../features/ai/AiSettingsPage';
 import { AiChatPage } from '../features/ai/AiChatPage';
 import { QuestionsPage } from '../features/questions/QuestionsPage';
 import { QuestionDetailPage } from '../features/questions/QuestionDetailPage';
+import { QuestionEditPage } from '../features/questions/QuestionEditPage';
 import { QuestionForm } from '../features/questions/QuestionForm';
 import { PracticePage } from '../features/practice/PracticePage';
 import { PracticeSessionPage } from '../features/practice/PracticeSessionPage';
@@ -68,6 +69,7 @@ export const router = createHashRouter([
           { path: 'questions', element: <QuestionsPage /> },
           { path: 'questions/new', element: <QuestionForm /> },
           { path: 'questions/:questionId', element: <QuestionDetailPage /> },
+          { path: 'questions/:questionId/edit', element: <QuestionEditPage /> },
           { path: 'practice', element: <PracticePage /> },
           { path: 'practice/:sessionId', element: <PracticeSessionPage /> },
           { path: 'exams', element: <ExamsPage /> },

@@ -115,6 +115,7 @@ describe('route contract', () => {
       '/spaces/:spaceId/exams',
       '/spaces/:spaceId/notes',
       '/spaces/:spaceId/notes/:noteId',
+      '/spaces/:spaceId/questions/:questionId/edit',
     ]) {
       expect(ROUTE_PATTERNS).toContain(expected);
     }

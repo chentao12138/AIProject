@@ -33,7 +33,8 @@ cannot silently drift from the links.
 | `/spaces/:spaceId/ai/:conversationId` | `AiChatPage` | AI tutor (existing conversation) |
 | `/spaces/:spaceId/questions` | `QuestionsPage` | Question list / filters |
 | `/spaces/:spaceId/questions/new` | `QuestionForm` | Create question |
-| `/spaces/:spaceId/questions/:questionId` | `QuestionDetailPage` | Question detail + publish |
+| `/spaces/:spaceId/questions/:questionId` | `QuestionDetailPage` | Question detail + publish + archive/restore |
+| `/spaces/:spaceId/questions/:questionId/edit` | `QuestionEditPage` | Edit stem / explanation / difficulty — the only fields `UpdateQuestionRequest` carries |
 | `/spaces/:spaceId/practice` | `PracticePage` | Practice start + history |
 | `/spaces/:spaceId/practice/:sessionId` | `PracticeSessionPage` | Active practice session |
 | `/spaces/:spaceId/exams` | `ExamsPage` | Exam list + create |
