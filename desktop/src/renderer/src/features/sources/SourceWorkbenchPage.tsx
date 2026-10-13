@@ -22,10 +22,25 @@
  *     The reader selection is read from `?page=` (W15), and the URL is
  *     normalized whenever it points at a page of a different asset, so
  *     state, highlight and history can never disagree with the screen.
+ *     A `page`/`block` that cannot belong to the current asset is REMOVED
+ *     once the source's asset+page lists have arrived (W15: an asset with no
+ *     pages yet must not keep another asset's page in the URL); before they
+ *     arrive the URL is left alone, because nothing is known yet and a valid
+ *     deep link must survive the load.
+ *   - Cross-module shortcuts (W16): source / page / content block each offer
+ *     新建笔记 with the ids the contract really carries for that entity, and
+ *     问 AI opens the AI workspace. `SendMessageRequest` is still `{content}`
+ *     only (C03), so no context is claimed to be attached and no AI query
+ *     param is invented — AiChatPage reads nothing but `:conversationId`.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
 import {
@@ -148,17 +163,53 @@ export function SourceWorkbenchPage() {
   });
   const latestJob = assetJob.job;
   const latestPages = filterPagesForAsset(allPages, latestAsset?.id);
+  // W15: "this asset has no pages" is only a FACT once both the asset list
+  // and the page list have arrived for this source. Until then the page set is
+  // unknown, so the URL normaliser must not rewrite — let alone delete — a
+  // `?page=&block=` deep link on a guess.
+  const pageSetResolved = assetsQuery.isSuccess && pagesQuery.isSuccess;
 
   return (
     <div className="page">
       <PageHeader
         title={source?.title ?? '来源详情'}
         actions={
-          <Button onClick={() => navigate(`/spaces/${spaceId}/sources`)}>
-            返回来源列表
-          </Button>
+          <>
+            <Button onClick={() => navigate(`/spaces/${spaceId}/sources`)}>
+              返回来源列表
+            </Button>
+            {/* W16: a note started here is attached to THIS source. `sourceId`
+                is the only context id a source itself owns — the page and
+                content-block links live in the reader below, where those ids
+                are on screen. The keys are the Notes list page's own prefill
+                keys; its listing keys (`page`/`size`/`keyword`) are not
+                touched, and neither is the reader's `?page=`. */}
+            <Link
+              className="nav-link"
+              data-testid="source-note-link"
+              to={`/spaces/${spaceId}/notes?${new URLSearchParams({
+                sourceId: String(sourceId),
+              }).toString()}`}
+            >
+              新建笔记
+            </Link>
+            {/* W16: an entry into the AI workspace, and only that. The
+                contract's SendMessageRequest carries `content` alone (C03), so
+                this link names no context param and the copy below never
+                claims the source travels with it. */}
+            <Link
+              className="nav-link"
+              data-testid="source-ai-link"
+              to={`/spaces/${spaceId}/ai`}
+            >
+              问 AI
+            </Link>
+          </>
         }
       />
+      <p className="page__note" data-testid="ai-entry-note">
+        问 AI 打开 AI 辅导；这条来源的内容不会自动附带，请在提问里描述要讨论的部分。
+      </p>
 
       <BusinessSummary
         source={source}
@@ -188,6 +239,7 @@ export function SourceWorkbenchPage() {
         latestJobStatus={latestJob?.status}
         jobScope={assetJob.source}
         latestPages={latestPages}
+        pageSetResolved={pageSetResolved}
       />
     </div>
   );
@@ -748,12 +800,14 @@ function ContentSection({
   latestJobStatus,
   jobScope,
   latestPages,
+  pageSetResolved,
 }: {
   spaceId: number;
   sourceId: number;
   latestAssetId?: number;
   latestJobStatus?: string | null;
   jobScope: AssetJobResolution['source'];
+  pageSetResolved: boolean;
   latestPages: {
     id?: number;
     pageType?: string;
@@ -772,7 +826,7 @@ function ContentSection({
   // W15: `?page=` is the single source of truth for the selected page, so
   // back/forward/refresh can never disagree with what is rendered. A page id
   // that is not part of the CURRENT asset's pages is a stale deep link — it
-  // selects nothing, and the URL is normalized below instead of staying
+  // selects nothing, and the URL is rewritten below instead of staying
   // pointed at another asset's page while pages[0] shows.
   const urlPageId = parsePositiveIdParam(searchParams.get('page') ?? undefined);
   const urlBlockId = parsePositiveIdParam(searchParams.get('block') ?? undefined);
@@ -786,23 +840,46 @@ function ContentSection({
   const highlightBlockId = pageBelongsToAsset ? urlBlockId : null;
 
   useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+
     if (selectedPageId === null) {
+      // The current asset has no page to select. If its page set has settled,
+      // any `page`/`block` left in the URL can only be another asset's, so it
+      // is removed instead of lingering as residue (and resurrecting on
+      // refresh). Before the set settles, nothing is known and the URL stays
+      // exactly as it is — that is what keeps a valid deep link alive through
+      // the load.
+      if (
+        !pageSetResolved ||
+        (!searchParams.has('page') && !searchParams.has('block'))
+      ) {
+        return;
+      }
+      next.delete('page');
+      next.delete('block');
+      setSearchParams(next, { replace: true });
       return;
     }
+
     const pageIsCurrent = searchParams.get('page') === String(selectedPageId);
     const blockIsConsistent =
       highlightBlockId !== null || !searchParams.has('block');
     if (pageIsCurrent && blockIsConsistent) {
       return;
     }
-    const next = new URLSearchParams(searchParams);
     next.set('page', String(selectedPageId));
     if (highlightBlockId === null) {
       next.delete('block');
     }
     // replace: normalizing state is not a navigation the user can go back to.
     setSearchParams(next, { replace: true });
-  }, [selectedPageId, highlightBlockId, searchParams, setSearchParams]);
+  }, [
+    selectedPageId,
+    highlightBlockId,
+    pageSetResolved,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const status = (latestJobStatus ?? '').trim().toUpperCase();
   const isImagePages = pages.length > 0 && pages.every(
@@ -959,14 +1036,32 @@ function ContentSection({
       </div>
 
       {selectedPage && isPositiveId(selectedPage.id) && (
-        <PageContent
-          spaceId={spaceId}
-          sourceId={sourceId}
-          pageId={selectedPage.id}
-          pageType={selectedPage.pageType}
-          extractedText={selectedPage.extractedText}
-          highlightBlockId={highlightBlockId}
-        />
+        <>
+          {/* W16: the entity on screen here is the page, so the note starts
+              with the two ids this screen really has — the source from the
+              route and this page. Its block, when there is one, is linked
+              from the block itself and adds `contentBlockId`. */}
+          <p className="page__note">
+            <Link
+              className="nav-link"
+              data-testid="page-note-link"
+              to={`/spaces/${spaceId}/notes?${new URLSearchParams({
+                sourceId: String(sourceId),
+                sourcePageId: String(selectedPage.id),
+              }).toString()}`}
+            >
+              本页新建笔记
+            </Link>
+          </p>
+          <PageContent
+            spaceId={spaceId}
+            sourceId={sourceId}
+            pageId={selectedPage.id}
+            pageType={selectedPage.pageType}
+            extractedText={selectedPage.extractedText}
+            highlightBlockId={highlightBlockId}
+          />
+        </>
       )}
     </section>
   );
@@ -1052,18 +1147,19 @@ function PageContent({
   return (
     <div className="content-blocks">
       {blocks.map((block, index) => {
+        const blockId = block.id;
         const isHighlighted =
-          highlightBlockId !== null && block.id === highlightBlockId;
+          highlightBlockId !== null && blockId === highlightBlockId;
         return (
           <article
-            key={block.id ?? `block-${index}`}
+            key={blockId ?? `block-${index}`}
             className={
               isHighlighted
                 ? 'content-block content-block--highlighted'
                 : 'content-block'
             }
             data-testid="content-block"
-            data-block-id={block.id}
+            data-block-id={blockId}
           >
             <p className="content-block__type muted">
               {block.blockType ?? 'TEXT'}
@@ -1072,6 +1168,27 @@ function PageContent({
             <pre className="content-block__text">
               {block.normalizedText ?? '—'}
             </pre>
+            {isPositiveId(blockId) && (
+              <p className="page__note">
+                {/* W16: the three ids this content block really has — the
+                    source the workbench is open on, the page these blocks were
+                    read from, and the block itself. The Notes form keeps the
+                    most specific pointer (block > page > source) and lets the
+                    server resolve the chain, so none of them is invented. */}
+                <Link
+                  className="nav-link"
+                  data-testid="block-note-link"
+                  aria-label={`为片段 #${blockId} 新建笔记`}
+                  to={`/spaces/${spaceId}/notes?${new URLSearchParams({
+                    sourceId: String(sourceId),
+                    sourcePageId: String(pageId),
+                    contentBlockId: String(blockId),
+                  }).toString()}`}
+                >
+                  新建笔记
+                </Link>
+              </p>
+            )}
           </article>
         );
       })}

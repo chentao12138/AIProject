@@ -86,6 +86,69 @@ describe('KnowledgePointDetailPage', () => {
     );
   });
 
+  it('links the point to a prefilled note and to the AI workspace (W16)', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: {
+          id: 5,
+          spaceId: 3,
+          title: 'Draft note',
+          content: 'body',
+          status: 'DRAFT',
+        },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        data: [
+          {
+            id: 70,
+            spaceId: 3,
+            knowledgePointId: 5,
+            contentBlockId: 31,
+            sourceId: 3,
+            sourcePageId: 20,
+            relationType: 'DERIVED_FROM',
+          },
+        ],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    // `knowledgePointId` is the only context id a knowledge point itself owns:
+    // the source/page/block trio belongs to the provenance rows, and the Notes
+    // list page's own listing keys (`page`, `size`, `keyword`) are not reused
+    // for a prefill.
+    expect(await screen.findByTestId('point-note-link')).toHaveAttribute(
+      'href',
+      '/spaces/3/notes?knowledgePointId=5'
+    );
+    // C03: the contract's SendMessageRequest is `{content}` alone and AiChatPage
+    // reads nothing but `:conversationId`, so this is a bare route — no context
+    // id, and no query key the AI page would silently ignore.
+    expect(screen.getByTestId('point-ai-link')).toHaveAttribute(
+      'href',
+      '/spaces/3/ai'
+    );
+    // The copy says plainly that nothing is attached.
+    expect(screen.getByTestId('ai-entry-note')).toHaveTextContent('不会自动附带');
+
+    // The provenance row keeps deep-linking into the reader with the ids the
+    // server sends — that reader is where the block-level note link lives.
+    expect(
+      screen.getByRole('link', { name: 'Content block #31' })
+    ).toHaveAttribute('href', '/spaces/3/sources/3?page=20&block=31');
+  });
+
   it('shows no active publish CTA for a PUBLISHED point (K1.10)', async () => {
     const apiClient = mockApiClient({
       listKnowledgeCategories: vi.fn(async () => ({

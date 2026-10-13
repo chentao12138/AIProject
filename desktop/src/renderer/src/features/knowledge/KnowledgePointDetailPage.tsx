@@ -10,6 +10,13 @@
  * Provenance: BUSINESS-007 stable links (listKnowledgePointSources)
  * are shown when the contract exposes them. Navigation only for
  * positive source ids that have a real route.
+ *
+ * W16 cross-module shortcuts (相关学习): question list, practice start,
+ * Notes prefill (`?knowledgePointId=`) and an AI-workspace entry are all
+ * reachable from the point itself, with the ids this entity really has.
+ * The AI entry is a plain route — the contract's SendMessageRequest still
+ * takes only `content` (C03), so nothing here claims attached context and
+ * no query param is invented for a page that ignores it.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -235,7 +242,41 @@ export function KnowledgePointDetailPage() {
               就此知识点开始练习
             </Link>
           </li>
+          <li>
+            {/* W16: `knowledgePointId` is the one context id this entity owns;
+                the source/page/block trio belongs to 来源追溯 below, where the
+                server supplies those ids per row. The Notes list page reads
+                exactly this key (its own listing keys — `page`, `size`,
+                `keyword` — are not reused for a prefill). */}
+            <Link
+              className="nav-link"
+              data-testid="point-note-link"
+              to={`/spaces/${spaceId}/notes?${new URLSearchParams({
+                knowledgePointId: String(knowledgePointId),
+              }).toString()}`}
+            >
+              就此知识点新建笔记
+            </Link>
+          </li>
+          <li>
+            {/* W16: an entry into the AI workspace only. `SendMessageRequest`
+                is still `{content}` alone (C03 in
+                BACKEND-CONTRACT-REQUESTS.md), and AiChatPage receives nothing
+                but its `:conversationId` route param — so this link carries no
+                context param and the line below states plainly that the
+                knowledge point is not attached. */}
+            <Link
+              className="nav-link"
+              data-testid="point-ai-link"
+              to={`/spaces/${spaceId}/ai`}
+            >
+              就此知识点问 AI
+            </Link>
+          </li>
         </ul>
+        <p className="page__note" data-testid="ai-entry-note">
+          问 AI 打开 AI 辅导；这个知识点不会自动附带为上下文，请在提问里描述它。
+        </p>
       </section>
 
       <section className="workbench-section" aria-label="来源追溯">
