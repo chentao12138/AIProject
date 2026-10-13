@@ -203,24 +203,44 @@ checked. A step is evidence, not a checkbox.
 
 ---
 
-## Contract-gated smoke steps (must NOT be marked passed yet)
+## Smoke steps, 2026-10-14
 
-Each step below is an A-class acceptance criterion that cannot pass until the
-backend ships the contract named in `BACKEND-CONTRACT-REQUESTS.md`. Running the
-suite green does not cover them: the UI deliberately refuses to render or
-navigate where the contract has no field.
+`BACKEND-CONTRACT-REQUESTS.md` records what the regenerated contract delivered.
+That split these steps into two different kinds of waiting: some still need the
+backend to publish a field, others need nothing but a running server plus a test
+account. Nothing here is marked passed — an unrun step is an unrun step.
+
+### Blocked by the contract (frontend cannot pass these yet, whatever it builds)
 
 | Step | Blocked by | What a pass looks like |
 |------|-----------|------------------------|
-| Notes list / create / edit / delete, unsaved-changes guard, links to Source/ KP/ Question | C01 (no `/notes` path) | Create a note from a knowledge point, close the app, reopen, content and links survive |
-| Modify an existing draft question | C05 (no `PUT /questions/{id}`) | Edit saves against the same `questionId`; no duplicate row appears in the list |
-| Reopen a finished practice session | C06 (`PracticeSessionDetail` has no score) | Score, correct count and the wrong-item review come from the server, not from the in-memory `finish` response |
-| Reload mid-exam and continue | C10 (`ExamAnswerView` returns no answer content) | Previously saved selections are shown; saved-state is per question |
-| Knowledge point → exact Source page + block highlight | C02 (no `sourceId`/`sourcePageId`) | Provenance row is a working deep link, not plain text |
+| Knowledge point → exact Source page + block highlight | C02 (`KnowledgePointSourceResponse` still has no `sourceId`/`sourcePageId`) | Provenance row is a working deep link, not plain text |
 | Source / KP → Ask AI with context | C03 (`SendMessageRequest` = `content` only) | The message carries the id, and the answer demonstrably uses that material |
-| AI citation → page/block | C04 (`locator` is free text) | Every supported reference type navigates |
-| Question list paging | C-Paging (no `page`/`size`) | Pager drives server requests; no full-list fetch |
-| Search hit of type NOTE | C-Search (enum lacks `NOTE`) | A note hit opens the note |
-| 排序/配对 question authoring + answering | C09 (no ordered/pair answer fields) | Create → practice → exam → review all express the order/pairs |
-| Installed-app login/restore/logout | Backend up + credentials | Steps 1–11 above executed on `dist/AIStudy Setup*.exe` |
+| AI citation → page/block | C04 (`ContextReference.locator` is free text) | Every supported reference type navigates |
+| Reload mid-exam and continue | C10 (`/exam-attempts/{id}/answers` is POST-only; `AttemptQuestionView` has no answer) | Previously saved selections are shown; saved state is per question |
+| Reopen a finished practice and see its score | C06, the half that did not land (`PracticeSessionSummary`/`Detail` have no score; only the `finish` response does) | Score comes from the server at any later time, not from a response held in memory |
+| Question list paging | C-Paging (`GET /questions` accepts no `page`/`size`) | Pager drives server requests; no full-list fetch |
+| Exam attempt history | C11 (attempts are only listable under `/admin/exams/{examId}/attempts`) | From the paper, a learner re-opens a past attempt and its result |
+| Show the standard order / pair set of a stored question | C09b (`QuestionAnswerView` has neither `correctOrder` nor `matches`) | An editor pre-fills and a reader sees what the author set |
+
+### Unblocked by the regeneration — waiting only on a running backend and a test account
+
+These are implemented (or being implemented this round) against the real
+contract; they need execution, not a backend change.
+
+| Step | Unblocked by |
+|------|--------------|
+| Notes list / create / edit / delete, unsaved-changes guard, links to Source / KP / Question | C01: full Notes CRUD + archive + paged list + context links |
+| Modify an existing draft question | C05: `PUT /questions/{id}` — note `UpdateQuestionRequest` is only `stem`/`explanation`/`difficulty`, so options and the correct answer stay locked and the UI says so |
+| Archive / restore a question | C07: `POST /questions/{id}/archive` and `/restore` |
+| Reopen a finished practice and review each answer | C06 (review half): `GET .../practice-sessions/{sessionId}/answers` |
+| Search hit of type NOTE | C-Search: enum has `NOTE`, hit carries `noteId` |
+| 排序/配对 authoring + answering + grading | C09 write side: `correctOrder`/`matches`, `orderingAnswer`/`matchingAnswer` |
+| Exam created with a time limit, and the countdown that depends on it | Field-name correction: the server binds `timeLimitMinutes`; the frontend had been sending `durationMinutes`, so no exam ever got a limit and `deadlineAt` came back null |
+| Installed-app login / restore / logout (A10, steps 1–11 above) | Nothing but a running backend and a desktop test account — these must be executed on `dist/AIStudy Setup*.exe`, not on the unpacked build |
+
+Before any of the above is run: `OPENAPI_URL=<server>/v3/api-docs npm run api:live`
+must be green. The `durationMinutes` incident is exactly what that gate now
+catches — a snapshot, its types and its manifest can all agree with each other
+while disagreeing with the server.
 
