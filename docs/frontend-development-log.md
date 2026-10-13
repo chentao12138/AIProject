@@ -685,3 +685,38 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
 - 本轮进行中：Notes 模块、题目编辑/归档、排序配对作答控件、练习刷新恢复、搜索类型
   过滤与 NOTE 深链、来源/知识点跨模块入口由并行子 Agent 实施，主 Agent 负责路由/导航
   接线（88c204f 已注册 Notes 两条路由并加导航与 A9.1 覆盖测试）与最终门禁、安装验收。
+
+## FE-CONTRACT-WAVE-2026-10-14（续：功能落地与发布门禁实跑）
+
+- 并行子 Agent（同 worktree + 文件白名单 + 主 agent 提交）交付：Notes 全模块
+  （列表分页 / 关键字、创建、编辑器 + 未保存拦截、归档/删除、知识点与正文块双向
+  关联）、题目七类可创建 + 编辑 + 归档/恢复、ORDERING/MATCHING 作答控件、练习
+  刷新后以服务端 `…/answers` 恢复、搜索类型筛选与 NOTE 深链、来源/知识点的
+  新建笔记与问 AI 入口（W16）。
+- 子 Agent 触顶中断一次（题目 lane），主 agent 收尾：其 MATCHING 模型（左右两列
+  存成 L1…/R1… 选项、pairs 存右列下标、`matches` 提交键引用）是对的，测试还停在
+  旧的"一行一组"UI；另有一处配对重编号断言方向写反（`[2,0,1]` 删右 1 → `[1,0,-1]`
+  而不是 `[-1,0,2]`）。同时撤掉一个我起草的超限用例：`matches` 只装键，表单实际
+  到不了 4000 字符上限，为不可能的分支写测试是负债。
+- W15 真残留：workbench 的 page 归一化在"当前素材没有任何页"时提前 return，于是
+  旧素材的 `?page=&block=` 会留在 URL 上并在刷新后回来。修法是补 `pageSetResolved`
+  落地判定——去掉它，合法深链会在页列表到达前被删掉（临时移除后新测试失败已验证）。
+- 发布门禁实跑（此前只有单测）：
+  - R02 **装 / 起 / 卸 全流程通过**。静默安装 exit 0，
+    `%LOCALAPPDATA%\Programs\AIStudy\AIStudy.exe` productVersion 0.1.0.0，开始菜单
+    与桌面快捷方式生成，窗口标题 `AIStudy`，4 进程无崩溃；静默卸载删除目录、两个
+    快捷方式与 `HKCU\...\Uninstall` 项，但保留 `%APPDATA%\AIStudy`（
+    `deleteAppDataOnUninstall=false` 的预期）。
+  - 坑：NSIS 卸载器是**异步**的，进程先返回、文件后删。只看退出码或隔几秒去查
+    目录会误判成"卸载失败"。判据应为等目录消失。
+  - 新缺陷（打包版实测发现）：`Set-Content -Encoding utf8` 写的 `config.json` 带
+    UTF-8 BOM，`parseRuntimeConfig` 把整份文件当损坏丢弃 → 静默回落到打包默认
+    端口，运行期改地址失效。已修（剥掉前导 BOM）并由
+    `src/main/runtime-config.test.ts` 固定。
+  - 诚实边界：匿名状态下客户端**不发任何请求**（PHASE 7 无健康探测），打包版又按
+    ADR-037 关掉 DevTools，因此"配置的后端 origin 真被使用"与渲染内容仍需账号才能
+    观测 → R03–R05 挂在一个桌面测试账号上，已向后端会话单条排队索取。
+- 门禁（本轮结束时实跑）：lint 0 / typecheck 0 / `api:check` 与 `api:live` 均绿 /
+  **70 files 971 tests 全绿** / coverage statements 91.39% / build OK（renderer
+  889.64 kB）/ 制品 `AIStudy Setup 0.1.0.exe` 111,467,982 字节（01:38，时间戳从
+  制品读回）。
