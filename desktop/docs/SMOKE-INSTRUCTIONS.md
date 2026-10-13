@@ -187,11 +187,40 @@ npm run build
 
 ## A11.5 Final Documentation Checklist
 
-- [x] README matches implementation
-- [x] `docs/frontend-current-task.md` reflects current state
-- [x] `docs/frontend-development-log.md` appended with current checkpoint
+Only items whose file actually exists and was re-read against the code are
+checked. A step is evidence, not a checkbox.
+
+- [x] README matches implementation (scope section now names the contract-blocked
+      flows and states that verification is manual smoke + Vitest, not Playwright)
 - [x] `docs/ROUTE_MAP.md` lists all routes
 - [x] `docs/FINAL-FEATURE-MATRIX.md` lists implemented / blocked / out-of-scope
-- [x] `BACKEND-CONTRACT-REQUESTS.md` lists A8/A2.1/A3.2/A3.3 contracts
+- [x] `BACKEND-CONTRACT-REQUESTS.md` lists the blocked contracts
+      (A8 Notes, A2.1, A3.2, A3.3, A4.5, A5.3 + C09/C10/C-Paging/C-Search)
 - [x] Packaging instructions in README
 - [x] Smoke instructions in this file
+- [ ] `docs/frontend-current-task.md` — file does not exist in this repo
+- [ ] `docs/frontend-development-log.md` — file does not exist in this repo
+
+---
+
+## Contract-gated smoke steps (must NOT be marked passed yet)
+
+Each step below is an A-class acceptance criterion that cannot pass until the
+backend ships the contract named in `BACKEND-CONTRACT-REQUESTS.md`. Running the
+suite green does not cover them: the UI deliberately refuses to render or
+navigate where the contract has no field.
+
+| Step | Blocked by | What a pass looks like |
+|------|-----------|------------------------|
+| Notes list / create / edit / delete, unsaved-changes guard, links to Source/ KP/ Question | C01 (no `/notes` path) | Create a note from a knowledge point, close the app, reopen, content and links survive |
+| Modify an existing draft question | C05 (no `PUT /questions/{id}`) | Edit saves against the same `questionId`; no duplicate row appears in the list |
+| Reopen a finished practice session | C06 (`PracticeSessionDetail` has no score) | Score, correct count and the wrong-item review come from the server, not from the in-memory `finish` response |
+| Reload mid-exam and continue | C10 (`ExamAnswerView` returns no answer content) | Previously saved selections are shown; saved-state is per question |
+| Knowledge point → exact Source page + block highlight | C02 (no `sourceId`/`sourcePageId`) | Provenance row is a working deep link, not plain text |
+| Source / KP → Ask AI with context | C03 (`SendMessageRequest` = `content` only) | The message carries the id, and the answer demonstrably uses that material |
+| AI citation → page/block | C04 (`locator` is free text) | Every supported reference type navigates |
+| Question list paging | C-Paging (no `page`/`size`) | Pager drives server requests; no full-list fetch |
+| Search hit of type NOTE | C-Search (enum lacks `NOTE`) | A note hit opens the note |
+| 排序/配对 question authoring + answering | C09 (no ordered/pair answer fields) | Create → practice → exam → review all express the order/pairs |
+| Installed-app login/restore/logout | Backend up + credentials | Steps 1–11 above executed on `dist/AIStudy Setup*.exe` |
+
