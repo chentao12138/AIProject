@@ -205,11 +205,12 @@ class AiTutorConversationIntegrationTest {
     @Test
     void archivedConversationRejectsSend() {
         conversationService.archiveConversation(OWNER, spaceId, conversationId);
-        org.springframework.web.server.ResponseStatusException ex =
-                assertThrows(org.springframework.web.server.ResponseStatusException.class,
+        com.aistudy.server.common.problem.ApiException ex =
+                assertThrows(com.aistudy.server.common.problem.ApiException.class,
                         () -> conversationService.sendMessage(
                                 OWNER, spaceId, conversationId, "after archive"));
-        assertEquals(409, ex.getStatusCode().value());
+        assertEquals(409, ex.status().value());
+        assertEquals("AI_CONVERSATION_NOT_ACTIVE", ex.code());
         verify(aiProvider, never()).chat(any(), anyString());
     }
 

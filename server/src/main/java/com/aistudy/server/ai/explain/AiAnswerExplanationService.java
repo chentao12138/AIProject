@@ -34,6 +34,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -121,7 +123,7 @@ public class AiAnswerExplanationService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "PracticeSession not found");
         }
         if (!"SUBMITTED".equals(session.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.AI_EXPLANATION_NOT_READY,
                     "explanation is only available after submit: " + session.getStatus());
         }
 
@@ -151,7 +153,7 @@ public class AiAnswerExplanationService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ExamAttempt not found");
         }
         if (!"SUBMITTED".equals(attempt.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.AI_EXPLANATION_NOT_READY,
                     "explanation is only available after submit: " + attempt.getStatus());
         }
         ExamQuestion slot = examQuestionMapper.selectByIdSpaceOwner(

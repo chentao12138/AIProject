@@ -5,6 +5,8 @@ import com.aistudy.server.knowledge.point.entity.KnowledgePointRelation;
 import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
 import com.aistudy.server.knowledge.point.mapper.KnowledgePointRelationMapper;
 import com.aistudy.server.space.service.LearningSpaceService;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,7 +64,7 @@ public class KnowledgePointRelationService {
             return null;
         }
         if (checkCycle(spaceId, sourceKpId, targetKpId, relationType, ownerSubject)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "relation would create a cycle");
+            throw ApiException.conflict(ApiErrorCodes.KP_RELATION_CYCLE, "relation would create a cycle");
         }
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
         KnowledgePointRelation relation = new KnowledgePointRelation();

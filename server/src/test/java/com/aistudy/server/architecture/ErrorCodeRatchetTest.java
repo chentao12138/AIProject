@@ -31,27 +31,23 @@ class ErrorCodeRatchetTest {
     private static final String BASE_PACKAGE = "com.aistudy.server";
 
     /**
-     * Classes that still answer 409 without a dedicated code. Migrate one, then
-     * delete its entry — never add one.
+     * The migration is finished: no class may answer 409 with a code the client
+     * cannot branch on, so the baseline is empty and stays empty. Reopen it only
+     * as a documented, shrinking exception — never to add a new offender.
      */
-    private static final Set<String> UNTYPED_CONFLICT_BASELINE = Set.of(
-            "ai.explain.AiAnswerExplanationService",
-            "ai.service.AiConversationService",
-            "config.service.SystemConfigService",
-            "exam.service.ExamDiagnosisService",
-            "knowledge.point.service.KnowledgePointRelationService",
-            "mastery.service.MasteryCalibrationConfigService",
-            "source.outline.service.SourceOutlineNodeService",
-            "studyplan.service.StudyPlanService"
-    );
+    private static final Set<String> UNTYPED_CONFLICT_BASELINE = Set.of();
 
     private static final Pattern UNTYPED_CONFLICT = Pattern.compile(
             "new\\s+ResponseStatusException\\s*\\(\\s*HttpStatus\\.CONFLICT");
+
+    /** Raising a conflict with the fallback code is the same defect, spelled differently. */
+    private static final Pattern GENERIC_CONFLICT_CODE = Pattern.compile("ApiErrorCodes\\.CONFLICT\\s*,");
 
     @Test
     void untypedConflictThrowSitesMustNotGrow() throws IOException {
         Path mainJava = locateMainSources();
         List<String> offenders = new ArrayList<>();
+        List<String> genericCodeOffenders = new ArrayList<>();
         try (Stream<Path> files = Files.walk(mainJava)) {
             files.filter(path -> path.getFileName().toString().endsWith(".java"))
                     .sorted()
@@ -60,6 +56,9 @@ class ErrorCodeRatchetTest {
                             String source = Files.readString(path);
                             if (UNTYPED_CONFLICT.matcher(source).find()) {
                                 offenders.add(classNameOf(mainJava, path));
+                            }
+                            if (GENERIC_CONFLICT_CODE.matcher(source).find()) {
+                                genericCodeOffenders.add(classNameOf(mainJava, path));
                             }
                         } catch (IOException e) {
                             throw new UncheckedIOException(e);

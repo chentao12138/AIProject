@@ -229,7 +229,7 @@ public class AIGenerationJobService {
         int updated = aiGenerationJobMapper.finishJob(jobId, STATUS_PROCESSING, finalStatus, 100,
                 Math.max(0, successCount), Math.max(0, failureCount), now, now, claimToken);
         if (updated == 0) {
-            throw new ApiException(HttpStatus.CONFLICT, ApiErrorCodes.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.AI_JOB_STALE,
                     "job state or lease changed concurrently");
         }
         return requireById(jobId);
@@ -317,12 +317,12 @@ public class AIGenerationJobService {
                     "AIGenerationJob not found");
         }
         if (!STATUS_FAILED.equals(job.getStatus())) {
-            throw new ApiException(HttpStatus.CONFLICT, ApiErrorCodes.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.AI_JOB_NOT_RETRYABLE,
                     "only FAILED jobs can be retried: " + job.getStatus());
         }
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
         if (aiGenerationJobMapper.retryFailed(jobId, now) == 0) {
-            throw new ApiException(HttpStatus.CONFLICT, ApiErrorCodes.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.AI_JOB_STALE,
                     "job state changed concurrently");
         }
         dispatchAfterCommit(jobId);

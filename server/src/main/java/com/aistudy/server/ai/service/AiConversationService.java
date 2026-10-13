@@ -37,6 +37,8 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -246,7 +248,7 @@ public class AiConversationService {
         }
         AiConversation conversation = requireConversation(ownerSubject, spaceId, conversationId);
         if (!STATUS_ACTIVE.equals(conversation.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.AI_CONVERSATION_NOT_ACTIVE,
                     "conversation is not ACTIVE");
         }
         List<AiContextItem> selectedItems = learningContextService.resolveSelectedContext(

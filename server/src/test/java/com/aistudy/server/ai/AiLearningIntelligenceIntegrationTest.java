@@ -164,10 +164,12 @@ class AiLearningIntelligenceIntegrationTest {
     @Test
     void unsubmittedPracticeAnswerReturns409() {
         Long answerId = seedPracticeAnswer(false);
-        org.springframework.web.server.ResponseStatusException ex =
-                assertThrows(org.springframework.web.server.ResponseStatusException.class,
+        com.aistudy.server.common.problem.ApiException ex =
+                assertThrows(com.aistudy.server.common.problem.ApiException.class,
                         () -> explanationService.explainPracticeAnswer(USER_A, spaceA, answerId));
-        assertEquals(409, ex.getStatusCode().value());
+        assertEquals(409, ex.status().value());
+        // F-30: the client branches on the code, never on the English reason.
+        assertEquals("AI_EXPLANATION_NOT_READY", ex.code());
         verify(aiProvider, never()).chat(any(), anyString());
     }
 

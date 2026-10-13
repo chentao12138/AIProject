@@ -2,6 +2,8 @@ package com.aistudy.server.config.service;
 
 import com.aistudy.server.config.entity.SystemConfig;
 import com.aistudy.server.config.mapper.SystemConfigMapper;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -94,7 +96,7 @@ public class SystemConfigService {
     public SystemConfig upsertValue(String key, String value) {
         ConfigDescriptor d = requireDescriptor(key);
         if (d.type() != ConfigType.RUNTIME_MODIFIABLE) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.CONFIG_KEY_NOT_MODIFIABLE,
                     "Key is not runtime-modifiable: " + key);
         }
         validateValue(d, value);

@@ -64,6 +64,8 @@ public final class ApiErrorCodes {
     public static final String EXAM_STALE = "EXAM_STALE";
     public static final String EXAM_QUESTION_ALREADY_IN_PAPER = "EXAM_QUESTION_ALREADY_IN_PAPER";
     public static final String AI_JOB_NOT_RETRYABLE = "AI_JOB_NOT_RETRYABLE";
+    /** Another worker moved the job (or its lease) first; the caller must re-read. */
+    public static final String AI_JOB_STALE = "AI_JOB_STALE";
     public static final String REVIEW_TASK_NOT_PENDING = "REVIEW_TASK_NOT_PENDING";
     public static final String REVIEW_TASK_STALE = "REVIEW_TASK_STALE";
     public static final String REVIEW_STATE_STALE = "REVIEW_STATE_STALE";
@@ -89,6 +91,28 @@ public final class ApiErrorCodes {
     public static final String EXAM_ATTEMPT_STALE = "EXAM_ATTEMPT_STALE";
     /** Another request moved the answer on between read and write. */
     public static final String EXAM_ANSWER_STALE = "EXAM_ANSWER_STALE";
+    /**
+     * Learner-facing conflict codes for the paths audit F-30 had left generic
+     * (contract request C12): each of these used to answer {@code code:
+     * "CONFLICT"} and put the reason only in free text, which the desktop client
+     * cannot branch on.
+     */
+    public static final String AI_EXPLANATION_NOT_READY = "AI_EXPLANATION_NOT_READY";
+    public static final String AI_CONVERSATION_NOT_ACTIVE = "AI_CONVERSATION_NOT_ACTIVE";
+    public static final String CONFIG_KEY_NOT_MODIFIABLE = "CONFIG_KEY_NOT_MODIFIABLE";
+    public static final String EXAM_DIAGNOSIS_NOT_AVAILABLE = "EXAM_DIAGNOSIS_NOT_AVAILABLE";
+    public static final String EXAM_DIAGNOSIS_MISSING = "EXAM_DIAGNOSIS_MISSING";
+    public static final String KP_RELATION_CYCLE = "KP_RELATION_CYCLE";
+    public static final String MASTERY_CALIBRATION_VERSION_EXISTS = "MASTERY_CALIBRATION_VERSION_EXISTS";
+    public static final String OUTLINE_NODE_HAS_CHILDREN = "OUTLINE_NODE_HAS_CHILDREN";
+    public static final String STUDY_PLAN_ACTIVE_EXISTS = "STUDY_PLAN_ACTIVE_EXISTS";
+    public static final String STUDY_PLAN_NO_CANDIDATES = "STUDY_PLAN_NO_CANDIDATES";
+    public static final String STUDY_PLAN_COMPLETED = "STUDY_PLAN_COMPLETED";
+    public static final String STUDY_TASK_SKIPPED_NOT_COMPLETABLE = "STUDY_TASK_SKIPPED_NOT_COMPLETABLE";
+    public static final String STUDY_TASK_NOT_SKIPPED = "STUDY_TASK_NOT_SKIPPED";
+    public static final String STUDY_TASK_STALE = "STUDY_TASK_STALE";
+    public static final String STUDY_TASK_REORDER_FAILED = "STUDY_TASK_REORDER_FAILED";
+    public static final String STUDY_TASK_ALREADY_CLOSED = "STUDY_TASK_ALREADY_CLOSED";
     public static final String AI_NOT_CONFIGURED = "AI_NOT_CONFIGURED";
     public static final String AI_PROVIDER_UNAVAILABLE = "AI_PROVIDER_UNAVAILABLE";
 

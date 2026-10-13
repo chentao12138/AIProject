@@ -4,6 +4,8 @@ import com.aistudy.server.mastery.entity.Mastery;
 import com.aistudy.server.mastery.entity.MasteryCalibrationConfig;
 import com.aistudy.server.mastery.mapper.MasteryCalibrationConfigMapper;
 import com.aistudy.server.mastery.mapper.MasteryMapper;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,7 +49,7 @@ public class MasteryCalibrationConfigService {
     public MasteryCalibrationConfig create(String version, Integer confidenceFullSamples,
                                           Integer recencyDaysCap, Integer volumeCap) {
         if (calibrationConfigMapper.selectByVersion(version) != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.MASTERY_CALIBRATION_VERSION_EXISTS,
                     "calibration version already exists: " + version);
         }
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);

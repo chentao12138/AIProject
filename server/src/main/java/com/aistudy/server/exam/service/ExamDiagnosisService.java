@@ -18,6 +18,8 @@ import com.aistudy.server.question.eval.AnswerDataCodec;
 import com.aistudy.server.question.eval.AnswerDataCodec.SnapshotView;
 import com.aistudy.server.question.mapper.QuestionKnowledgePointMapper;
 import com.aistudy.server.question.mapper.QuestionMapper;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -117,13 +119,13 @@ public class ExamDiagnosisService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ExamAttempt not found");
         }
         if (!ExamAttemptService.STATUS_SUBMITTED.equals(attempt.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_DIAGNOSIS_NOT_AVAILABLE,
                     "diagnosis is only available after submit: " + attempt.getStatus());
         }
         ExamDiagnosis diagnosis = examDiagnosisMapper.selectByAttempt(
                 attemptId, spaceId, ownerSubject);
         if (diagnosis == null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_DIAGNOSIS_MISSING,
                     "diagnosis missing for submitted exam attempt");
         }
         return ExamDiagnosisView.from(diagnosis,

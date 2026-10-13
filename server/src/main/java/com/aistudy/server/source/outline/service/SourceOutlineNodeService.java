@@ -7,6 +7,8 @@ import com.aistudy.server.source.outline.entity.SourceOutlineNode;
 import com.aistudy.server.source.outline.mapper.SourceOutlineNodeMapper;
 import com.aistudy.server.source.service.SourceService;
 import com.aistudy.server.space.service.LearningSpaceService;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -243,7 +245,7 @@ public class SourceOutlineNodeService {
         SourceOutlineNode existing = requireOwnedNode(ownerSubject, spaceId, sourceId, nodeId);
         int children = sourceOutlineNodeMapper.countChildren(nodeId);
         if (children > 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.OUTLINE_NODE_HAS_CHILDREN,
                     "node has children; reparent or delete children first");
         }
         sourceOutlineNodeMapper.deleteById(existing.getId());

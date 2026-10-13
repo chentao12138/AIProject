@@ -18,6 +18,8 @@ import com.aistudy.server.studyplan.mapper.StudyPlanMapper;
 import com.aistudy.server.studyplan.mapper.StudyTaskMapper;
 import com.aistudy.server.wrong.entity.ReviewTask;
 import com.aistudy.server.wrong.mapper.ReviewTaskMapper;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -135,13 +137,13 @@ public class StudyPlanService {
         }
         if (studyPlanMapper.selectByUserSpaceStatus(
                 ownerSubject, spaceId, STATUS_ACTIVE, ownerSubject) != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_PLAN_ACTIVE_EXISTS,
                     "an ACTIVE study plan already exists for this space");
         }
 
         List<Candidate> candidates = collectCandidates(ownerSubject, spaceId);
         if (candidates.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_PLAN_NO_CANDIDATES,
                     "no plan candidates: no pending review tasks and no mastery evidence");
         }
 
@@ -213,7 +215,7 @@ public class StudyPlanService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "StudyTask not found");
         }
         if (TASK_STATUS_SKIPPED.equals(task.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_TASK_SKIPPED_NOT_COMPLETABLE,
                     "a SKIPPED study task cannot be completed: " + task.getStatus());
         }
         if (TASK_STATUS_DONE.equals(task.getStatus())) {
@@ -224,7 +226,7 @@ public class StudyPlanService {
                 taskId, spaceId, ownerSubject,
                 TASK_STATUS_TODO, TASK_STATUS_IN_PROGRESS, TASK_STATUS_DONE, now, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_TASK_STALE,
                     "study task state changed concurrently");
         }
         task.setStatus(TASK_STATUS_DONE);
@@ -405,7 +407,7 @@ public class StudyPlanService {
         int updated = studyTaskMapper.skipByIdAndSpace(
                 taskId, spaceId, ownerSubject, now, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_TASK_STALE,
                     "study task state changed concurrently");
         }
         task.setStatus(TASK_STATUS_SKIPPED);
@@ -423,14 +425,14 @@ public class StudyPlanService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "StudyTask not found");
         }
         if (!TASK_STATUS_SKIPPED.equals(task.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_TASK_NOT_SKIPPED,
                     "only SKIPPED tasks can be unskipped: " + task.getStatus());
         }
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
         int updated = studyTaskMapper.unskipByIdAndSpace(
                 taskId, spaceId, ownerSubject, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_TASK_STALE,
                     "study task state changed concurrently");
         }
         task.setStatus(TASK_STATUS_TODO);
@@ -450,7 +452,7 @@ public class StudyPlanService {
         int updated = studyTaskMapper.markInProgressByIdAndSpace(
                 taskId, spaceId, ownerSubject, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_TASK_STALE,
                     "study task state changed concurrently");
         }
         task.setStatus(TASK_STATUS_IN_PROGRESS);
@@ -466,7 +468,7 @@ public class StudyPlanService {
         int updated = studyTaskMapper.updateDueAtByIdAndSpace(
                 taskId, spaceId, ownerSubject, dueAt, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_TASK_STALE,
                     "study task state changed concurrently");
         }
         task.setDueAt(dueAt);
@@ -482,7 +484,7 @@ public class StudyPlanService {
         int updated = studyTaskMapper.updatePriorityByIdAndSpace(
                 taskId, spaceId, ownerSubject, priority, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_TASK_STALE,
                     "study task state changed concurrently");
         }
         task.setPriority(priority);
@@ -518,7 +520,7 @@ public class StudyPlanService {
         for (Long taskId : orderedTaskIds) {
             int u = studyTaskMapper.reorderTask(taskId, planId, order++, now);
             if (u == 0) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                throw ApiException.conflict(ApiErrorCodes.STUDY_TASK_REORDER_FAILED,
                         "reorder failed for task: " + taskId);
             }
         }
@@ -536,7 +538,7 @@ public class StudyPlanService {
                 reason != null ? reason : task.getReason(),
                 now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_TASK_STALE,
                     "study task state changed concurrently");
         }
         task.setTitle(title != null ? title : task.getTitle());
@@ -553,7 +555,7 @@ public class StudyPlanService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "StudyPlan not found");
         }
         if (STATUS_COMPLETED.equals(plan.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_PLAN_COMPLETED,
                     "cannot regenerate a COMPLETED plan");
         }
         List<StudyTask> existing = studyTaskMapper.selectByPlanId(planId);
@@ -573,7 +575,7 @@ public class StudyPlanService {
         }
         List<Candidate> candidates = collectCandidates(ownerSubject, spaceId);
         if (candidates.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_PLAN_NO_CANDIDATES,
                     "no plan candidates for regeneration");
         }
         int maxNew = Math.min(DEFAULT_DAILY_LIMIT, candidates.size());
@@ -613,7 +615,7 @@ public class StudyPlanService {
     private StudyTask requireOpenTask(String ownerSubject, Long spaceId, Long taskId) {
         StudyTask task = requireTask(ownerSubject, spaceId, taskId);
         if (TASK_STATUS_DONE.equals(task.getStatus()) || TASK_STATUS_SKIPPED.equals(task.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.STUDY_TASK_ALREADY_CLOSED,
                     "task is already closed: " + task.getStatus());
         }
         return task;
