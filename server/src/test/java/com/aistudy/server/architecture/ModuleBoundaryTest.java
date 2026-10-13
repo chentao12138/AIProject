@@ -125,6 +125,7 @@ class ModuleBoundaryTest {
     @Test
     void crossModuleMapperImportsMustNotGrow() throws IOException {
         int count = 0;
+        List<String> offenders = new ArrayList<>();
         for (SourceFile source : readSources()) {
             String ownModule = moduleOf(source.fqcn());
             if (ownModule == null) {
@@ -137,13 +138,16 @@ class ModuleBoundaryTest {
                 String target = moduleOf(imported);
                 if (target != null && !target.equals(ownModule)) {
                     count++;
+                    offenders.add(source.fqcn() + " -> " + imported);
                 }
             }
         }
+        java.util.Collections.sort(offenders);
         assertThat(count)
                 .describedAs("Imports of another module's Mapper (architecture.md §4: "
                         + "\"Mapper 不被其他模块任意直接调用以绕过应用服务\"). Measured value is the "
-                        + "ceiling; lower it by routing a call through the owning service.")
+                        + "ceiling; lower it by routing a call through the owning service. "
+                        + "Current offenders: %s", offenders)
                 .isLessThanOrEqualTo(CROSS_MODULE_MAPPER_IMPORT_CAP);
     }
 

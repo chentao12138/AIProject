@@ -113,14 +113,55 @@ api-client npm run typecheck    → PASS
 6. Mastery 事务内聚合 + SELECT-then-INSERT 无 upsert/乐观锁；DERIVED 生产侧不写
    provenance 关联；生命周期状态无统一策略；Search 12 处重复谓词与 ngram 索引未使用。
 
-## Remaining for FEATURE FREEZE
-- §13 coverage audit table (no PARTIAL/TODO in frozen scope)
-- §14 full Maven test batches
-- §15 runtime E2E / OCR / BYOK / Docker / OpenAPI generate
-- §16 docs consistency
-- Optional: Search FULLTEXT MATCH ranking; AI usage on all generation purposes
+## Round 2026-10-13/14 — gap audit + frontend contract work (backend)
 
-Git: user-owned commit.
+Input: `docs/AIStudy_2026-10-13_Final_Backend_Gap_Audit.md` + `desktop/BACKEND-CONTRACT-REQUESTS.md` (C01–C12).
+Work was built in parallel lanes (search / source lifecycle / asset-folder-RAW / OCR / AI jobs) and integrated into `main`.
+
+### Done AND executed against real MySQL (`aistudy_flyway_test`)
+- **F-01/F-02/F-03 + C-Search**: valid UNION assembly (every branch suffixes the separator), publish visibility gate
+  (`source.status='PUBLISHED'` + current revision, NULL pointer = legacy escape; KP/Question `status='PUBLISHED'`),
+  ngram FULLTEXT wired in. `SearchResult.type` now includes `NOTE` and carries `noteId`.
+  Root cause of the Chinese-search bug: InnoDB natural-language relevance measured **1.9e-8** on a small corpus, so the
+  `ROUND(relevance * 5)` boost was always 0 and `score > 0` discarded the only kind of hit Chinese search can produce.
+  Fixed by giving a FULLTEXT-only match its own lowest tier per branch and using relevance only as `ft_relevance`
+  ordering key (scale-free). 34/34 search ITs + 20/20 SQL guards.
+- **Ingestion async contract**: `create()` had no duplicate guard after the dead SUCCEEDED vocabulary was deleted.
+  A job for an asset that is still in flight now returns 409 `INGESTION_ALREADY_RUNNING`; re-ingesting a terminal
+  asset stays legal and produces a NEW revision (old revision rows remain addressable). The two tests named in audit §C
+  now await the worker instead of expecting a terminal status on the create response. 38/38 ingestion ITs.
+- **C06**: `GET .../practice-sessions/{sessionId}/result` backed by a stored summary (V066),
+  `PRACTICE_SESSION_NOT_SUBMITTED` instead of a fabricated zero. 26/26 practice ITs.
+- **Flyway**: V001→V066 applies on a clean schema; the C02/C03/C04 branch's migration collided on V058 and was
+  renumbered V065. 5/5 migration ITs.
+- Merged and compiling/verified: F-04/F-05/F-25/F-26 (source review state machine, admin manual body, block write
+  guards), F-12/F-13/F-14/F-15 (ZIP idempotency, duplicate policy, folder sync chain, RAW Range/206/416),
+  F-08/F-09/F-28/F-31/F-10 (WebP sizing, OCR process fences, OCR sidecar + Docker, page-order invariant),
+  F-21/F-22/F-29 (AI job space scope, honest counts/type allow-list, claim-token lease),
+  F-16/F-17 (typed 201 for saved variant + inherited-answer gate), C01/C02/C03/C04/C05.
+- **Contract surface regenerated from the live service**: `packages/api-client` 67 → **195 paths**, `npm run typecheck`
+  passes. Handed to the frontend session with the answers it asked for (answers-list `explanation` is hardcoded null —
+  a defect, tracked; message paging is `created_at ASC` so page 0 is the OLDEST message).
+
+### Known-red, NOT caused by this round
+- `ModuleBoundaryTest.crossModuleMapperImportsMustNotGrow`: measured **91** vs cap **85**. At `f685ef8` (before any
+  merge in this round) it already measured **90**, so the ratchet was broken by earlier commits, not here; this round
+  added exactly one (`ingestion.job.service.ZipEntryAssetExtractor -> source.asset.mapper.SourceAssetMapper`, to be
+  routed through `SourceAssetService`). The guard now prints its offender list. Do NOT raise the cap.
+
+### Not done yet
+- F-18 (AI structuring writes live published blocks), F-19/F-20 (generator provenance + atomicity), F-23 (usage rows
+  for the batch generators/variant), F-24 (blueprint distribution actually enforced), F-06/F-07 (ORDER/OUTLINE issue
+  producers, automatic outline suggestions), F-11 (real revision diff), F-30 (error-code sweep beyond practice).
+- C-Paging (`GET /questions` page/size envelope — SQL paging + test updates), C09 (typed ORDERING/MATCHING pairs,
+  real enums), C10 (`ExamAnswerView` payload echo), C11 (exam attempt history; shape question sent to frontend),
+  C12 (exam/practice conflicts still surface generic `CONFLICT`).
+- Variant F-16/F-17 have no test yet; C06 negative path (open session → 409) untested.
+- Gates not executed: T-16 real textbook E2E, T-17 OCR on Windows+Docker, T-18 real StepFun/BYOK, T-21 container E2E,
+  T-22 (worktree is clean of tracked changes but nothing is pushed).
+- `login.json` / `spec-live.json` sit untracked in the repo root from someone's probe — not created by this round,
+  left in place; check them before any commit that includes the repo root.
+
 
 
 
