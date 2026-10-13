@@ -234,7 +234,7 @@ public class AiAnswerExplanationService {
 
         String explanation = response.content() == null ? "" : response.content();
         List<ContextReference> refs = context.stream()
-                .map(item -> new ContextReference(item.type(), item.entityId(), item.title(), item.snippet()))
+                .map(ContextReference::from)
                 .toList();
         return new ExplanationResponse(
                 explanation,

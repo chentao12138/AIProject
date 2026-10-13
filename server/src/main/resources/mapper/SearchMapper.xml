@@ -35,6 +35,7 @@
           NULL AS page_number,
           NULL AS knowledge_point_id,
           NULL AS question_id,
+          NULL AS note_id,
           CONCAT('SOURCE|', LPAD(s.id, 20, '0')) AS sort_key
         FROM source s
         JOIN learning_space ls ON ls.id = s.space_id
@@ -62,6 +63,7 @@
           sp.source_page_number AS page_number,
           NULL AS knowledge_point_id,
           NULL AS question_id,
+          NULL AS note_id,
           CONCAT('CONTENT_BLOCK|', LPAD(cb.id, 20, '0')) AS sort_key
         FROM content_block cb
         JOIN source_page sp ON sp.id = cb.source_page_id
@@ -98,6 +100,7 @@
           NULL AS page_number,
           kp.id AS knowledge_point_id,
           NULL AS question_id,
+          NULL AS note_id,
           CONCAT('KNOWLEDGE_POINT|', LPAD(kp.id, 20, '0')) AS sort_key
         FROM knowledge_point kp
         JOIN learning_space ls ON ls.id = kp.space_id
@@ -130,6 +133,7 @@
           NULL AS page_number,
           NULL AS knowledge_point_id,
           q.id AS question_id,
+          NULL AS note_id,
           CONCAT('QUESTION|', LPAD(q.id, 20, '0')) AS sort_key
         FROM question q
         JOIN learning_space ls ON ls.id = q.space_id
@@ -158,6 +162,7 @@
           NULL AS page_number,
           NULL AS knowledge_point_id,
           wq.question_id AS question_id,
+          NULL AS note_id,
           CONCAT('WRONG_QUESTION|', LPAD(wq.id, 20, '0')) AS sort_key
         FROM wrong_question wq
         JOIN learning_space ls ON ls.id = wq.space_id
@@ -168,18 +173,19 @@
           AND wq.user_subject = #{userSubject}
           AND ls.owner_subject = #{ownerSubject}
           AND q.stem LIKE #{containsPattern} ESCAPE '\\'
+        UNION ALL
       </if>
 
       <if test="types == null || types.isEmpty() || types.contains('NOTE')">
-        UNION ALL
         SELECT
           'NOTE' AS entity_type,
           n.id AS entity_id,
           n.title AS title,
-          n.content AS search_text,
+          CONCAT_WS(' ', n.title, n.content) AS search_text,
           CASE
             WHEN n.title = #{exactQuery} THEN 80
             WHEN n.title LIKE #{prefixPattern} ESCAPE '\\' THEN 60
+            WHEN n.title LIKE #{containsPattern} ESCAPE '\\' THEN 50
             WHEN n.content LIKE #{containsPattern} ESCAPE '\\' THEN 30
             ELSE 0
           END AS score,
@@ -189,6 +195,7 @@
           NULL AS page_number,
           NULL AS knowledge_point_id,
           NULL AS question_id,
+          n.id AS note_id,
           CONCAT('NOTE|', LPAD(n.id, 20, '0')) AS sort_key
         FROM note n
         JOIN learning_space ls ON ls.id = n.space_id
@@ -261,7 +268,7 @@
           AND CASE
             WHEN kp.title = #{exactQuery} THEN 100
             WHEN kp.title LIKE #{prefixPattern} ESCAPE '\\' THEN 80
-            WHEN kp.title LIKE #{prefixPattern} ESCAPE '\\' THEN 60
+            WHEN kp.title LIKE #{containsPattern} ESCAPE '\\' THEN 60
             WHEN kp.summary LIKE #{containsPattern} ESCAPE '\\' THEN 40
             WHEN kp.content LIKE #{containsPattern} ESCAPE '\\' THEN 20
             ELSE 0
@@ -303,10 +310,10 @@
             WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
             ELSE 0
           END > 0
+        UNION ALL
       </if>
 
       <if test="types == null || types.isEmpty() || types.contains('NOTE')">
-        UNION ALL
         SELECT 1 AS score_alias
         FROM note n
         JOIN learning_space ls ON ls.id = n.space_id
@@ -321,6 +328,7 @@
           AND CASE
             WHEN n.title = #{exactQuery} THEN 80
             WHEN n.title LIKE #{prefixPattern} ESCAPE '\\' THEN 60
+            WHEN n.title LIKE #{containsPattern} ESCAPE '\\' THEN 50
             WHEN n.content LIKE #{containsPattern} ESCAPE '\\' THEN 30
             ELSE 0
           END > 0

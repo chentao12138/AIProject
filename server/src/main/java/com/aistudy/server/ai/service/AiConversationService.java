@@ -8,6 +8,8 @@ import com.aistudy.server.ai.dto.AiDto.ConversationView;
 import com.aistudy.server.ai.dto.AiDto.ContextReference;
 import com.aistudy.server.ai.dto.AiDto.MessagePageResponse;
 import com.aistudy.server.ai.dto.AiDto.MessageView;
+import com.aistudy.server.ai.dto.AiDto.SendMessageRequest;
+import com.aistudy.server.ai.dto.AiDto.SendMessageResponse;
 import com.aistudy.server.ai.entity.AiConversation;
 import com.aistudy.server.ai.entity.AiMessage;
 import com.aistudy.server.ai.entity.AiMessageReference;
@@ -204,22 +206,35 @@ public class AiConversationService {
             result.computeIfAbsent(row.getMessageId(), k -> new ArrayList<>())
                     .add(new ContextReference(
                             row.getReferenceType(), row.getEntityId(),
-                            row.getTitle(), row.getSnippet()));
+                            row.getTitle(), row.getSnippet(), row.getLocator(),
+                            row.getSourceId(), row.getSourcePageId(), row.getContentBlockId()));
         }
         return result;
+    }
+
+    /** Text-only turn; kept for callers that have no context selection. */
+    public SendMessageResponse sendMessage(String ownerSubject,
+                                           Long spaceId,
+                                           Long conversationId,
+                                           String content) {
+        return sendMessage(ownerSubject, spaceId, conversationId, new SendMessageRequest(content));
     }
 
     /**
      * Tutor chat turn. USER message is committed first; provider call is
      * outside any DB transaction; ASSISTANT message is committed after.
+     *
+     * <p>C03: every context ID in the request is validated against this
+     * LearningSpace BEFORE anything is written, so a bad pointer cannot leave a
+     * half-completed turn behind.
      */
-    public com.aistudy.server.ai.dto.AiDto.SendMessageResponse sendMessage(
-            String ownerSubject,
-            Long spaceId,
-            Long conversationId,
-            String content) {
+    public SendMessageResponse sendMessage(String ownerSubject,
+                                           Long spaceId,
+                                           Long conversationId,
+                                           SendMessageRequest request) {
         requireAiEnabled(ownerSubject);
         requireSpace(ownerSubject, spaceId);
+        String content = request == null ? null : request.content();
         String trimmed = content == null ? "" : content.trim();
         if (trimmed.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "content must not be blank");
@@ -234,13 +249,19 @@ public class AiConversationService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "conversation is not ACTIVE");
         }
+        List<AiContextItem> selectedItems = learningContextService.resolveSelectedContext(
+                ownerSubject, spaceId,
+                request == null ? null : request.sourceId(),
+                request == null ? null : request.sourcePageId(),
+                request == null ? null : request.contentBlockId(),
+                request == null ? null : request.knowledgePointId());
 
         AiMessage userMessage = messagePersistenceService.persistUserMessage(
                 ownerSubject, spaceId, conversation, trimmed);
 
         List<AiChatMessage> history = loadHistory(conversation.getId(), spaceId, ownerSubject);
         List<AiContextItem> contextItems = learningContextService.assemble(
-                ownerSubject, ownerSubject, spaceId, trimmed);
+                ownerSubject, ownerSubject, spaceId, trimmed, selectedItems);
         String renderedContext = learningContextService.renderContextBlock(contextItems);
         AiLearningState learningState = learningStateService.assemble(ownerSubject, spaceId);
         List<AiChatMessage> providerMessages = AiTutorPromptBuilder.build(
@@ -277,11 +298,10 @@ public class AiConversationService {
                 ownerSubject, spaceId, conversation, response, contextItems, groundingMode);
 
         List<ContextReference> refs = contextItems.stream()
-                .map(item -> new ContextReference(
-                        item.type(), item.entityId(), item.title(), item.snippet()))
+                .map(ContextReference::from)
                 .toList();
 
-        return new com.aistudy.server.ai.dto.AiDto.SendMessageResponse(
+        return new SendMessageResponse(
                 conversation.getId(),
                 toMessageView(userMessage, List.of()),
                 toMessageView(assistantMessage, refs),

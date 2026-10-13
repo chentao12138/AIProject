@@ -1,19 +1,12 @@
 package com.aistudy.server.knowledge;
 
-import com.aistudy.server.ingestion.job.mapper.IngestionJobMapper;
-import com.aistudy.server.knowledge.category.mapper.KnowledgeCategoryMapper;
-import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
-import com.aistudy.server.knowledge.source.mapper.KnowledgePointSourceMapper;
-import com.aistudy.server.space.mapper.LearningSpaceMapper;
-import com.aistudy.server.source.asset.mapper.SourceAssetMapper;
-import com.aistudy.server.source.content.mapper.ContentBlockMapper;
-import com.aistudy.server.source.mapper.SourceMapper;
-import com.aistudy.server.source.page.mapper.SourcePageMapper;
 import com.aistudy.server.spike.auth.SpikeSpaceMembershipRepository;
+import com.aistudy.server.testsupport.MapperMockRegistrar;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -22,159 +15,41 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import com.aistudy.server.question.mapper.QuestionMapper;
-import com.aistudy.server.question.mapper.QuestionOptionMapper;
-import com.aistudy.server.question.mapper.QuestionKnowledgePointMapper;
-import com.aistudy.server.practice.mapper.PracticeSessionMapper;
-import com.aistudy.server.practice.mapper.PracticeSessionQuestionMapper;
-import com.aistudy.server.practice.mapper.PracticeAnswerMapper;
-import com.aistudy.server.wrong.mapper.WrongQuestionMapper;
-import com.aistudy.server.wrong.mapper.ReviewTaskMapper;
-import com.aistudy.server.wrong.mapper.ReviewRecordMapper;
-import com.aistudy.server.exam.mapper.ExamMapper;
-import com.aistudy.server.exam.mapper.ExamPaperMapper;
-import com.aistudy.server.exam.mapper.ExamQuestionMapper;
-import com.aistudy.server.exam.mapper.ExamAttemptMapper;
-import com.aistudy.server.exam.mapper.ExamAnswerMapper;
-import com.aistudy.server.exam.mapper.ExamResultMapper;
 
 /**
  * BUSINESS-007 — OpenAPI contract test for the KnowledgePointSource
- * provenance API ({@code test} profile + {@code @MockitoBean} mappers
+ * provenance API ({@code test} profile + {@link MapperMockRegistrar}
  * so the context boots without MySQL).
  *
  * <p>Verifies: both provenance paths are exposed; POST has a typed
  * {@code LinkKnowledgePointSourcesRequest} body (contentBlockIds
  * array, required) and returns {@code array + items.$ref} of
  * {@code KnowledgePointSourceResponse}; GET returns the same typed
- * list; the response schema exposes citation identity only (no
- * normalizedText / storageKey / block content); bearerAuth is
- * declared.
+ * list; the response schema carries the citation identity plus the
+ * {@code sourceId} / {@code sourcePageId} the client navigates on, and
+ * nothing else (no normalizedText / storageKey / block content);
+ * bearerAuth is declared.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Import(MapperMockRegistrar.class)
 class KnowledgePointProvenanceOpenApiContractTest {
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    /** SPIKE-004 pattern: keep the test profile context bootable. */
-    @MockitoBean
-    private SpikeSpaceMembershipRepository membershipRepository;
-
-    /** BUSINESS-001: keep the test profile context bootable. */
-    @MockitoBean
-    private LearningSpaceMapper learningSpaceMapper;
-
-    /** BUSINESS-002: keep the test profile context bootable. */
-    @MockitoBean
-    private SourceMapper sourceMapper;
-
-    /** BUSINESS-003: keep the test profile context bootable. */
-    @MockitoBean
-    private KnowledgeCategoryMapper knowledgeCategoryMapper;
-
-    /** BUSINESS-003: keep the test profile context bootable. */
-    @MockitoBean
-    private KnowledgePointMapper knowledgePointMapper;
-
-    /** BUSINESS-004: keep the test profile context bootable. */
-    @MockitoBean
-    private SourceAssetMapper sourceAssetMapper;
-
-    /** BUSINESS-005: keep the test profile context bootable. */
-    @MockitoBean
-    private IngestionJobMapper ingestionJobMapper;
-
-    /** BUSINESS-006: keep the test profile context bootable. */
-    @MockitoBean
-    private SourcePageMapper sourcePageMapper;
-
-    /** BUSINESS-006: keep the test profile context bootable. */
-    @MockitoBean
-    private ContentBlockMapper contentBlockMapper;
-
-    /** BUSINESS-007: keep the test profile context bootable. */
-    @MockitoBean
-    private KnowledgePointSourceMapper knowledgePointSourceMapper;
-    @MockitoBean
-    private com.aistudy.server.question.mapper.QuestionMapper questionMapper;
-    @MockitoBean
-    private com.aistudy.server.question.mapper.QuestionOptionMapper questionOptionMapper;
-    @MockitoBean
-    private com.aistudy.server.question.mapper.QuestionKnowledgePointMapper questionKnowledgePointMapper;
-    @MockitoBean
-    private com.aistudy.server.practice.mapper.PracticeSessionMapper practiceSessionMapper;
-    @MockitoBean
-    private com.aistudy.server.practice.mapper.PracticeSessionQuestionMapper practiceSessionQuestionMapper;
-    @MockitoBean
-    private com.aistudy.server.practice.mapper.PracticeAnswerMapper practiceAnswerMapper;
-    @MockitoBean
-    private com.aistudy.server.wrong.mapper.WrongQuestionMapper wrongQuestionMapper;
-    @MockitoBean
-    private com.aistudy.server.wrong.mapper.ReviewTaskMapper reviewTaskMapper;
-    @MockitoBean
-    private com.aistudy.server.wrong.mapper.ReviewRecordMapper reviewRecordMapper;
-    @MockitoBean
-    private com.aistudy.server.exam.mapper.ExamMapper examMapper;
-    @MockitoBean
-    private com.aistudy.server.exam.mapper.ExamPaperMapper examPaperMapper;
-    @MockitoBean
-    private com.aistudy.server.exam.mapper.ExamQuestionMapper examQuestionMapper;
-    @MockitoBean
-    private com.aistudy.server.exam.mapper.ExamAttemptMapper examAttemptMapper;
-    @MockitoBean
-    private com.aistudy.server.exam.mapper.ExamAnswerMapper examAnswerMapper;
-    @MockitoBean
-    private com.aistudy.server.exam.mapper.ExamResultMapper examResultMapper;
-    @MockitoBean
-    private com.aistudy.server.mastery.mapper.MasteryMapper masteryMapper;
-    @MockitoBean
-    private com.aistudy.server.exam.mapper.ExamDiagnosisMapper examDiagnosisMapper;
-
-    @MockitoBean
-    private com.aistudy.server.exam.mapper.ExamDiagnosisItemMapper examDiagnosisItemMapper;
-    @MockitoBean
-    private com.aistudy.server.studyplan.mapper.StudyPlanMapper studyPlanMapper;
-
-    @MockitoBean
-    private com.aistudy.server.studyplan.mapper.StudyTaskMapper studyTaskMapper;
-
-    @MockitoBean
-    private com.aistudy.server.auth.mapper.UserAccountRoleMapper userAccountRoleMapper;
-
-    @MockitoBean
-    private com.aistudy.server.auth.mapper.RefreshSessionMapper refreshSessionMapper;
-
-    @MockitoBean
-    private com.aistudy.server.search.mapper.SearchMapper searchMapper;
-
-    @MockitoBean
-    private com.aistudy.server.ai.mapper.AiMessageReferenceMapper aiMessageReferenceMapper;
-
-    @MockitoBean
-    private com.aistudy.server.ai.settings.AiProviderSettingsMapper aiProviderSettingsMapper;
-
-    @MockitoBean
-    private com.aistudy.server.ai.settings.AiProviderSecretMapper aiProviderSecretMapper;
-
-
-    @MockitoBean
-    private com.aistudy.server.ai.mapper.AiConversationMapper aiConversationMapper;
-
-    @MockitoBean
-    private com.aistudy.server.ai.mapper.AiMessageMapper aiMessageMapper;
-
 
     private static final String LINK_BASE =
             "/api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}/sources";
 
-    /** (1) both provenance paths are exposed. */
+    private static final String RESPONSE_SCHEMA =
+            "$.components.schemas.KnowledgePointSourceResponse.properties.";
 
+    @Autowired
+    private MockMvc mockMvc;
+
+    /** Not a {@code @Mapper}: constructor-injects JdbcTemplate. */
     @MockitoBean
-    private com.aistudy.server.auth.mapper.UserAccountMapper userAccountMapper;
+    private SpikeSpaceMembershipRepository membershipRepository;
 
+    /** (1) both provenance paths are exposed. */
     @Test
     void provenancePathsAreExposedInOpenApi() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
@@ -226,17 +101,17 @@ class KnowledgePointProvenanceOpenApiContractTest {
     void responseSchemaExposesCitationIdentityOnly() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.components.schemas.KnowledgePointSourceResponse.properties.knowledgePointId.type")
+                .andExpect(jsonPath(RESPONSE_SCHEMA + "knowledgePointId.type")
                         .value("integer"))
-                .andExpect(jsonPath("$.components.schemas.KnowledgePointSourceResponse.properties.contentBlockId.type")
+                .andExpect(jsonPath(RESPONSE_SCHEMA + "contentBlockId.type")
                         .value("integer"))
-                .andExpect(jsonPath("$.components.schemas.KnowledgePointSourceResponse.properties.relationType.type")
+                .andExpect(jsonPath(RESPONSE_SCHEMA + "relationType.type")
                         .value("string"))
-                .andExpect(jsonPath("$.components.schemas.KnowledgePointSourceResponse.properties.relevanceScore.type")
+                .andExpect(jsonPath(RESPONSE_SCHEMA + "relevanceScore.type")
                         .value("number"))
-                .andExpect(jsonPath("$.components.schemas.KnowledgePointSourceResponse.properties.normalizedText")
+                .andExpect(jsonPath(RESPONSE_SCHEMA + "normalizedText")
                         .doesNotExist())
-                .andExpect(jsonPath("$.components.schemas.KnowledgePointSourceResponse.properties.storageKey")
+                .andExpect(jsonPath(RESPONSE_SCHEMA + "storageKey")
                         .doesNotExist());
     }
 
@@ -249,5 +124,21 @@ class KnowledgePointProvenanceOpenApiContractTest {
                         .exists())
                 .andExpect(jsonPath("$.paths['" + LINK_BASE + "'].get.security[0].bearerAuth")
                         .exists());
+    }
+
+    /**
+     * (7) the provenance entry has to be clickable: the response carries the
+     * source and the source page of the cited block, which is what the
+     * generated Desktop client opens. Pinning the names here means a rename
+     * fails the build instead of silently shipping an unclickable citation.
+     */
+    @Test
+    void responseSchemaCarriesProvenanceNavigationIds() throws Exception {
+        for (String field : new String[]{"sourceId", "sourcePageId"}) {
+            mockMvc.perform(get("/v3/api-docs"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath(RESPONSE_SCHEMA + field).exists())
+                    .andExpect(jsonPath(RESPONSE_SCHEMA + field + ".type").value("integer"));
+        }
     }
 }

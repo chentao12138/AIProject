@@ -2,6 +2,8 @@ package com.aistudy.server.search;
 
 import com.aistudy.server.auth.service.JwtAccessTokenService;
 import com.aistudy.server.testsupport.OwnedSpaceReset;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -26,6 +28,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -33,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * BUSINESS-022 — Search vertical slice (SQL ranking, pagination, types,
- * LIKE escaping, Unicode).
+ * LIKE escaping, Unicode, note ownership).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -44,6 +47,8 @@ class SearchIntegrationTest {
 
     private static final String EXPECTED_SCHEMA = "aistudy_flyway_test";
     private static final String OWNER = "biz-search-user";
+    /** Owns no space of its own; only ever writes a note inside OWNER's space. */
+    private static final String FOREIGN_SUBJECT = "biz-search-foreign-subject";
 
     @Autowired
     private MockMvc mockMvc;
@@ -51,6 +56,8 @@ class SearchIntegrationTest {
     private DataSource dataSource;
     @Autowired
     private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private ObjectMapper objectMapper;
     @Autowired
     private JwtAccessTokenService jwtAccessTokenService;
 
@@ -261,6 +268,77 @@ class SearchIntegrationTest {
         assertTrue(body2.contains("第一范式"), body2);
     }
 
+    // ==================== notes ====================
+
+    /** A note is found through its title and through its body. */
+    @Test
+    void ownNoteIsFoundByTitleAndByContent() throws Exception {
+        insertNote("数据库范式复习", "第一范式要求每一列都是原子的", false);
+        String byTitle = search("范式复习", "NOTE", 0, 20);
+        assertTrue(byTitle.contains("\"type\":\"NOTE\""), byTitle);
+        String byContent = search("每一列", "NOTE", 0, 20);
+        assertTrue(byContent.contains("\"type\":\"NOTE\""), byContent);
+        // same snippet path as the other text entities: centred on the hit
+        assertTrue(byContent.contains("每一列"), byContent);
+    }
+
+    /**
+     * The desktop opens a result at /spaces/{id}/notes/{noteId}, so a NOTE
+     * result must carry noteId — and it mirrors the generic id, which stays
+     * null-safe for every other type.
+     */
+    @Test
+    void noteResultCarriesNoteIdAndOtherTypesLeaveItNull() throws Exception {
+        Long noteId = insertNote("notePointer", "正文", false);
+        insertSource(spaceId, "notePointerSource");
+
+        JsonNode note = firstResultOfType(search("notePointer", "NOTE", 0, 20), "NOTE");
+        assertEquals(noteId.longValue(), note.path("noteId").asLong());
+        assertEquals(noteId.longValue(), note.path("id").asLong());
+
+        JsonNode source = firstResultOfType(search("notePointerSource", "SOURCE", 0, 20), "SOURCE");
+        assertTrue(source.has("noteId"), "noteId must be documented on every result: " + source);
+        assertTrue(source.path("noteId").isNull(), "non-note results carry no note pointer: " + source);
+    }
+
+    /** A note written by someone else inside the same space is invisible. */
+    @Test
+    void foreignUserNoteInSameSpaceIsNotReturned() throws Exception {
+        insertNote("同空间私有笔记甲", "甲的正文", false);
+        Long foreignNoteId = insertNoteFor(FOREIGN_SUBJECT, "同空间私有笔记乙", "乙的正文", false);
+
+        String body = search("同空间私有笔记", "NOTE", 0, 20);
+        assertTrue(body.contains("同空间私有笔记甲"), body);
+        assertFalse(body.contains("同空间私有笔记乙"), body);
+        assertFalse(body.contains("\"noteId\":" + foreignNoteId), body);
+        assertTrue(body.contains("\"totalElements\":1"), body);
+    }
+
+    /** Archiving hides a note from search without deleting it. */
+    @Test
+    void archivedNoteIsNotReturned() throws Exception {
+        Long archivedId = insertNote("归档探针", "正文", true);
+        insertNote("在线归档探针", "正文", false);
+
+        String body = search("归档探针", "NOTE", 0, 20);
+        assertTrue(body.contains("在线归档探针"), body);
+        assertFalse(body.contains("\"noteId\":" + archivedId), body);
+        assertTrue(body.contains("\"totalElements\":1"), body);
+        assertNotNull(jdbcTemplate.queryForObject(
+                "SELECT id FROM note WHERE id = ?", Long.class, archivedId),
+                "archive must not delete the row");
+    }
+
+    /** Notes ride the default (unfiltered) query path, ranked beside the rest. */
+    @Test
+    void noteParticipatesInUnfilteredSearch() throws Exception {
+        insertNote("全局探针笔记", "正文", false);
+        insertSource(spaceId, "全局探针来源");
+        String body = search("全局探针", null, 0, 20);
+        assertTrue(body.contains("\"type\":\"NOTE\""), body);
+        assertTrue(body.contains("\"type\":\"SOURCE\""), body);
+    }
+
     // ==================== helpers ====================
 
     private String search(String q, String types, int page, int size) throws Exception {
@@ -356,6 +434,34 @@ class SearchIntegrationTest {
                 "INSERT INTO question (space_id, question_type, stem, answer_data_json, origin_type, status, created_at, updated_at) "
                         + "VALUES (?, 'SINGLE_CHOICE', ?, ?, 'USER_CURATED', 'PUBLISHED', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
                 spaceId, stem, answerJson);
+    }
+
+    private Long insertNote(String title, String content, boolean archived) {
+        return insertNoteFor(OWNER, title, content, archived);
+    }
+
+    /** Notes are user-owned, so the author is part of the fixture. */
+    private Long insertNoteFor(String userSubject, String title, String content, boolean archived) {
+        jdbcTemplate.update(
+                "INSERT INTO note (space_id, user_subject_id, title, content, content_format, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, ?, 'PLAIN_TEXT', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))",
+                spaceId, userSubject, title, content);
+        Long id = jdbcTemplate.queryForObject(
+                "SELECT id FROM note WHERE space_id=? AND title=? ORDER BY id DESC LIMIT 1",
+                Long.class, spaceId, title);
+        if (archived) {
+            jdbcTemplate.update("UPDATE note SET archived_at = CURRENT_TIMESTAMP(6) WHERE id = ?", id);
+        }
+        return id;
+    }
+
+    private JsonNode firstResultOfType(String body, String type) throws Exception {
+        for (JsonNode result : objectMapper.readTree(body).path("content")) {
+            if (type.equals(result.path("type").asText())) {
+                return result;
+            }
+        }
+        throw new AssertionError("no " + type + " result in " + body);
     }
 
     private void clean() {

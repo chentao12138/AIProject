@@ -15,8 +15,26 @@ public record SearchResult(
         Long sourcePageId,
         Integer pageNumber,
         Long knowledgePointId,
-        Long questionId
+        Long questionId,
+        /** Set only when {@code type} is NOTE; the id the client routes on. */
+        Long noteId
 ) {
+
+    /** Overload for results that carry no note pointer. */
+    public SearchResult(SearchEntityType type,
+                        Long id,
+                        String title,
+                        String snippet,
+                        Integer score,
+                        Long sourceId,
+                        Long sourceAssetId,
+                        Long sourcePageId,
+                        Integer pageNumber,
+                        Long knowledgePointId,
+                        Long questionId) {
+        this(type, id, title, snippet, score, sourceId, sourceAssetId, sourcePageId,
+                pageNumber, knowledgePointId, questionId, null);
+    }
 
     public static SearchResult from(SearchProjection projection, String query) {
         String snippet = SnippetGenerator.snippet(
@@ -32,7 +50,8 @@ public record SearchResult(
                 projection.getSourcePageId(),
                 projection.getPageNumber(),
                 projection.getKnowledgePointId(),
-                projection.getQuestionId()
+                projection.getQuestionId(),
+                projection.getNoteId()
         );
     }
 }

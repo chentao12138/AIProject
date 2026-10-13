@@ -17,6 +17,14 @@ public class AiMessageReference {
     private Integer ordinal;
     private String referenceType;
     private Long entityId;
+    /**
+     * C04 — the structured route of the pointer. {@code entityId} says which
+     * entity {@code referenceType} names; these say where it sits in the source
+     * tree, so a page reload can rebuild a deep-link without re-resolving.
+     */
+    private Long sourceId;
+    private Long sourcePageId;
+    private Long contentBlockId;
     private String title;
     private String snippet;
     private String locator;
@@ -60,6 +68,30 @@ public class AiMessageReference {
 
     public void setEntityId(Long entityId) {
         this.entityId = entityId;
+    }
+
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    public void setSourceId(Long sourceId) {
+        this.sourceId = sourceId;
+    }
+
+    public Long getSourcePageId() {
+        return sourcePageId;
+    }
+
+    public void setSourcePageId(Long sourcePageId) {
+        this.sourcePageId = sourcePageId;
+    }
+
+    public Long getContentBlockId() {
+        return contentBlockId;
+    }
+
+    public void setContentBlockId(Long contentBlockId) {
+        this.contentBlockId = contentBlockId;
     }
 
     public String getTitle() {

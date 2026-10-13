@@ -14,14 +14,14 @@ import java.util.List;
  *
  * <p>Extends {@link BaseMapper} for insert only. All READS are
  * explicit owner-scoped {@code @Select} queries that JOIN through
- * {@code knowledge_point} → {@code learning_space} (and
- * {@code content_block} → {@code source} → {@code learning_space})
- * so the owner subject and the same-space invariant are enforced in
- * SQL:
+ * {@code knowledge_point} → {@code learning_space} so the owner
+ * subject is enforced in SQL, and keep every block predicate
+ * space-scoped:
  *
  * <ul>
  *   <li>{@link #selectBySpacePointOwner} — links of one owned point
- *       (JOIN on both endpoints + owner predicate)</li>
+ *       (JOIN on the point + owner predicate, LEFT JOIN on the cited
+ *       block for its source/page ids)</li>
  *   <li>{@link #selectExistingBlockIds} — dedup pre-check: which of
  *       the requested block ids are already linked to this point
  *       (same space predicates in SQL)</li>
@@ -35,18 +35,25 @@ public interface KnowledgePointSourceMapper extends BaseMapper<KnowledgePointSou
 
     /**
      * Lists the provenance links of one owned, non-deleted point.
-     * The JOIN requires the point to belong to the space AND the
-     * block to belong to the same space; the owner predicate comes
-     * from {@code learning_space}. A point (or block) from another
+     * The JOIN requires the point to belong to the space and the owner
+     * predicate comes from {@code learning_space}: a point from another
      * space yields no rows — nothing leaks.
+     *
+     * <p>{@code content_block} is LEFT joined and its {@code source_id}
+     * / {@code source_page_id} are projected in this same statement, so
+     * a client can navigate to the cited location without one query per
+     * link. OUTER on purpose: a link whose block row is gone must still
+     * be listed, with both navigation ids NULL. The block's space
+     * predicate stays in the ON clause, so a block of a different space
+     * contributes NULL ids rather than another space's pointers.
      */
-    @Select("SELECT kps.* "
+    @Select("SELECT kps.*, cb.source_id, cb.source_page_id "
             + "FROM knowledge_point_source kps "
             + "JOIN knowledge_point kp "
             + "  ON kp.id = kps.knowledge_point_id "
             + " AND kp.space_id = kps.space_id "
             + " AND kp.deleted_at IS NULL "
-            + "JOIN content_block cb "
+            + "LEFT JOIN content_block cb "
             + "  ON cb.id = kps.content_block_id "
             + " AND cb.space_id = kps.space_id "
             + "JOIN learning_space ls ON ls.id = kps.space_id "

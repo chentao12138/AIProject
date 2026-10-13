@@ -91,9 +91,12 @@ public class AiMessagePersistenceService {
                 reference.setOrdinal(ordinal++);
                 reference.setReferenceType(item.type());
                 reference.setEntityId(item.entityId());
+                reference.setSourceId(item.sourceId());
+                reference.setSourcePageId(item.sourcePageId());
+                reference.setContentBlockId(item.contentBlockId());
                 reference.setTitle(truncate(item.title(), 512));
                 reference.setSnippet(truncate(item.snippet(), 2000));
-                reference.setLocator(null);
+                reference.setLocator(truncate(item.locator(), 512));
                 reference.setCreatedAt(now);
                 messageReferenceMapper.insert(reference);
             }

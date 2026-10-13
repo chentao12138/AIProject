@@ -13,6 +13,7 @@ public class SearchProjection {
     private Integer pageNumber;
     private Long knowledgePointId;
     private Long questionId;
+    private Long noteId;
     private String sortKey;
 
     public String getEntityType() {
@@ -101,6 +102,14 @@ public class SearchProjection {
 
     public void setQuestionId(Long questionId) {
         this.questionId = questionId;
+    }
+
+    public Long getNoteId() {
+        return noteId;
+    }
+
+    public void setNoteId(Long noteId) {
+        this.noteId = noteId;
     }
 
     public String getSortKey() {
