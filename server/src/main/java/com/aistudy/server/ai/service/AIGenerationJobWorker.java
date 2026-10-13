@@ -235,7 +235,7 @@ public class AIGenerationJobWorker implements GenerationJobDispatcher {
                     throw new AiJobFailureException.LeaseLostException(job.getId());
                 }
                 List<?> created = aiKnowledgeExtractionService.extract(
-                        job.getRequester(), job.getSpaceId(), text);
+                        job.getRequester(), job.getSpaceId(), job.getSourceId(), text);
                 if (created.isEmpty()) {
                     throw new AiJobFailureException(AIGenerationJobService.ERROR_NO_OUTPUT,
                             "no knowledge points extracted");
@@ -251,12 +251,10 @@ public class AIGenerationJobWorker implements GenerationJobDispatcher {
                     throw new AiJobFailureException(AIGenerationJobService.ERROR_NO_OUTPUT,
                             "knowledgePointId is required for question-generation");
                 }
-                var question = aiQuestionGenerationService.generate(
+                // generate() throws on any unusable response, so a null return
+                // is no longer a failure mode that has to be re-interpreted here.
+                aiQuestionGenerationService.generate(
                         job.getRequester(), job.getSpaceId(), kpId);
-                if (question == null) {
-                    throw new AiJobFailureException(AIGenerationJobService.ERROR_NO_OUTPUT,
-                            "question generation produced no result");
-                }
                 yield Outcome.wrote(1);
             }
             // F-22: exam-diagnosis-narrative used to be accepted here with no

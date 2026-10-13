@@ -92,7 +92,7 @@ class AiGenerationJobWorkerTest {
     void knowledgeExtractionReportsEveryPersistedPointOnce() {
         AIGenerationJob job = seed(AIGenerationJobWorker.JOB_TYPE_KNOWLEDGE_EXTRACTION);
         Mockito.when(sourceDiagnosis.extractSourceText(USER, SPACE, 5L)).thenReturn("chapter one");
-        Mockito.when(knowledgeExtraction.extract(USER, SPACE, "chapter one"))
+        Mockito.when(knowledgeExtraction.extract(USER, SPACE, 5L, "chapter one"))
                 .thenReturn(List.of(new KnowledgePoint(), new KnowledgePoint(),
                         new KnowledgePoint(), new KnowledgePoint()));
 
@@ -183,7 +183,7 @@ class AiGenerationJobWorkerTest {
     void handlerBlowUpIsSanitizedIntoTheJobRow() {
         AIGenerationJob job = seed(AIGenerationJobWorker.JOB_TYPE_KNOWLEDGE_EXTRACTION);
         Mockito.when(sourceDiagnosis.extractSourceText(USER, SPACE, 5L)).thenReturn("text");
-        Mockito.when(knowledgeExtraction.extract(USER, SPACE, "text"))
+        Mockito.when(knowledgeExtraction.extract(USER, SPACE, 5L, "text"))
                 .thenThrow(new IllegalStateException("HTTP 401 from provider, api key sk-secret"));
 
         workerA.dispatch(job.getId());
