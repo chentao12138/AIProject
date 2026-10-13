@@ -46,11 +46,16 @@ export interface RuntimeConfig {
  * Parse `<userData>/config.json`. Unparseable JSON, non-object payloads and
  * a missing/blank `apiBaseUrl` all yield `{}` — a broken config file must not
  * brick the app, and it must never smuggle a non-http(s) origin into the CSP.
+ *
+ * A leading UTF-8 BOM is stripped first. `Windows PowerShell 5.1`'s
+ * `Set-Content -Encoding utf8` writes one, so the documented way to create this
+ * file on the target platform produces a file the strict parser would otherwise
+ * discard — silently falling back to the packaged default URL.
  */
 export function parseRuntimeConfig(raw: string): RuntimeConfig {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(raw.replace(/^\uFEFF/, ''));
   } catch {
     return {};
   }

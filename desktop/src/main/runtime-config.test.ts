@@ -65,6 +65,21 @@ describe('resolveRuntimeApiBaseUrl', () => {
     });
   });
 
+  it('accepts a config file that starts with a UTF-8 BOM', () => {
+    // Windows PowerShell 5.1 `Set-Content -Encoding utf8` — the documented way
+    // to create this file on the target platform — writes a BOM. Discarding the
+    // file over it would silently send the app to the packaged default URL.
+    const { resolved } = resolve({
+      file: '\uFEFF' + JSON.stringify({ apiBaseUrl: 'http://localhost:8081' }),
+      buildDefault: 'http://127.0.0.1:9090',
+    });
+
+    expect(resolved).toEqual({
+      url: 'http://localhost:8081',
+      source: 'config-file',
+    });
+  });
+
   it('falls back to the build default when nothing is configured', () => {
     const { resolved } = resolve({ file: null, buildDefault: 'http://127.0.0.1:9090' });
     expect(resolved).toEqual({

@@ -40,6 +40,10 @@ declaring `FRONTEND V1 FUNCTIONALLY COMPLETE`.
    ```
    The header must then show `后端地址：http://localhost:8081`. If it shows the
    default, the file is not being read — that is a finding, not a step to skip.
+   (Found on 2026-10-14: `Set-Content -Encoding utf8` writes a UTF-8 BOM, and the
+   parser used to discard the whole file over it, silently falling back to the
+   packaged default. `parseRuntimeConfig` now strips a leading BOM, pinned by a
+   test in `src/main/runtime-config.test.ts`.)
 3. Launch AIStudy from Start Menu.
 4. Verify Electron boot:
    - Window title = `AIStudy`
