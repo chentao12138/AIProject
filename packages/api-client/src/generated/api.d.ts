@@ -2486,6 +2486,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["result"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces/{spaceId}/mastery": {
         parameters: {
             query?: never;
@@ -2566,6 +2582,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spaces/{spaceId}/exam-attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAttempts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/spaces/{spaceId}/exam-attempts/{attemptId}": {
         parameters: {
             query?: never;
@@ -2589,7 +2621,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["result"];
+        get: operations["result_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3006,7 +3038,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["listAttempts"];
+        get: operations["listAttempts_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4025,6 +4057,8 @@ export interface components {
             questionType?: string;
             stem?: string;
             options?: components["schemas"]["OptionView"][];
+            answer?: components["schemas"]["AnswerPayloadView"];
+            answered?: boolean;
         };
         ExamAttemptView: {
             /** Format: int64 */
@@ -4140,6 +4174,8 @@ export interface components {
             gradingStatus?: string;
             /** Format: date-time */
             answeredAt?: string;
+            answer?: components["schemas"]["AnswerPayloadView"];
+            submitted?: boolean;
         };
         StudyCoachRequest: {
             question?: string;
@@ -4742,6 +4778,17 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        QuestionPageResponse: {
+            items?: components["schemas"]["QuestionAuthoringResponse"][];
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            /** Format: int64 */
+            totalItems?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
         SourceReference: {
             /** Format: int64 */
             sourceId?: number;
@@ -4794,6 +4841,21 @@ export interface components {
             updatedAt?: string;
             questions?: components["schemas"]["PracticeQuestionView"][];
         };
+        PracticeResultView: {
+            /** Format: int64 */
+            sessionId?: number;
+            status?: string;
+            /** Format: int32 */
+            questionCount?: number;
+            /** Format: int32 */
+            answeredCount?: number;
+            /** Format: int32 */
+            correctCount?: number;
+            /** Format: int32 */
+            score?: number;
+            /** Format: int32 */
+            maxScore?: number;
+        };
         NotePageResponse: {
             items?: components["schemas"]["NoteView"][];
             /** Format: int32 */
@@ -4825,6 +4887,32 @@ export interface components {
             lastEvidenceAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        AttemptPageResponse: {
+            items?: components["schemas"]["AttemptSummaryView"][];
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            /** Format: int64 */
+            totalItems?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
+        AttemptSummaryView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            examId?: number;
+            status?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            submittedAt?: string;
+            /** Format: int32 */
+            score?: number;
+            /** Format: int32 */
+            maxScore?: number;
         };
         ExamDiagnosisView: {
             /** Format: int64 */
@@ -6527,6 +6615,8 @@ export interface operations {
                 status?: string;
                 questionType?: string;
                 knowledgePointId?: number;
+                page?: number;
+                size?: number;
             };
             header?: never;
             path: {
@@ -6542,7 +6632,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["QuestionAuthoringResponse"][];
+                    "application/json": components["schemas"]["QuestionPageResponse"];
                 };
             };
         };
@@ -9672,6 +9762,29 @@ export interface operations {
             };
         };
     };
+    result: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeResultView"];
+                };
+            };
+        };
+    };
     list_23: {
         parameters: {
             query?: never;
@@ -9787,6 +9900,33 @@ export interface operations {
             };
         };
     };
+    listAttempts: {
+        parameters: {
+            query?: {
+                examId?: number;
+                status?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                spaceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttemptPageResponse"];
+                };
+            };
+        };
+    };
     get_14: {
         parameters: {
             query?: never;
@@ -9810,7 +9950,7 @@ export interface operations {
             };
         };
     };
-    result: {
+    result_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -10406,7 +10546,7 @@ export interface operations {
             };
         };
     };
-    listAttempts: {
+    listAttempts_1: {
         parameters: {
             query?: never;
             header?: never;
