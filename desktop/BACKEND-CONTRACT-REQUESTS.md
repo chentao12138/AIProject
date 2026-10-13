@@ -43,6 +43,51 @@ C09 ordering/matching payloads, C10 saved exam answers, C11 attempt list,
 C12 discriminable conflict codes, C-Paging, C-Search `NOTE`, C13 content-block
 hit id semantics, C14 per-asset page filtering, C15 jobs readable at queue time.
 
+### Re-checked against the server sources after the merge (2026-10-13)
+
+Reading the Java that `main` actually ships split the list above into three
+different kinds of work. Field names below are copied from the sources, not
+invented:
+
+**(a) Already implemented — needs only a running server + client regeneration**
+
+- **C09 seven question types.** `question/eval/AnswerDataCodec.AnswerPayloadView`
+  is `(selectedOptionKeys, booleanAnswer, textAnswer, orderingAnswer:
+  List<Integer>, matchingAnswer: String)`; stored correct answers use
+  `{"correctOrder":[3,1,2]}` and `{"matchesJson":"[{\"left\":\"A\",\"right\":\"1\"}]"}`,
+  and `CreateQuestionRequest` accepts `correctOrder: List<Integer>` plus
+  `matches: String`. FILL_BLANK uses comma-delimited `referenceAnswer`.
+  So ORDERING and MATCHING can be authored *and* answered today; the frontend
+  blocked them only because this client snapshot predates them. The earlier plan
+  of encoding an order through `selectedOptionKeys` array order is superseded —
+  use `orderingAnswer`.
+- **C06 practice per-question review (partially).** `PracticeAnswerController`
+  exposes `GET .../practice-sessions/{sessionId}/answers` per the backend's own
+  report, which the snapshot does not list; that alone restores submitted state.
+  The score summary (`score`/`maxScore`/`correctCount`) is still not on the
+  session detail, so the `/result` ask stands for the history case only.
+- **C13 content-block hit semantics (partially).** `search/dto/SearchResult`
+  carries `type: SearchEntityType` and `sourcePageId`, so the deep link can be
+  built from real fields once the enum and ids are confirmed from the generated
+  contract.
+
+**(b) Confirmed still missing in code — genuine backend work**
+
+- **C02 provenance ids.** `knowledge/source/dto/KnowledgePointSourceResponse` is
+  `(id, spaceId, knowledgePointId, contentBlockId, relationType, relevanceScore,
+  createdAt)` — no `sourceId`, no `sourcePageId`. KP → exact page deep link
+  stays blocked.
+- **C-Paging question list.** `QuestionController.list` takes only
+  `status`, `questionType`, `knowledgePointId` and returns a plain `List`.
+  No `page`/`size`, so the question list cannot paginate honestly.
+
+**(c) Not yet checkable from the sources I could find** — C03 AI context,
+C04 citation ids, C10 saved exam answer content, C11 attempt list, C12 conflict
+codes, C-Search `NOTE`, C14 per-asset page filtering, C15 job visibility at
+queue time. These get answered by a regeneration plus one focused look, not by
+guessing.
+
+
 **Coordination:** asks go to the backend session one at a time, waiting for each
 reply. The one currently standing is "start the server + a desktop login
 account"; the regeneration itself is frontend work, not theirs.
