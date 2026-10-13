@@ -229,6 +229,21 @@ export const QUESTION_FIELD_LIMITS = {
  */
 export const PRACTICE_COUNT_LIMITS = { min: 1, max: 100 } as const;
 
+/**
+ * Exam creation bounds, copied out of the generated contract
+ * (`CreateExamRequest` and `ExamQuestionInput`). `question-type-contract.test.ts`
+ * compares every entry against openapi.json, because a form that is tighter
+ * than the server denies legitimate input and a form that is looser only fails
+ * as a 400 after the user pressed 创建.
+ */
+export const EXAM_FORM_LIMITS = {
+  titleMaxLength: 255,
+  descriptionMaxLength: 1000,
+  durationMinMinutes: 1,
+  maxQuestions: 100,
+  questionScoreMin: 1,
+} as const;
+
 /** Backend question types -> display copy. Unknown values show as-is. */
 const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   SINGLE_CHOICE: '单选',

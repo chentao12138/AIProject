@@ -47,12 +47,40 @@ describe('ExamsPage', () => {
     expect(listQuestions.mock.calls[0][1]).toMatchObject({ status: 'PUBLISHED' });
   });
 
-  // The backend answers 400 "questions must not be empty", so a form that had
-  // no way to pick a question could never create an exam at all.
-  it('refuses to submit until at least one question is picked', async () => {
+  // The backend answers 400 "questions must not be empty". A greyed-out button
+  // gave no reason, so the form now explains what is missing instead.
+  it('explains why it will not submit instead of silently refusing', async () => {
+    const user = userEvent.setup();
     const { createExam } = render();
-    await userEvent.type(await screen.findByLabelText('标题'), '期中考');
-    expect(screen.getByRole('button', { name: '创建考试' })).toBeDisabled();
+    await user.type(await screen.findByLabelText('标题'), '期中考');
+
+    const submit = screen.getByRole('button', { name: '创建考试' });
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    expect(await screen.findByTestId('exam-form-errors')).toHaveTextContent(
+      '至少选择一道题目'
+    );
+    expect(createExam).not.toHaveBeenCalled();
+  });
+
+  it('rejects a contract-invalid duration before the request', async () => {
+    const user = userEvent.setup();
+    const { createExam } = render();
+
+    await user.type(await screen.findByLabelText('标题'), '期中考');
+    await user.click(screen.getByRole('checkbox', { name: '1+1 等于几？' }));
+    // `min` on a number input does not stop typing, so this would otherwise
+    // reach the server and come back as a 400. (The per-question score input
+    // already clamps itself to >= 1, so it needs no error path.)
+    const duration = screen.getByLabelText('时长（分钟）');
+    fireEvent.change(duration, { target: { value: '0' } });
+
+    fireEvent.submit(duration.closest('form')!);
+
+    expect(await screen.findByTestId('exam-form-errors')).toHaveTextContent(
+      '时长至少为 1 分钟'
+    );
     expect(createExam).not.toHaveBeenCalled();
   });
 

@@ -57,7 +57,7 @@ Real command output, not a historical claim:
 | Lint | `npm run lint` | 0 errors, 0 warnings |
 | Typecheck | `npx tsc --noEmit -p tsconfig.node.json` / `-p tsconfig.web.json` | 0 errors |
 | Contract gate | `npm run api:check` | `openapi.json and api.d.ts are in sync` |
-| Unit | `npm run test:run` | 65 files / 772 tests passed |
+| Unit | `npm run test:run` | 65 files / 774 tests passed |
 | Coverage | `npm run test:coverage` | statements 90% (7275/8083), branches 84.4%, functions 81.34% |
 | Build | `npm run build` | main 13.93 kB, preload 1.65 kB, renderer 775.91 kB |
 | Package | `npm run dist:win` (with the two mirror variables in README) | `dist/AIStudy Setup 0.1.0.exe`, 111 MB, timestamp matches the built commit |

@@ -31,6 +31,7 @@ import {
   QUESTION_TYPES,
   QUESTION_TYPE_SUPPORT,
   PRACTICE_COUNT_LIMITS,
+  EXAM_FORM_LIMITS,
   isAuthorableQuestionType,
   isPublishableQuestionType,
 } from './format';
@@ -97,6 +98,23 @@ describe.skipIf(!hasContract)('practice count bounds follow the contract', () =>
     expect(count.maximum).toBeDefined();
     expect(PRACTICE_COUNT_LIMITS.min).toBe(count.minimum);
     expect(PRACTICE_COUNT_LIMITS.max).toBe(count.maximum);
+  });
+});
+
+/**
+ * Exam creation bounds, pinned the same way: the form used to accept anything
+ * (no title cap, no question-count cap, no score/duration validation) and let
+ * the server 400 it.
+ */
+describe.skipIf(!hasContract)('exam form limits follow the contract', () => {
+  it('matches CreateExamRequest and ExamQuestionInput', () => {
+    const exam = schema('CreateExamRequest').properties ?? {};
+    const input = schema('ExamQuestionInput').properties ?? {};
+    expect(EXAM_FORM_LIMITS.titleMaxLength).toBe(exam.title?.maxLength);
+    expect(EXAM_FORM_LIMITS.descriptionMaxLength).toBe(exam.description?.maxLength);
+    expect(EXAM_FORM_LIMITS.durationMinMinutes).toBe(exam.durationMinutes?.minimum);
+    expect(EXAM_FORM_LIMITS.maxQuestions).toBe(exam.questions?.maxItems);
+    expect(EXAM_FORM_LIMITS.questionScoreMin).toBe(input.score?.minimum);
   });
 });
 

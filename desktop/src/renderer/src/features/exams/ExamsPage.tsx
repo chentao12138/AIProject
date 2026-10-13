@@ -6,6 +6,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { EXAM_FORM_LIMITS } from '../../lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
 import {
@@ -35,6 +36,8 @@ export function ExamsPage() {
   /** questionId -> score. The backend rejects an exam with no questions, and
    * a question without a score, so the form cannot submit either. */
   const [selected, setSelected] = useState<Record<number, number>>({});
+  /** Errors appear after the first submit attempt, not while the form is pristine. */
+  const [showErrors, setShowErrors] = useState(false);
 
   const listQuery = useQuery(
     spaceQuery(spaceId, queryKeys.exams(spaceId), (id) => api.listExams(id))
@@ -52,7 +55,34 @@ export function ExamsPage() {
     questionId: Number(questionId),
     score,
   }));
-  const canSubmit = title.trim().length > 0 && questions.length > 0;
+
+  /**
+   * Contract constraints checked before submitting. The server rejects each of
+   * these with a 400, and the audit's complaint about exam/practice forms was
+   * exactly that a rejected submission felt like an unresponsive button — so
+   * the errors are listed on the form instead of only disabling 创建.
+   */
+  const formErrors: string[] = [];
+  if (title.trim().length === 0) {
+    formErrors.push('标题不能为空。');
+  } else if (title.length > EXAM_FORM_LIMITS.titleMaxLength) {
+    formErrors.push(`标题最多 ${EXAM_FORM_LIMITS.titleMaxLength} 个字符。`);
+  }
+  if (description.length > EXAM_FORM_LIMITS.descriptionMaxLength) {
+    formErrors.push(`说明最多 ${EXAM_FORM_LIMITS.descriptionMaxLength} 个字符。`);
+  }
+  if (
+    !Number.isInteger(durationMinutes) ||
+    durationMinutes < EXAM_FORM_LIMITS.durationMinMinutes
+  ) {
+    formErrors.push(`时长至少为 ${EXAM_FORM_LIMITS.durationMinMinutes} 分钟的整数。`);
+  }
+  if (questions.length === 0) {
+    formErrors.push('至少选择一道题目。');
+  } else if (questions.length > EXAM_FORM_LIMITS.maxQuestions) {
+    formErrors.push(`一份试卷最多 ${EXAM_FORM_LIMITS.maxQuestions} 题。`);
+  }
+  const canSubmit = formErrors.length === 0;
 
   const create = useMutation({
     mutationFn: () =>
@@ -81,18 +111,35 @@ export function ExamsPage() {
       <PageHeader title="考试" />
       <section className="workbench-section" aria-label="创建考试">
         <h2 className="section-title">创建考试</h2>
-        <form className="form" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
+        <form
+          className="form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setShowErrors(true);
+            if (!canSubmit) {
+              return;
+            }
+            create.mutate();
+          }}
+        >
+          {showErrors && formErrors.length > 0 && (
+            <ul className="form__error" role="alert" data-testid="exam-form-errors">
+              {formErrors.map((error) => (
+                <li key={error}>{error}</li>
+              ))}
+            </ul>
+          )}
           <div className="form__field">
             <label htmlFor="e-title" className="form__label">标题</label>
-            <input id="e-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} required />
+            <input id="e-title" className="input" value={title} maxLength={EXAM_FORM_LIMITS.titleMaxLength} onChange={(e) => setTitle(e.target.value)} required />
           </div>
           <div className="form__field">
             <label htmlFor="e-desc" className="form__label">说明</label>
-            <textarea id="e-desc" className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            <textarea id="e-desc" className="textarea" value={description} maxLength={EXAM_FORM_LIMITS.descriptionMaxLength} onChange={(e) => setDescription(e.target.value)} rows={2} />
           </div>
           <div className="form__field">
             <label htmlFor="e-duration" className="form__label">时长（分钟）</label>
-            <input id="e-duration" className="input" type="number" min={1} value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))} />
+            <input id="e-duration" className="input" type="number" min={EXAM_FORM_LIMITS.durationMinMinutes} value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))} />
           </div>
 
           <div className="form__field">
@@ -134,10 +181,17 @@ export function ExamsPage() {
                           <input
                             className="input"
                             type="number"
-                            min={1}
+                            min={EXAM_FORM_LIMITS.questionScoreMin}
                             value={selected[q.id]}
                             onChange={(e) =>
-                              setSelected((prev) => ({ ...prev, [q.id as number]: Math.max(1, Number(e.target.value) || 1) }))
+                              setSelected((prev) => ({
+                                ...prev,
+                                [q.id as number]: Math.max(
+                                  EXAM_FORM_LIMITS.questionScoreMin,
+                                  Number(e.target.value) ||
+                                    EXAM_FORM_LIMITS.questionScoreMin
+                                ),
+                              }))
                             }
                           />
                         </label>
@@ -155,7 +209,11 @@ export function ExamsPage() {
             </p>
           )}
           <div className="form__actions">
-            <Button type="submit" variant="primary" disabled={create.isPending || !canSubmit}>
+            {/* Deliberately not disabled on validation errors: a greyed-out
+                创建考试 with no reason is the "button does nothing" complaint
+                the audit raised for exam/practice forms. The click reveals the
+                list above and never reaches the server. */}
+            <Button type="submit" variant="primary" disabled={create.isPending}>
               {create.isPending ? '创建中…' : '创建考试'}
             </Button>
           </div>
