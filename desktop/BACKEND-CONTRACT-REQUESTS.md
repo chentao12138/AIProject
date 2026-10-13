@@ -16,7 +16,7 @@ for what that proved. Rows are the frontend's own audit items, not the C-numbers
 |------|--------|------|
 | A2.1 provenance nav | **Still blocked (C02)** | `KnowledgePointSourceResponse` is still `{id, spaceId, knowledgePointId, contentBlockId, relationType, relevanceScore, createdAt}` — no `sourceId`/`sourcePageId`. |
 | A3.2 AI context | **Still blocked (C03)** | `SendMessageRequest` is still `{content}` only. |
-| A8 Notes | **Unblocked, building** | Full CRUD + archive + paged list + context links are in the contract. |
+| A8 Notes | **Built this round (unit-verified)** | CRUD + archive + paged list + keyword + context links + unsaved-changes guard are implemented and tested; runtime/E2E still needs a login. Four follow-ups are listed under "Notes module follow-ups". |
 | A4.5 Question update | **Unblocked, with a limit** | `PUT /questions/{questionId}` exists but `UpdateQuestionRequest` is only `stem`/`explanation`/`difficulty`; options and the correct answer cannot be edited. |
 | A5.3 Practice result | **Partly unblocked** | Per-question review works from `GET .../answers`. The score is still unreachable for a session that is already finished — it exists only in the `finish` response, so history cannot show 成绩 (C06 remains open for that half). |
 | A6.2 Exam answer resume | **Still blocked (C10)** | Only `POST .../exam-attempts/{attemptId}/answers`; `AttemptQuestionView` has no answer and `ExamAnswerView` still echoes no content. |
@@ -505,6 +505,33 @@ not have. **Ask:** either implement per-blank grading behind `textAnswers:
 string[]` (already requested in C09) or drop the "comma-delimited per blank"
 javadoc so the contract and the code agree.
 
+
+## Notes module follow-ups (found while building it, 2026-10-14)
+
+- **C-Notes-archive — archived notes are unreachable.** Archive only sets
+  `archived_at` (`NoteService.java:146-154`) and the list filters
+  `archived_at IS NULL` (`NoteMapper.java:42,59`), while `NoteView` has no
+  `archivedAt` field at all. So the action is one-way and invisible: the note
+  vanishes from the list and neither the client nor the user can tell which notes
+  are archived or bring one back. Needed: `archived` in the list query,
+  `archivedAt` in `NoteView`, and a restore endpoint — questions, spaces, sources
+  and knowledge points all have one; notes do not.
+- **C-Notes-reverse — no entity → notes listing.** There is
+  `GET /notes/{noteId}/knowledge-points` but no
+  `GET /knowledge-points/{id}/notes` (nor a source/question equivalent), so a
+  knowledge point page cannot show or count the notes attached to it. Only the
+  note → entity direction is buildable, which leaves A8.3 half a loop.
+- **C-Notes-link-noop — a bad link id is reported as success.**
+  `NoteKnowledgePointService.java:145-150` and `NoteSourceService.java:57-62`
+  `return` after a failed `getMine` lookup and the controller still answers
+  **201 with no body**. A client cannot distinguish "linked" from "silently
+  ignored because the id belongs to another space", so it cannot report a truthful
+  result. Needed: 404/400 for an unknown or foreign id. The UI only offers ids
+  read from the space's own catalog, which hides the defect rather than fixing it.
+- **Documentation contradiction:** `NotePageResponse.java:6-8` says "`page` is
+  1-based" while `NoteController.java:45-46` defaults `page` to 0 and
+  `NoteService.java:86` computes `safePage * safeSize`. The wire is **0-based**
+  and the client follows the code; please fix one of the two.
 
 ## Answer payload rules the renderer must obey (verified in the server, 2026-10-14)
 
