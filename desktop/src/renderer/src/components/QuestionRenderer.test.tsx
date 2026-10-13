@@ -421,10 +421,9 @@ describe('QuestionRenderer — ORDERING (G02 / C09)', () => {
       screen.getAllByTestId('ordering-item').map((el) => el.textContent)
     ).toEqual(['1第二项', '2第一项', '3第三项']);
     expect(screen.queryByRole('button', { name: /上移|下移/ })).not.toBeInTheDocument();
-    expect(screen.getByTestId('contract-gap-notice')).toHaveTextContent(
-      'QuestionAnswerView'
-    );
-    expect(screen.getByTestId('contract-gap-notice')).toHaveTextContent('C09');
+    // C09b: the read side carries `correctOrder`, so the review surface owes the
+    // user no "cannot be read back" notice any more.
+    expect(screen.queryByTestId('contract-gap-notice')).not.toBeInTheDocument();
     expect(screen.getByTestId('question-explanation')).toBeInTheDocument();
   });
 
@@ -576,7 +575,7 @@ describe('QuestionRenderer — MATCHING (G02 / C09)', () => {
       '东京 ↔ 日本',
     ]);
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(screen.getByTestId('contract-gap-notice')).toHaveTextContent('matchesJson');
+    expect(screen.queryByTestId('contract-gap-notice')).not.toBeInTheDocument();
   });
 
   it('review says so when nothing was paired', () => {

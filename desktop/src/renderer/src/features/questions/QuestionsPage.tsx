@@ -21,7 +21,9 @@ import { spaceQuery } from '../../lib/queries';
 import { useSpaceId } from '../../lib/space-scope';
 import { isPositiveId } from '../../lib/ids';
 import {
+  QUESTION_STATUSES,
   difficultyLabel,
+  isQuestionEditable,
   questionTypeLabel,
   QUESTIONS_PAGE_SIZE,
   QUESTION_TYPES,
@@ -257,7 +259,9 @@ export function QuestionsPage() {
           </thead>
           <tbody>
             {items.map((q, idx) => {
-              const archived = (q.status ?? '').trim().toUpperCase() === 'ARCHIVED';
+              const normalizedStatus = (q.status ?? '').trim().toUpperCase();
+              const archived = normalizedStatus === QUESTION_STATUSES.ARCHIVED;
+              const editable = isQuestionEditable(q.status);
               return (
                 <tr key={q.id ?? `q-${idx}`}>
                   <td>#{q.id}</td>
@@ -273,10 +277,11 @@ export function QuestionsPage() {
                       查看
                     </Button>
                     {/* G04: the row links to the edit form only when the server
-                        would accept the PUT — `update()` answers 404 for an
-                        ARCHIVED question (QuestionService.java:124), so an
-                        archived row routes through 查看 to the restore button. */}
-                    {!archived && q.id !== undefined && (
+                        would accept the PUT. The contract's PUT description
+                        allows a DRAFT only and answers 409
+                        `QUESTION_NOT_EDITABLE` for PUBLISHED / ARCHIVED /
+                        REJECTED, so those rows route through 查看 instead. */}
+                    {editable && q.id !== undefined && (
                       <Link
                         to={`/spaces/${spaceId}/questions/${q.id}/edit`}
                         className="nav-link"
@@ -284,6 +289,11 @@ export function QuestionsPage() {
                       >
                         编辑
                       </Link>
+                    )}
+                    {!editable && q.id !== undefined && (
+                      <span className="muted" data-testid={`question-not-editable-hint-${q.id}`}>
+                        只有草稿可编辑
+                      </span>
                     )}
                     {archived && (
                       <span className="muted" data-testid={`question-archived-hint-${q.id}`}>

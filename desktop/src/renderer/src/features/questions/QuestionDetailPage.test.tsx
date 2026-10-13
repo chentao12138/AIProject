@@ -96,14 +96,14 @@ describe('QuestionDetailPage — FILL_BLANK review (G02)', () => {
   });
 });
 
-describe('QuestionDetailPage — the two new types are publishable, still one-way to read', () => {
-  it('publishes an ORDERING draft and keeps the review gap honest', async () => {
+describe('QuestionDetailPage — a stored ORDERING / MATCHING answer reads back (C09b)', () => {
+  it('publishes an ORDERING draft and shows the stored standard order', async () => {
     const user = userEvent.setup();
     const api = renderDetail({
       questionType: 'ORDERING',
       stem: '把下面的步骤排序。',
       options: choiceOptions,
-      answer: {},
+      answer: { correctOrder: [2, 1] },
     });
 
     // Create carries correctOrder and the answer payload carries orderingAnswer,
@@ -113,30 +113,27 @@ describe('QuestionDetailPage — the two new types are publishable, still one-wa
     await waitFor(() => expect(api.publishQuestion).toHaveBeenCalledWith(7, 4));
     expect(screen.queryByTestId('publish-gap-notice')).not.toBeInTheDocument();
 
-    // What is still missing is the READ side: QuestionAnswerView has no
-    // correctOrder, so the stored order cannot be shown. The review surface
-    // says exactly that instead of inventing one.
-    expect(screen.getByTestId('contract-gap-notice')).toHaveTextContent(
-      CONTRACT_GAP_NOTICES.ORDERING_REVIEW
-    );
+    // The read side now declares `correctOrder`, so the page names the items in
+    // that order instead of announcing that the order cannot be shown.
+    expect(screen.queryByTestId('contract-gap-notice')).not.toBeInTheDocument();
+    const items = screen.getAllByTestId('stored-order-item').map((li) => li.textContent);
+    expect(items).toEqual(['第 1 位：第二项', '第 2 位：第一项']);
   });
 
-  it('publishes a MATCHING draft and renders the pair set as unreadable', async () => {
+  it('shows the stored pair set of a MATCHING question', async () => {
     const user = userEvent.setup();
     const api = renderDetail({
       questionType: 'MATCHING',
       stem: '把概念与定义配对。',
       options: choiceOptions,
-      answer: {},
+      answer: { matches: JSON.stringify([{ left: 'A', right: 'B' }]) },
     });
 
     await user.click(await screen.findByRole('button', { name: '发布' }));
     await waitFor(() => expect(api.publishQuestion).toHaveBeenCalledWith(7, 4));
 
-    expect(screen.getByTestId('matching-readonly')).toBeInTheDocument();
-    expect(screen.getByTestId('contract-gap-notice')).toHaveTextContent(
-      CONTRACT_GAP_NOTICES.MATCHING_REVIEW
-    );
+    expect(screen.queryByTestId('contract-gap-notice')).not.toBeInTheDocument();
+    expect(screen.getByTestId('stored-matches')).toHaveTextContent('A → B');
   });
 
   it('never shows a publish button for a published question', async () => {
@@ -156,8 +153,10 @@ describe('QuestionDetailPage — the two new types are publishable, still one-wa
       }
     );
 
-    await screen.findByTestId('contract-gap-notice');
+    await screen.findByTestId('question-not-editable');
     expect(screen.queryByRole('button', { name: '发布' })).not.toBeInTheDocument();
+    // A PUBLISHED question has no edit entry either: the PUT is DRAFT-only.
+    expect(screen.queryByTestId('question-edit-link')).not.toBeInTheDocument();
   });
 });
 

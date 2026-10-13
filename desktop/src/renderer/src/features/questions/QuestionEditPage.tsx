@@ -12,12 +12,18 @@
  * instead of accepting edits it could not send.
  *
  * Two server behaviors shape the form:
- *  - `QuestionService.update()` (QuestionService.java:122-142) treats a null
- *    field as "keep what is stored", so all three fields are always sent; a
- *    blank `explanation` therefore really does clear it.
- *  - the same method returns null for an ARCHIVED question, which the
- *    controller turns into a 404 (QuestionController.java:72-76), so an
- *    archived question has no editable form to open.
+ *  - `QuestionService.update()` treats a null field as "keep what is stored", so
+ *    all three fields are always sent; a blank `explanation` therefore really
+ *    does clear it.
+ *  - the contract states the precondition outright: the PUT description says
+ *    "a DRAFT question only", and PUBLISHED / ARCHIVED / REJECTED answer 409 with
+ *    `code: QUESTION_NOT_EDITABLE` (a published question is already quoted by
+ *    exam and practice snapshots and by mastery/diagnosis rows). So this form is
+ *    only saveable for a DRAFT, and the entry points hide it otherwise — the
+ *    learner is not asked to fill a form whose save is doomed. This workspace's
+ *    older `QuestionService` copy still rejects only ARCHIVED (with a 404); the
+ *    published contract is what the UI follows, and the code is handled below in
+ *    case the question changes state while this form is open.
  *
  * The update DTO is also NARROWER than the create DTO on `explanation`
  * (2000 vs 4000 characters), which is why the caps come from
@@ -30,6 +36,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
 import {
   NOT_FOUND_MESSAGE,
+  apiProblemCode,
   normalizeApiError,
   unwrap,
 } from '../../lib/api-error';
@@ -40,7 +47,9 @@ import { parsePositiveIdParam } from '../../lib/ids';
 import {
   CONTRACT_GAP_NOTICES,
   QUESTION_FIELD_LIMITS,
+  QUESTION_NOT_EDITABLE_CODE,
   difficultyLabel,
+  isQuestionEditable,
   questionTypeLabel,
 } from '../../lib/format';
 import type { components } from '@aistudy/api-client';
@@ -54,8 +63,6 @@ import {
   UPDATE_QUESTION_FIELD_LIMITS,
   validateQuestionEdit,
 } from './question-form-state';
-
-const STATUS_ARCHIVED = 'ARCHIVED';
 
 export function QuestionEditPage() {
   const api = useApiClient();
@@ -151,8 +158,7 @@ export function QuestionEditPage() {
     difficulty: difficulty ?? loaded.difficulty,
   };
 
-  const status = (q.status ?? '').trim().toUpperCase();
-  const isArchived = status === STATUS_ARCHIVED;
+  const editable = isQuestionEditable(q.status);
   const errors = validateQuestionEdit(draft);
   const dirty =
     draft.stem !== loaded.stem ||
@@ -164,7 +170,7 @@ export function QuestionEditPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setShowErrors(true);
-    if (busy || errors.length > 0) {
+    if (busy || !editable || errors.length > 0) {
       return;
     }
     save.mutate();
@@ -192,10 +198,13 @@ export function QuestionEditPage() {
         {CONTRACT_GAP_NOTICES.QUESTION_UPDATE_FIELDS}
       </p>
 
-      {isArchived && (
-        <p className="form__error" role="alert" data-testid="archived-edit-blocked">
-          本题已归档，PUT /questions 对 ARCHIVED 题目直接返回 404
-          （QuestionService.java:124），所以本页不可保存。请先在详情页恢复为草稿。
+      {!editable && (
+        <p className="form__error" role="alert" data-testid="not-editable-banner">
+          本题当前状态是 {q.status || '未报告'}，而
+          PUT /questions 只接受 DRAFT，其余状态返回 409 `code:
+          QUESTION_NOT_EDITABLE`（契约里这个 operation 的描述与 409
+          响应都写明了）。发布题已被试卷/练习快照与掌握度诊断引用，改了会变动已判分依据；
+          要改内容只能新建一题，或先把它退回草稿。
         </p>
       )}
 
@@ -224,7 +233,7 @@ export function QuestionEditPage() {
             rows={3}
             required
             maxLength={UPDATE_QUESTION_FIELD_LIMITS.stem}
-            disabled={busy || isArchived}
+            disabled={busy || !editable}
           />
         </div>
 
@@ -237,7 +246,7 @@ export function QuestionEditPage() {
             onChange={(e) => setExplanation(e.target.value)}
             rows={2}
             maxLength={UPDATE_QUESTION_FIELD_LIMITS.explanation}
-            disabled={busy || isArchived}
+            disabled={busy || !editable}
           />
           <p className="field__hint">
             编辑上限是 {UPDATE_QUESTION_FIELD_LIMITS.explanation} 个字符，
@@ -253,7 +262,7 @@ export function QuestionEditPage() {
             className="select"
             value={draft.difficulty}
             onChange={(e) => setDifficulty(e.target.value)}
-            disabled={busy || isArchived}
+            disabled={busy || !editable}
           >
             <option value="">—</option>
             <option value="EASY">简单</option>
@@ -292,7 +301,9 @@ export function QuestionEditPage() {
 
         {save.isError && (
           <p className="form__error" role="alert" data-testid="edit-mutation-error">
-            {normalizeApiError(save.error).message}
+            {apiProblemCode(save.error) === QUESTION_NOT_EDITABLE_CODE
+              ? '服务端说这题已经不是草稿了（可能刚被发布或驳回），保存被拒绝。请刷新查看最新状态。'
+              : normalizeApiError(save.error).message}
           </p>
         )}
 
@@ -303,7 +314,7 @@ export function QuestionEditPage() {
           <Button
             type="submit"
             variant="primary"
-            disabled={busy || isArchived}
+            disabled={busy || !editable}
             data-testid="edit-save-button"
           >
             {busy ? '保存中…' : '保存'}

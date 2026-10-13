@@ -40,11 +40,7 @@ import {
   splitMatchingOptions,
   type MatchingPair,
 } from './answer-grammar';
-import {
-  QUESTION_FIELD_LIMITS,
-  QUESTION_TYPE_DISPLAY_GAP,
-  type QuestionType,
-} from '../lib/format';
+import { QUESTION_FIELD_LIMITS } from '../lib/format';
 
 interface Option {
   optionKey: string;
@@ -230,10 +226,6 @@ export function QuestionRenderer({
     }
   };
 
-  /** Copy telling the user which part of the loop the contract cannot close. */
-  const displayGap = QUESTION_TYPE_DISPLAY_GAP[qType as QuestionType];
-  const gapNotice = isReview ? displayGap?.review ?? null : null;
-
   const submitDisabled =
     disabled ||
     (isBoolean
@@ -265,12 +257,6 @@ export function QuestionRenderer({
   return (
     <div className="question-renderer" data-testid="question-renderer">
       <p className="question-renderer__stem">{question.stem}</p>
-
-      {gapNotice && (
-        <p className="form__note" role="note" data-testid="contract-gap-notice">
-          {gapNotice}
-        </p>
-      )}
 
       {isBoolean && (
         <div className="question-renderer__options">

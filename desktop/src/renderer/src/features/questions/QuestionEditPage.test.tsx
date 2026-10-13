@@ -231,21 +231,51 @@ describe('QuestionEditPage — what is locked, and why', () => {
     expect(screen.getByLabelText('题型')).toBeDisabled();
   });
 
-  it('refuses to save an archived question, because PUT answers 404', async () => {
+  // The contract's PUT description allows a DRAFT only and answers 409
+  // `QUESTION_NOT_EDITABLE` for anything else, so no state but DRAFT gets a
+  // saveable form.
+  it.each(['ARCHIVED', 'PUBLISHED', 'REJECTED'])(
+    'refuses to save a %s question and says why',
+    async (status) => {
+      const user = userEvent.setup();
+      const api = editApi({
+        getQuestion: vi.fn(async () => ({
+          data: { ...stored, status },
+          response: { status: 200 },
+        })),
+      });
+      renderEdit(api);
+
+      const banner = await screen.findByTestId('not-editable-banner');
+      expect(banner).toHaveTextContent(status);
+      expect(banner).toHaveTextContent('QUESTION_NOT_EDITABLE');
+      expect(screen.getByTestId('edit-save-button')).toBeDisabled();
+      expect(screen.getByLabelText('题干')).toBeDisabled();
+
+      // Typing cannot re-enable a doomed save.
+      await user.type(screen.getByLabelText('题干'), '？');
+      expect(api.updateQuestion).not.toHaveBeenCalled();
+    }
+  );
+
+  it('names the 409 code when the question changes state while the form is open', async () => {
     const user = userEvent.setup();
     const api = editApi({
-      getQuestion: vi.fn(async () => ({
-        data: { ...stored, status: 'ARCHIVED' },
-        response: { status: 200 },
+      updateQuestion: vi.fn(async () => ({
+        error: { code: 'QUESTION_NOT_EDITABLE', detail: 'the question is not a DRAFT' },
+        response: { status: 409 },
       })),
     });
     renderEdit(api);
 
-    await screen.findByTestId('archived-edit-blocked');
-    expect(screen.getByTestId('edit-save-button')).toBeDisabled();
+    await screen.findByLabelText('题干');
+    await user.type(screen.getByLabelText('题干'), '再改一点');
+    await user.click(screen.getByTestId('edit-save-button'));
 
-    await user.type(screen.getByLabelText('题干'), '？');
-    expect(api.updateQuestion).not.toHaveBeenCalled();
+    const error = await screen.findByTestId('edit-mutation-error');
+    expect(error).toHaveTextContent('已经不是草稿');
+    // The server's English reason never reaches the screen.
+    expect(error).not.toHaveTextContent('not a DRAFT');
   });
 
   it('marks the form dirty only after a real change', async () => {

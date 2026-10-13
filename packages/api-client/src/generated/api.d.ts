@@ -60,6 +60,7 @@ export interface paths {
             cookie?: never;
         };
         get: operations["get_1"];
+        /** @description Edits stem, explanation and difficulty of a DRAFT question only. A PUBLISHED, ARCHIVED or REJECTED question answers 409 with `code: QUESTION_NOT_EDITABLE`: published questions are already quoted by exam/practice snapshots and by mastery and diagnosis rows, so editing them would change what an existing paper grades against. Publish and archive are the verbs for a published question. */
         put: operations["update_2"];
         post?: never;
         delete?: never;
@@ -559,6 +560,7 @@ export interface paths {
         };
         get: operations["listEntries"];
         put?: never;
+        /** @description Uploads one entry of an awaited snapshot. Conflicts answer 409 with a stable `code`: FOLDER_SNAPSHOT_ALREADY_PROCESSED, FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS, FOLDER_ENTRY_ALREADY_LINKED, FOLDER_ENTRY_NOT_PENDING, FOLDER_ENTRY_CHECKSUM_MISMATCH, FOLDER_ENTRY_STALE. A checksum mismatch means the bytes are not what the snapshot declared; FOLDER_ENTRY_STALE means another request already moved that entry. */
         post: operations["submitEntries"];
         delete?: never;
         options?: never;
@@ -575,6 +577,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Closes the snapshot once every entry is resolved. Conflicts answer 409 with a stable `code`: FOLDER_SNAPSHOT_ALREADY_PROCESSED, FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS, FOLDER_ENTRY_ALREADY_LINKED, FOLDER_ENTRY_NOT_PENDING, FOLDER_ENTRY_CHECKSUM_MISMATCH, FOLDER_ENTRY_STALE. */
         post: operations["completeSync"];
         delete?: never;
         options?: never;
@@ -591,6 +594,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Binds already-uploaded assets to snapshot entries. Conflicts answer 409 with a stable `code`: FOLDER_SNAPSHOT_ALREADY_PROCESSED, FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS, FOLDER_ENTRY_ALREADY_LINKED, FOLDER_ENTRY_NOT_PENDING, FOLDER_ENTRY_CHECKSUM_MISMATCH, FOLDER_ENTRY_STALE. */
         post: operations["bindEntries"];
         delete?: never;
         options?: never;
@@ -799,6 +803,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Closes the session and stores the summary in the same transaction. 409 `code: PRACTICE_SESSION_NOT_IN_PROGRESS` when it is not open, `code: PRACTICE_SESSION_STALE` when another request moved it on first. */
         post: operations["finish"];
         delete?: never;
         options?: never;
@@ -815,6 +820,7 @@ export interface paths {
         };
         get: operations["listAnswers"];
         put?: never;
+        /** @description Grades one answer immediately and stores it. 409 codes: PRACTICE_SESSION_NOT_IN_PROGRESS (the session is not open), PRACTICE_ANSWER_STALE. */
         post: operations["answer"];
         delete?: never;
         options?: never;
@@ -848,6 +854,22 @@ export interface paths {
         get: operations["list_10"];
         put?: never;
         post: operations["link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/spaces/{spaceId}/notes/{noteId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restore_4"];
         delete?: never;
         options?: never;
         head?: never;
@@ -943,7 +965,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["restore_4"];
+        post: operations["restore_5"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1119,6 +1141,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Starts an attempt. 409 `code: EXAM_ACTIVE_ATTEMPT_EXISTS` when the learner already has an unfinished attempt on this paper. */
         post: operations["create_12"];
         delete?: never;
         options?: never;
@@ -1199,6 +1222,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Builds the paper from the blueprint's distributions. 409 `code: EXAM_BLUEPRINT_UNSATISFIED` when the question pool cannot meet the declared type/difficulty quotas or the total: the distributions are enforced, so a paper is never silently produced with a different shape (or a shorter length) than the blueprint that was reviewed. 409 `code: EXAM_BLUEPRINT_NOT_DRAFT` when the blueprint has already generated a paper. */
         post: operations["generate_1"];
         delete?: never;
         options?: never;
@@ -1215,6 +1239,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Submits and grades in one transaction. 409 `code: EXAM_ATTEMPT_ALREADY_SUBMITTED` on a second submit, `code: EXAM_RESULT_NOT_AVAILABLE` when grading produced no result row. */
         post: operations["submit"];
         delete?: never;
         options?: never;
@@ -1247,6 +1272,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Saves one answer against the paper's frozen snapshot. Every rejection names a code: EXAM_ATTEMPT_NOT_IN_PROGRESS, EXAM_DEADLINE_EXCEEDED, EXAM_ANSWER_STALE (another request rewrote this answer), EXAM_ANSWER_NOT_GRADABLE. */
         post: operations["answer_1"];
         delete?: never;
         options?: never;
@@ -1360,7 +1386,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List my ACTIVE AI conversations in this LearningSpace */
+        /**
+         * List my ACTIVE AI conversations in this LearningSpace
+         * @description Paged conversations, newest activity first: ORDER BY COALESCE(last_message_at, created_at) DESC, id DESC. Page numbers are 0-based.
+         */
         get: operations["listConversations"];
         put?: never;
         /** Create an AI tutor conversation in this LearningSpace */
@@ -1378,7 +1407,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List messages of one of my AI conversations */
+        /**
+         * List messages of one of my AI conversations
+         * @description Paged messages of one conversation, OLDEST first: ORDER BY created_at ASC, id ASC, so page 0 is the beginning of the thread and the newest page is totalPages-1. The UI renders a chat transcript by appending later pages, not by reading page 0 as the latest.
+         */
         get: operations["listMessages"];
         put?: never;
         /**
@@ -1435,6 +1467,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Requires a SUBMITTED practice session, else 409 `code: VARIANT_SESSION_NOT_SUBMITTED`. The generated variant is stored as a DRAFT and never published automatically. */
         post: operations["variantFromPractice"];
         delete?: never;
         options?: never;
@@ -1531,7 +1564,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["restore_5"];
+        post: operations["restore_6"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2493,6 +2526,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Score summary written at submit time. 409 `code: PRACTICE_SESSION_NOT_SUBMITTED` while the session is still open — zeros would be a fabricated score — and `code: PRACTICE_RESULT_NOT_RECORDED` for a session submitted before results were stored. */
         get: operations["result"];
         put?: never;
         post?: never;
@@ -2621,6 +2655,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Reads the stored result. 409 `code: EXAM_RESULT_NOT_AVAILABLE` while the attempt is not submitted, `code: EXAM_RESULT_MISSING` when a submitted attempt has no result row to show. */
         get: operations["result_1"];
         put?: never;
         post?: never;
@@ -3270,18 +3305,28 @@ export interface components {
             correctOptionKeys?: string[];
             correctBoolean?: boolean;
             referenceAnswer?: string;
+            correctOrder?: number[];
+            matches?: string;
         };
         QuestionAuthoringResponse: {
             /** Format: int64 */
             id?: number;
             /** Format: int64 */
             spaceId?: number;
-            questionType?: string;
+            /**
+             * @description Answer shape the `answer` and `options` fields follow.
+             * @enum {string}
+             */
+            questionType?: "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER" | "FILL_BLANK" | "ORDERING" | "MATCHING";
             stem?: string;
             explanation?: string;
             difficulty?: string;
             originType?: string;
-            status?: string;
+            /**
+             * @description Lifecycle state. Only DRAFT is editable (PUT answers 409 QUESTION_NOT_EDITABLE otherwise).
+             * @enum {string}
+             */
+            status?: "DRAFT" | "PUBLISHED" | "ARCHIVED" | "REJECTED";
             options?: components["schemas"]["QuestionOptionResponse"][];
             answer?: components["schemas"]["QuestionAnswerView"];
             knowledgePointIds?: number[];
@@ -3338,6 +3383,8 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+            /** Format: date-time */
+            archivedAt?: string;
         };
         UpdateKnowledgePointRequest: {
             title?: string;
@@ -3825,7 +3872,11 @@ export interface components {
             completedAt?: string;
         };
         CreateQuestionRequest: {
-            questionType: string;
+            /**
+             * @description Authoring type. ORDERING carries options to be put in a 1-based order; MATCHING carries `matches` as a JSON array of {left,right} pair objects.
+             * @enum {string}
+             */
+            questionType: "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER" | "FILL_BLANK" | "ORDERING" | "MATCHING";
             stem: string;
             explanation?: string;
             difficulty?: string;
@@ -4093,6 +4144,9 @@ export interface components {
             kpScope?: number[];
             excludeQuestionIds?: number[];
             includeQuestionIds?: number[];
+            scoreByDifficulty?: {
+                [key: string]: number;
+            };
             /** Format: int32 */
             totalQuestionCount?: number;
             /** Format: int32 */
@@ -5252,8 +5306,26 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description Updated draft */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionAuthoringResponse"];
+                };
+            };
+            /** @description No such question in this space (`code: NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionAuthoringResponse"];
+                };
+            };
+            /** @description `code: QUESTION_NOT_EDITABLE` — the question is not a DRAFT */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6868,8 +6940,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description submit summary */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeSubmitView"];
+                };
+            };
+            /** @description conflict with a stable `code` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6918,8 +6999,17 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description answer with feedback */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeAnswerView"];
+                };
+            };
+            /** @description conflict with a stable `code` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6935,6 +7025,11 @@ export interface operations {
                 page?: number;
                 size?: number;
                 keyword?: string;
+                knowledgePointId?: number;
+                sourceId?: number;
+                contentBlockId?: number;
+                questionId?: number;
+                archived?: boolean;
             };
             header?: never;
             path: {
@@ -7022,6 +7117,27 @@ export interface operations {
         responses: {
             /** @description Created */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    restore_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spaceId: number;
+                noteId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7246,7 +7362,7 @@ export interface operations {
             };
         };
     };
-    restore_4: {
+    restore_5: {
         parameters: {
             query?: never;
             header?: never;
@@ -7573,8 +7689,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
-            200: {
+            /** @description attempt created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAttemptView"];
+                };
+            };
+            /** @description `code: EXAM_ACTIVE_ATTEMPT_EXISTS` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7717,8 +7842,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description exam, paper and slots created */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamBlueprintGenerateResponse"];
+                };
+            };
+            /** @description `code: EXAM_BLUEPRINT_UNSATISFIED` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7740,8 +7874,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description result of this submission */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamResultView"];
+                };
+            };
+            /** @description conflict with a stable `code` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7790,8 +7933,17 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description answer stored and graded */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAnswerView"];
+                };
+            };
+            /** @description conflict with a stable `code` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7983,7 +8135,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description conversation page */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8035,7 +8187,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description message page in ascending time order */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8134,8 +8286,17 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description variant created as DRAFT */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description `code: VARIANT_SESSION_NOT_SUBMITTED` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8286,7 +8447,7 @@ export interface operations {
             };
         };
     };
-    restore_5: {
+    restore_6: {
         parameters: {
             query?: never;
             header?: never;
@@ -9774,8 +9935,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description stored result */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeResultView"];
+                };
+            };
+            /** @description conflict with a stable `code` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9962,8 +10132,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description graded result */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamResultView"];
+                };
+            };
+            /** @description conflict with a stable `code` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

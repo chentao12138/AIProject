@@ -19,7 +19,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QuestionForm } from './QuestionForm';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
-import { CONTRACT_GAP_NOTICES, QUESTION_FIELD_LIMITS } from '../../lib/format';
+import { QUESTION_FIELD_LIMITS } from '../../lib/format';
 
 const ROUTE = '/spaces/:spaceId/questions/new';
 
@@ -122,22 +122,22 @@ describe('QuestionForm — type list follows the contract (G02)', () => {
     expect(screen.queryByTestId('ordering-editor')).not.toBeInTheDocument();
   });
 
-  it('states that the order and the pairs cannot be read back, per type', async () => {
+  it('no longer claims the order and pairs cannot be read back', async () => {
     const user = userEvent.setup();
     renderForm();
 
-    // The read side (QuestionAnswerView) has no correctOrder / matchesJson, so
-    // the notice has to name that field rather than imply the author can review
-    // what they set.
+    // C09b: `QuestionAnswerView` declares `correctOrder` and `matches`, so the
+    // one-way notices are gone. The wire previews stay — they show what the
+    // author is about to send, which is a different claim from "it cannot be read".
     await pickType(user, 'ORDERING');
-    expect(await screen.findByTestId('ordering-oneway-notice')).toHaveTextContent(
-      CONTRACT_GAP_NOTICES.ORDERING_REVIEW
-    );
+    expect(await screen.findByTestId('ordering-editor')).toBeInTheDocument();
+    expect(screen.queryByTestId('ordering-oneway-notice')).not.toBeInTheDocument();
+    expect(screen.getByTestId('correct-order-preview')).toBeInTheDocument();
 
     await pickType(user, 'MATCHING');
-    expect(await screen.findByTestId('matching-oneway-notice')).toHaveTextContent(
-      CONTRACT_GAP_NOTICES.MATCHING_REVIEW
-    );
+    expect(await screen.findByTestId('matching-editor')).toBeInTheDocument();
+    expect(screen.queryByTestId('matching-oneway-notice')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('contract-gap-notice')).not.toBeInTheDocument();
   });
 });
 

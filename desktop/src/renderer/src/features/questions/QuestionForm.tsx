@@ -10,10 +10,9 @@
  * `correctOrder` / `matches` on the create side and `orderingAnswer` /
  * `matchingAnswer` on the answer side, so all seven types are authorable.
  *
- * What is still one-way is the stored answer for the two new types:
- * `QuestionAnswerView` has no `correctOrder` / `matchesJson`, so nothing here
- * pretends to read them back — the notice under each widget is
- * `QUESTION_TYPE_DISPLAY_GAP`, the same copy the review surface uses.
+ * Both new types now read back too: `QuestionAnswerView` carries `correctOrder`
+ * and `matches` (C09b), so the stored answer of an ORDERING / MATCHING question
+ * is visible on the detail page and nothing has to be promised one-way.
  *
  * Every limit below comes from openapi.json (`maxLength` / `maxItems`); the
  * per-type required answers mirror what `QuestionService.validateStructure()`
@@ -38,7 +37,6 @@ import {
   AUTHORABLE_QUESTION_TYPES,
   QUESTION_FIELD_LIMITS,
   QUESTION_TYPES,
-  QUESTION_TYPE_DISPLAY_GAP,
   isAuthorableQuestionType,
   questionTypeGap,
   questionTypeLabel,
@@ -81,11 +79,6 @@ const ITEM_TYPES: readonly QuestionType[] = [
   'MULTIPLE_CHOICE',
   'ORDERING',
 ];
-
-/** The copy that names the read-side gap of the two new types. */
-function oneWayNotice(type: QuestionType): string | null {
-  return QUESTION_TYPE_DISPLAY_GAP[type]?.review ?? questionTypeGap(type);
-}
 
 export function QuestionForm() {
   const api = useApiClient();
@@ -385,9 +378,6 @@ export function QuestionForm() {
   const correctOrderPreview = toCorrectOrder(ordering);
   const matchesPreviewText = serializeMatches(matching);
   const matchingPreview = matchingPreviewRows(matching);
-  const oneWay = questionType === 'ORDERING' || questionType === 'MATCHING'
-    ? oneWayNotice(questionType)
-    : null;
 
   return (
     <div className="page">
@@ -560,11 +550,6 @@ export function QuestionForm() {
             <p className="field__hint" data-testid="correct-order-preview">
               correctOrder = [{correctOrderPreview.join(', ')}]
             </p>
-            {oneWay && (
-              <p className="form__note" role="note" data-testid="ordering-oneway-notice">
-                {oneWay}
-              </p>
-            )}
           </div>
         )}
 
@@ -706,11 +691,6 @@ export function QuestionForm() {
               matches = {matchesPreviewText}（{matchesPreviewText.length} /{' '}
               {QUESTION_FIELD_LIMITS.matches} 字符）
             </p>
-            {oneWay && (
-              <p className="form__note" role="note" data-testid="matching-oneway-notice">
-                {oneWay}
-              </p>
-            )}
           </div>
         )}
 

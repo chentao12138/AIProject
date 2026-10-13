@@ -46,9 +46,11 @@ import {
   difficultyLabel,
   formatDateTime,
   isPublishableQuestionType,
+  isQuestionEditable,
   questionTypeGap,
   questionTypeLabel,
 } from '../../lib/format';
+import { parseMatchingPairs } from '../../components/answer-grammar';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { ErrorState } from '../../components/ErrorState';
@@ -165,13 +167,37 @@ export function QuestionDetailPage() {
         correctOptionKeys: q.answer.correctOptionKeys,
         correctBoolean: q.answer.correctBoolean,
         referenceAnswer: q.answer.referenceAnswer,
+        correctOrder: q.answer.correctOrder,
+        matches: q.answer.matches,
         explanation: q.explanation,
       }
     : undefined;
 
   const status = (q.status ?? '').trim().toUpperCase();
   const isArchived = status === STATUS_ARCHIVED;
-  const isDraft = status === 'DRAFT';
+  const isDraft = isQuestionEditable(q.status);
+  /**
+   * C09b closed the read side, so a stored ORDERING / MATCHING answer is a fact
+   * the page can show instead of a gap it has to announce. `correctOrder[i]` is
+   * the POSITION the i-th option was put in — that is what the create side writes
+   * (`toCorrectOrder`) and what `gradeOrdering` compares an `orderingAnswer`
+   * against — so the list is inverted here: sort the options by the position they
+   * were assigned, and read them back as 第 1 位 … 第 n 位.
+   */
+  const storedOrder = q.answer?.correctOrder ?? [];
+  const reviewOptions = payload.options ?? [];
+  const orderRows = storedOrder
+    .map((position, itemIndex) => ({
+      position,
+      content: reviewOptions[itemIndex]?.content ?? `第 ${itemIndex + 1} 个选项未返回`,
+    }))
+    .sort((a, b) => a.position - b.position);
+  const allOptionKeys = reviewOptions.map((o) => o.optionKey ?? '');
+  const storedPairs = parseMatchingPairs(
+    q.answer?.matches,
+    allOptionKeys,
+    allOptionKeys
+  );
   // Publishing a question whose correct answer the contract cannot express
   // would hand exams/practice an ungradeable item, so the action is withheld
   // and the missing field is named instead.
@@ -202,9 +228,10 @@ export function QuestionDetailPage() {
                 {publish.isPending ? '发布中…' : '发布'}
               </Button>
             )}
-            {/* `PUT` refuses an ARCHIVED question (QuestionService.java:124),
-                so there is no edit form to open while archived. */}
-            {!isArchived && (
+            {/* The contract's PUT description allows only a DRAFT; anything else
+                answers 409 `QUESTION_NOT_EDITABLE`, so no edit form is offered
+                for a published or rejected question either. */}
+            {isDraft && (
               <Link
                 to={`/spaces/${spaceId}/questions/${questionId}/edit`}
                 className="nav-link"
@@ -212,6 +239,11 @@ export function QuestionDetailPage() {
               >
                 编辑
               </Link>
+            )}
+            {!isDraft && !isArchived && (
+              <span className="muted" role="note" data-testid="question-not-editable">
+                不可编辑：只有草稿能改
+              </span>
             )}
             {isArchived ? (
               <Button
@@ -311,6 +343,32 @@ export function QuestionDetailPage() {
         <h2 className="section-title">题目内容</h2>
         <QuestionRenderer question={payload} answer={answer} mode="review" />
       </section>
+
+      {q.questionType === 'ORDERING' && storedOrder.length > 0 && (
+        <section className="workbench-section" aria-label="标准顺序">
+          <h2 className="section-title">标准顺序</h2>
+          <ol data-testid="stored-order">
+            {orderRows.map((row, index) => (
+              <li key={`${row.position}-${index}`} data-testid="stored-order-item">
+                第 {row.position} 位：{row.content}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {q.questionType === 'MATCHING' && storedPairs.length > 0 && (
+        <section className="workbench-section" aria-label="标准配对">
+          <h2 className="section-title">标准配对</h2>
+          <ul data-testid="stored-matches">
+            {storedPairs.map((pair) => (
+              <li key={`${pair.left}-${pair.right}`} data-testid="stored-match-item">
+                {pair.left} → {pair.right}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {confirmingArchive && (
         <Dialog

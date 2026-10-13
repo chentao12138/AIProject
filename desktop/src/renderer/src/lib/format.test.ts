@@ -9,7 +9,6 @@ import {
   CONTRACT_GAP_NOTICES,
   QUESTION_FIELD_LIMITS,
   QUESTION_TYPES,
-  QUESTION_TYPE_DISPLAY_GAP,
   formatBytes,
   isAuthorableQuestionType,
   isPublishableQuestionType,
@@ -102,13 +101,17 @@ describe('AUTHORABLE_QUESTION_TYPES (G02)', () => {
 });
 
 describe('contract-gap copy', () => {
-  it('names the fields it is talking about instead of saying "not supported"', () => {
-    expect(CONTRACT_GAP_NOTICES.ORDERING_REVIEW).toContain('QuestionAnswerView');
-    expect(CONTRACT_GAP_NOTICES.ORDERING_REVIEW).toContain('correctOrder');
-    expect(CONTRACT_GAP_NOTICES.MATCHING_REVIEW).toContain('matchesJson');
+  it('names the field it is talking about instead of saying "not supported"', () => {
     expect(CONTRACT_GAP_NOTICES.QUESTION_UPDATE_FIELDS).toContain(
       'UpdateQuestionRequest'
     );
+  });
+
+  // C09b closed: `QuestionAnswerView` now declares `correctOrder` and `matches`,
+  // so the two "cannot read it back" notices must not come back. This assertion
+  // is the guard — a re-added notice key turns it red.
+  it('has no read-side gap notice left', () => {
+    expect(Object.keys(CONTRACT_GAP_NOTICES)).toEqual(['QUESTION_UPDATE_FIELDS']);
   });
 
   it('has no authoring gap left to attach', () => {
@@ -119,25 +122,6 @@ describe('contract-gap copy', () => {
     }
     expect(questionTypeGap('FILL_BLANK')).toBeNull();
     expect(questionTypeGap('SINGLE_CHOICE')).toBeNull();
-  });
-
-  it('keeps the read-side sentence on the review surface only', () => {
-    // Authoring and answering close the loop, but a stored question's standard
-    // order / pair set cannot be read back, so only the reader is owed a note.
-    expect(QUESTION_TYPE_DISPLAY_GAP.ORDERING?.review).toBe(
-      CONTRACT_GAP_NOTICES.ORDERING_REVIEW
-    );
-    expect(QUESTION_TYPE_DISPLAY_GAP.MATCHING?.review).toBe(
-      CONTRACT_GAP_NOTICES.MATCHING_REVIEW
-    );
-    expect(
-      Object.values(QUESTION_TYPE_DISPLAY_GAP).every(
-        (entry) => entry !== undefined && 'review' in entry
-      )
-    ).toBe(true);
-    // Nothing to flag for a type the contract closes.
-    expect(QUESTION_TYPE_DISPLAY_GAP.FILL_BLANK).toBeUndefined();
-    expect(QUESTION_TYPE_DISPLAY_GAP.SHORT_ANSWER).toBeUndefined();
   });
 
   it('labels the three new types for display', () => {

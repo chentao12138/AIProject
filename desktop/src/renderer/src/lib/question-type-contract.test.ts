@@ -37,9 +37,10 @@ import {
   SOURCE_FORM_LIMITS,
   NOTE_FORM_LIMITS,
   QUESTIONS_PAGE_SIZE,
-  QUESTION_TYPE_DISPLAY_GAP,
+  QUESTION_STATUSES,
   isAuthorableQuestionType,
   isPublishableQuestionType,
+  isQuestionEditable,
 } from './format';
 
 const CONTRACT_PATH = join(
@@ -232,21 +233,43 @@ describe.skipIf(!hasContract)('question authoring body matches the contract', ()
     expect(ordering.items?.minimum).toBe(1);
   });
 
-  it('cannot read a stored order or pair set back, so the review notice stays', () => {
-    // C09b: the write side grew correctOrder / matches, the read side did not.
-    expect(fieldNames('QuestionAnswerView')).toEqual([
-      'correctOptionKey',
-      'correctOptionKeys',
-      'correctBoolean',
-      'referenceAnswer',
+  it('reads a stored order and pair set back, so no review notice is owed', () => {
+    // C09b closed: the read side grew `correctOrder` and `matches`, and the
+    // detail page renders them instead of announcing a gap.
+    const fields = fieldNames('QuestionAnswerView');
+    expect(fields).toContain('correctOrder');
+    expect(fields).toContain('matches');
+    expect(fields).toContain('referenceAnswer');
+
+    // And the copy that claimed the opposite is gone for good: re-adding a
+    // "cannot read it back" notice has to pass this assertion on purpose.
+    const source = readFileSync(FORM_PATH, 'utf8');
+    expect(source).not.toContain('oneway-notice');
+    expect(source).not.toContain('QUESTION_TYPE_DISPLAY_GAP');
+  });
+
+  it('declares the lifecycle enum that decides what is editable', () => {
+    // `QuestionEditPage` / `QuestionsPage` offer 编辑 only where the contract
+    // says a PUT is accepted. That rule is this enum plus the operation
+    // description, not a string hardcoded in one page.
+    const status = (
+      contract?.components.schemas?.QuestionAuthoringResponse as unknown as
+        | { properties?: { status?: { enum?: string[] } } }
+        | undefined
+    )?.properties?.status;
+    expect(status?.enum).toEqual(['DRAFT', 'PUBLISHED', 'ARCHIVED', 'REJECTED']);
+    expect(Object.values(QUESTION_STATUSES)).toEqual([
+      'DRAFT',
+      'PUBLISHED',
+      'ARCHIVED',
+      'REJECTED',
     ]);
-    expect(QUESTION_TYPE_DISPLAY_GAP.ORDERING?.review).toContain(
-      'QuestionAnswerView'
-    );
-    expect(QUESTION_TYPE_DISPLAY_GAP.MATCHING?.review).toContain(
-      'QuestionAnswerView'
-    );
-    expect(QUESTION_TYPE_DISPLAY_GAP.SINGLE_CHOICE).toBeUndefined();
+    expect(isQuestionEditable('DRAFT')).toBe(true);
+    for (const state of ['PUBLISHED', 'ARCHIVED', 'REJECTED']) {
+      expect(isQuestionEditable(state), `${state} must not be editable`).toBe(
+        false
+      );
+    }
   });
 
   it('carries FILL_BLANK end to end, which is why it is authorable', () => {

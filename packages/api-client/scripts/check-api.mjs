@@ -76,6 +76,27 @@ function canonical(value) {
 }
 
 /**
+ * Where two canonical forms first part ways, as a bounded excerpt.
+ *
+ * Without this the `--live` failure could only say "the meaning differs", and
+ * the way to find out was to fetch the document by hand and diff it — which is
+ * how a genuine 198-path regeneration looked broken for several rounds: the
+ * path sets matched, so the message gave no clue where the documents did not.
+ */
+function firstCanonicalDiff(a, b, window = 200) {
+  const ca = canonical(a);
+  const cb = canonical(b);
+  if (ca === cb) return 'the canonical forms are equal (so the hash mismatch is internal)';
+  let i = 0;
+  while (i < ca.length && i < cb.length && ca[i] === cb[i]) i += 1;
+  const from = Math.max(0, i - window);
+  return (
+    `at char ${i} — committed ${JSON.stringify(ca.slice(from, i + window))} ` +
+    `vs live ${JSON.stringify(cb.slice(from, i + window))}`
+  );
+}
+
+/**
  * `--live`: the committed snapshot must still equal what the server publishes.
  *
  * `api:check` proves openapi.json and api.d.ts agree with EACH OTHER, which is
@@ -85,6 +106,9 @@ function canonical(value) {
  * silently created with no time limit. Only a comparison against the live
  * server can see that, so this mode exists and `docs/SMOKE-INSTRUCTIONS.md`
  * tells you to run it whenever the backend is reachable.
+ */
+/**
+ * `--live`: the committed snapshot must still equal what a running server.
  */
 async function checkAgainstLiveServer(spec) {
   const url =
@@ -114,8 +138,21 @@ async function checkAgainstLiveServer(spec) {
     }
   }
 
-  const liveHash = sha256(canonical(live));
-  const committedHash = sha256(canonical(spec));
+  // `servers[].url` is springdoc echoing the Host it was asked for, so a
+  // document fetched through `localhost` differs from the same document fetched
+  // through `127.0.0.1` — or from one recorded while the server sat on another
+  // port — without any contract changing. Comparing it would make this gate
+  // permanently red on the machine it is meant to protect, so the comparison is
+  // of everything except that field.
+  const comparable = (doc) => {
+    const { servers, ...rest } = doc ?? {};
+    return rest;
+  };
+  const liveDoc = comparable(live);
+  const committedDoc = comparable(spec);
+
+  const liveHash = sha256(canonical(liveDoc));
+  const committedHash = sha256(canonical(committedDoc));
   if (liveHash !== committedHash) {
     const livePaths = new Set(paths);
     const committedPaths = new Set(Object.keys(spec.paths ?? {}));
@@ -123,9 +160,14 @@ async function checkAgainstLiveServer(spec) {
     const removed = [...committedPaths].filter((p) => !livePaths.has(p));
     fail(
       `the committed snapshot is not what ${url} publishes (canonical spec ` +
-        `differs). Paths added by the server: ${added.length ? added.join(', ') : 'none'}. ` +
+        `differs, ignoring servers[].url). Paths added by the server: ` +
+        `${added.length ? added.join(', ') : 'none'}. ` +
         `Paths removed: ${removed.length ? removed.join(', ') : 'none'}. ` +
-        'Field-level changes are not listed here — run `npm run api:generate` ' +
+        `Committed ${SPEC_FILE}: ${committedPaths.size} paths, canonical ` +
+        `${canonical(committedDoc).length} chars. Live: ${livePaths.size} paths, canonical ` +
+        `${canonical(liveDoc).length} chars. First canonical difference: ` +
+        `${firstCanonicalDiff(committedDoc, liveDoc)}. ` +
+        'Field-level changes are not listed above — run `npm run api:generate` ' +
         'against this server, then `npm run typecheck`: the derived request ' +
         'and response types are what report renamed or added fields.'
     );

@@ -93,10 +93,6 @@ export type AuthorableQuestionType =
  * can tell "not built yet" apart from "the contract cannot express it".
  */
 export const CONTRACT_GAP_NOTICES = {
-  ORDERING_REVIEW:
-    '无法回显标准顺序：契约的读侧 QuestionAnswerView 只有 correctOptionKey / correctOptionKeys / correctBoolean / referenceAnswer，没有 correctOrder，所以题库详情看不到创建时设的顺序（缺口 C09b）。批改结果里的 correctAnswer 仍会给出服务端判分用的顺序。',
-  MATCHING_REVIEW:
-    '无法回显标准配对：QuestionAnswerView 不携带 matchesJson，创建时设定的配对读不回来（缺口 C09b）。批改结果里的 correctAnswer 仍会给出服务端的配对。',
   QUESTION_UPDATE_FIELDS:
     '编辑只能改题干 / 解析 / 难度：契约的 UpdateQuestionRequest 只有 stem、explanation、difficulty 三个字段，选项与正确答案无法修改。要改答案只能新建一道题。',
 } as const;
@@ -175,19 +171,6 @@ export function isPublishableQuestionType(type?: string | null): boolean {
 export function questionTypeGap(type?: string | null): string | null {
   return questionTypeSupport(type)?.gap ?? null;
 }
-
-/**
- * Copy for the display of a type the contract cannot close, per surface.
- * Answering is complete for every type now, so only the review of a *stored*
- * question still owes the user an explanation: `QuestionAnswerView` has no
- * `correctOrder` / `matchesJson`, so what the author set cannot be read back.
- */
-export const QUESTION_TYPE_DISPLAY_GAP: Partial<
-  Record<QuestionType, { review: string }>
-> = {
-  ORDERING: { review: CONTRACT_GAP_NOTICES.ORDERING_REVIEW },
-  MATCHING: { review: CONTRACT_GAP_NOTICES.MATCHING_REVIEW },
-};
 
 /**
  * Length caps copied out of openapi.json — `maxLength` on a string,
@@ -348,6 +331,33 @@ export const PRACTICE_RESULT_ERROR_CODES = {
   /** Finished before V066, so the server never stored a score for it. */
   NOT_RECORDED: 'PRACTICE_RESULT_NOT_RECORDED',
 } as const;
+
+/**
+ * Question lifecycle states, now an enum in the contract
+ * (`QuestionAuthoringResponse.status`, description: "Only DRAFT is editable").
+ * Pinned to the published enum by `lib/question-type-contract.test.ts`.
+ */
+export const QUESTION_STATUSES = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+  REJECTED: 'REJECTED',
+} as const;
+
+/**
+ * The one editable state. The PUT description states the rule and the 409 code
+ * outright, and `QuestionService.update()` used to reject only ARCHIVED — the
+ * contract now decides, so a PUBLISHED or REJECTED question gets no edit form
+ * instead of a form whose save is doomed.
+ */
+export const QUESTION_EDITABLE_STATUS = QUESTION_STATUSES.DRAFT;
+
+export function isQuestionEditable(status?: string | null): boolean {
+  return (status ?? '').trim().toUpperCase() === QUESTION_EDITABLE_STATUS;
+}
+
+/** The 409 `code` the server answers a non-DRAFT `PUT /questions/{id}` with. */
+export const QUESTION_NOT_EDITABLE_CODE = 'QUESTION_NOT_EDITABLE';
 
 /**
  * Knowledge origin types (`KnowledgePoint.ORIGIN_TYPE_*`), pinned to the
