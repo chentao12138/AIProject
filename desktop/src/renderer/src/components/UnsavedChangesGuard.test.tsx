@@ -54,6 +54,21 @@ describe('UnsavedChangesGuard (A8.2)', () => {
     expect(await screen.findByText('其它页面')).toBeInTheDocument();
   });
 
+  it('closes on Escape without leaving the page, so the keyboard escape hatch works', async () => {
+    const user = userEvent.setup();
+    renderGuarded(true);
+
+    await user.click(await screen.findByRole('link', { name: '离开' }));
+    const dialog = await screen.findByRole('dialog');
+
+    // Escape means "stay", never "discard": the destructive path requires an
+    // explicit button.
+    await user.keyboard('{Escape}');
+    expect(dialog).not.toBeInTheDocument();
+    expect(screen.queryByText('其它页面')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '离开' })).toBeInTheDocument();
+  });
+
   it('does not intercept navigation when nothing is dirty', async () => {
     const user = userEvent.setup();
     renderGuarded(false);
