@@ -209,6 +209,25 @@ export function KnowledgePointDetailPage() {
         <div className="content-block__body">{point.content || '—'}</div>
       </section>
 
+      <section className="workbench-section" aria-label="相关学习">
+        <h2 className="section-title">相关学习</h2>
+        {/* W16: the question list already filters by knowledgePointId from the
+            URL, so arriving from a knowledge point must not require typing an
+            id by hand. Only contract-supported query keys are used here. */}
+        <ul className="point-list">
+          <li>
+            <Link
+              className="nav-link"
+              to={`/spaces/${spaceId}/questions?${new URLSearchParams({
+                knowledgePointId: String(knowledgePointId),
+              }).toString()}`}
+            >
+              在题库中查看相关题目
+            </Link>
+          </li>
+        </ul>
+      </section>
+
       <section className="workbench-section" aria-label="来源追溯">
         <h2 className="section-title">来源追溯</h2>
         {provenanceQuery.isPending && (

@@ -43,6 +43,41 @@ describe('KnowledgePointDetailPage', () => {
     expect(screen.getByRole('button', { name: '发布' })).toBeInTheDocument();
   });
 
+  it('links to the question list pre-filtered by this knowledge point (W16)', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: {
+          id: 5,
+          spaceId: 3,
+          title: 'Draft note',
+          content: 'body',
+          status: 'DRAFT',
+        },
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    const link = await screen.findByRole('link', {
+      name: '在题库中查看相关题目',
+    });
+    // The id must arrive as the query key QuestionsPage actually reads, so the
+    // user never has to type a knowledge point id by hand.
+    expect(link).toHaveAttribute(
+      'href',
+      '/spaces/3/questions?knowledgePointId=5'
+    );
+  });
+
   it('shows no active publish CTA for a PUBLISHED point (K1.10)', async () => {
     const apiClient = mockApiClient({
       listKnowledgeCategories: vi.fn(async () => ({
