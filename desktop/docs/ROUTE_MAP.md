@@ -27,6 +27,8 @@ cannot silently drift from the links.
 | `/spaces/:spaceId/sources/:sourceId` | `SourceWorkbenchPage` | Source reader + workbench |
 | `/spaces/:spaceId/knowledge` | `KnowledgePage` | Knowledge catalog |
 | `/spaces/:spaceId/knowledge/:knowledgePointId` | `KnowledgePointDetailPage` | Knowledge point detail + provenance |
+| `/spaces/:spaceId/notes` | `NotesPage` | Note list (paged, keyword) + create + prefill from another entity |
+| `/spaces/:spaceId/notes/:noteId` | `NoteDetailPage` | Note view / edit / archive / delete + context links |
 | `/spaces/:spaceId/ai` | `AiChatPage` | AI tutor (new conversation) |
 | `/spaces/:spaceId/ai/:conversationId` | `AiChatPage` | AI tutor (existing conversation) |
 | `/spaces/:spaceId/questions` | `QuestionsPage` | Question list / filters |
@@ -65,5 +67,9 @@ There is no question *edit* route: the contract has no update verb, so
 
 ## Out of scope (B-class)
 
-- Notes routes (`/notes`, `/notes/:noteId`) — blocked; no backend contract.
 - macOS/Linux specific routes or platform flows.
+
+Notes used to be listed here. It was not B-class — it was A8 waiting on a
+contract that has since landed, and both routes above are registered now.
+Rich-text WYSIWYG note editing stays excluded (B12.4): the editor is plain text
+or Markdown source, never an HTML surface.
