@@ -53,6 +53,38 @@ function offenders(pattern: RegExp, dirs: string[]): string[] {
 const UI = ['src/renderer/src/app', 'src/renderer/src/features'];
 const ALL = ['src/renderer/src'];
 
+/**
+ * Files that call the server must also be able to fail out loud (A9.3).
+ *
+ * The audit found pages where a start/submit mutation resolved into an error
+ * and the UI simply stayed as if nothing happened. Whether a screen reports a
+ * failure is a file-level property, so this cannot be a one-line pattern: a
+ * module that talks to the API has to reference at least one failure surface —
+ * `isError`, an `onError` handler, `ErrorState`, the shared error copy
+ * normaliser, or the form-level error element.
+ */
+function dataFilesWithoutFailureSurface(dirs: string[]): string[] {
+  const hits: string[] = [];
+  for (const dir of dirs) {
+    for (const file of sourceFiles(dir)) {
+      const text = readFileSync(file, 'utf8');
+      const callsServer =
+        /\buseQuery\(|\buseMutation\(|spaceQuery\(|entityQuery\(/.test(text);
+      if (!callsServer) {
+        continue;
+      }
+      const showsFailure =
+        /\bisError\b|onError\s*:|normalizeApiError\(|<ErrorState|form__error/.test(
+          text
+        );
+      if (!showsFailure) {
+        hits.push(relative(process.cwd(), file));
+      }
+    }
+  }
+  return hits;
+}
+
 describe('renderer conventions', () => {
   it('never re-implements an id guard inline', () => {
     // lib/queries.ts and requireId own this. A page-local copy is how a
@@ -97,6 +129,10 @@ describe('renderer conventions', () => {
     // fields the server may not send (or renamed) with no compile error.
     // The single sanctioned escape hatch lives in lib/types.ts.
     expect(offenders(/as unknown as|Record<string, unknown>/, UI)).toEqual([]);
+  });
+
+  it('never talks to the server without a way to report failure', () => {
+    expect(dataFilesWithoutFailureSurface(UI)).toEqual([]);
   });
 
   it('never re-declares a response shape that the client already types', () => {
