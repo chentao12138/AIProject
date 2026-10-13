@@ -27,6 +27,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusBadge } from '../../components/StatusBadge';
+import { examActionError } from './exam-error';
 
 export function ExamDetailPage() {
   const api = useApiClient();
@@ -105,7 +106,21 @@ export function ExamDetailPage() {
 
   const status = (exam.status ?? '').toUpperCase();
   const questions = exam.questions ?? [];
-  const actionError = publish.error ?? startAttempt.error;
+
+  /*
+   * W07 — CONTRACT GAP, deliberately not implemented.
+   * This page cannot offer an entry to past attempts: the contract exposes no
+   * attempt-list endpoint at all. `GET /exams/{examId}` returns `ExamResponse`
+   * = {id, spaceId, title, description, examType, timeLimitMinutes, totalScore,
+   * status, paperVersion, questions, createdAt, updatedAt, publishedAt} — no
+   * attempts/attempts field — and the only attempt reads are
+   * `GET /exam-attempts/{attemptId}`, `.../result` and `.../diagnosis`, all of
+   * which already need an attemptId we have no way to discover here.
+   * `POST /exams/{examId}/sessions` always CREATES a new attempt, so "开始考试"
+   * is not a history entry and must not be labelled as one. Recorded as a
+   * contract request (C10 / W07): `GET /exams/{examId}/attempts` (or an
+   * `attempts` array on ExamResponse).
+   */
 
   return (
     <div className="page">
@@ -171,10 +186,23 @@ export function ExamDetailPage() {
         </Button>
       </div>
 
-      {actionError && (
-        <p className="form__error" role="alert">
-          {normalizeApiError(actionError).message}
-        </p>
+      {/* W05: a failed action states what went wrong in readable Chinese and
+          offers the retry that can actually help. */}
+      {publish.error && (
+        <ErrorState
+          message={examActionError(publish.error).message}
+          onRetry={() => publish.mutate()}
+        />
+      )}
+      {startAttempt.error && (
+        <ErrorState
+          message={examActionError(startAttempt.error).message}
+          onRetry={() => startAttempt.mutate()}
+        >
+          <Link className="nav-link" to={`/spaces/${spaceId}/exams`}>
+            返回考试列表
+          </Link>
+        </ErrorState>
       )}
 
       <section className="workbench-section" aria-label="试卷列表">
