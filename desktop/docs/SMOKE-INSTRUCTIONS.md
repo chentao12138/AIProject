@@ -233,6 +233,45 @@ checked. A step is evidence, not a checkbox.
 
 ---
 
+## Live API journey, 2026-10-14 (real server, real token — not a GUI run)
+
+With the account restored, the A-class flows were exercised against
+`http://localhost:8081` through the same endpoints the renderer calls. This is
+**API-level** evidence: it proves the wire contract and the server's behaviour,
+not that the installed renderer paints anything.
+
+| Result | Step |
+|--------|------|
+| PASS | `POST /auth/login` → access + refresh token pair |
+| PASS | `GET /spaces` → the account's space (id 29) |
+| PASS | `POST /notes` → note created (201) |
+| PASS | `GET /notes/{id}` → `contentFormat` still `MARKDOWN` (no silent downgrade), `updatedAt` 6-decimal |
+| PASS | `PUT /notes/{id}` with the full document replaces the content — the reason the editor never sends a partial body |
+| PASS | `POST /notes/{id}/archive` → 204, and the note is gone from the paged list; page shape is `{items,page,pageSize,totalItems,totalPages}` |
+| PASS | `POST /questions` ORDERING with 1-based `correctOrder: [2,1]` → 201 |
+| PASS | `POST /questions/{id}/publish` → 200 |
+| PASS | `POST /questions` MATCHING with `matches` = JSON `{left,right}` key pairs → 201 |
+| **PASS** | `POST /exams` with `timeLimitMinutes: 45` → **`GET /exams/{id}` returns 45** — the field-name fix works against the server, which is the defect this round found |
+| PASS | `GET /search?q=…&types=NOTE` → 200 (accepted; 0 hits because the only note is archived) |
+| **not run** | practice grading of `orderingAnswer` |
+| **not run** | exam attempt `deadlineAt`, and the C10 read-model check |
+
+The last two did **not** run because the script skipped a step, not because the
+product failed — recorded here so nobody reads them as defects or as passes:
+
+- `POST /practice-sessions` returns `PracticeSessionSummary`, which has no
+  `questions` array; the snapshot comes from `GET /practice-sessions/{id}`. The
+  script read the create response, so it saw `undefined`. **The renderer takes
+  the correct path** (it reads the detail), but the live check that the server
+  grades a 1-based `orderingAnswer` as correct is therefore **still unproven**.
+- `POST /exams/{id}/sessions` returned **400** — the exam was created but never
+  published. So `deadlineAt` (the countdown's source) and the attempt read model
+  remain unverified live.
+
+Re-run to close those two: publish the exam, and read the practice session
+detail before answering. R03–R05 (installed-app login/restore and the GUI
+journeys) still need the same account plus a person or automation at the keyboard.
+
 ## Smoke steps, 2026-10-14
 
 `BACKEND-CONTRACT-REQUESTS.md` records what the regenerated contract delivered.
