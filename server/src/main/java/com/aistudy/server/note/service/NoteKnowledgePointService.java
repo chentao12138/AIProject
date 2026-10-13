@@ -1,11 +1,14 @@
 package com.aistudy.server.note.service;
 
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import com.aistudy.server.knowledge.point.service.KnowledgePointService;
 import com.aistudy.server.note.entity.Note;
 import com.aistudy.server.note.entity.NoteKnowledgePoint;
 import com.aistudy.server.note.mapper.NoteKnowledgePointMapper;
 import com.aistudy.server.note.mapper.NoteMapper;
 import com.aistudy.server.space.service.LearningSpaceService;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,20 +47,28 @@ public class NoteKnowledgePointService {
         return noteKnowledgePointMapper.selectKnowledgePointIdsByNote(noteId, spaceId, ownerSubject);
     }
 
+    /**
+     * Links every given knowledge point, skipping the ones already linked.
+     *
+     * <p>Every id is validated BEFORE the first insert, and an unknown or
+     * foreign id is a 404 rather than a silent {@code return}: the controller
+     * answers 201, so a partial or empty link used to be indistinguishable from
+     * success for a client that had just been told the link existed.
+     *
+     * @throws ApiException 404 {@code SPACE_NOT_FOUND} / {@code NOTE_NOT_FOUND} /
+     *         {@code KNOWLEDGE_POINT_NOT_FOUND}, naming the offending id
+     */
     @Transactional
     public void linkKnowledgePoints(String ownerSubject, Long spaceId, Long noteId, List<Long> kpIds) {
-        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
-            return;
-        }
-        Note note = noteMapper.selectByIdAndSpaceAndOwner(noteId, spaceId, ownerSubject);
-        if (note == null) {
-            return;
-        }
+        requireSpace(ownerSubject, spaceId);
+        requireNote(ownerSubject, spaceId, noteId);
 
         Set<Long> uniqueIds = new LinkedHashSet<>(kpIds);
         for (Long kpId : uniqueIds) {
-            if (knowledgePointService.getMine(ownerSubject, spaceId, kpId) == null) {
-                return;
+            if (kpId == null || knowledgePointService.getMine(ownerSubject, spaceId, kpId) == null) {
+                throw new ApiException(HttpStatus.NOT_FOUND,
+                        ApiErrorCodes.KNOWLEDGE_POINT_NOT_FOUND,
+                        "knowledge point " + kpId + " is not in this space");
             }
         }
 
@@ -79,9 +90,22 @@ public class NoteKnowledgePointService {
 
     @Transactional
     public void unlinkKnowledgePoint(String ownerSubject, Long spaceId, Long noteId, Long kpId) {
-        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
-            return;
-        }
+        requireSpace(ownerSubject, spaceId);
+        requireNote(ownerSubject, spaceId, noteId);
         noteKnowledgePointMapper.deleteByNoteIdAndKpId(noteId, kpId);
+    }
+
+    private void requireSpace(String ownerSubject, Long spaceId) {
+        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCodes.SPACE_NOT_FOUND,
+                    "learning space " + spaceId + " not found");
+        }
+    }
+
+    private void requireNote(String ownerSubject, Long spaceId, Long noteId) {
+        if (noteMapper.selectByIdAndSpaceAndOwner(noteId, spaceId, ownerSubject) == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCodes.NOTE_NOT_FOUND,
+                    "note " + noteId + " not found in this space");
+        }
     }
 }

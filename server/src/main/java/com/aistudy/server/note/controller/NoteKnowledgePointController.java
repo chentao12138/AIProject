@@ -1,5 +1,7 @@
 package com.aistudy.server.note.controller;
 
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import com.aistudy.server.note.entity.Note;
 import com.aistudy.server.note.service.NoteKnowledgePointService;
 import com.aistudy.server.note.service.NoteService;
@@ -63,7 +65,8 @@ public class NoteKnowledgePointController {
     private void requireOwnedNote(String ownerSubject, Long spaceId, Long noteId) {
         Note note = noteService.getMine(ownerSubject, spaceId, noteId);
         if (note == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Note not found");
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCodes.NOTE_NOT_FOUND,
+                    "note " + noteId + " not found in this space");
         }
     }
 }

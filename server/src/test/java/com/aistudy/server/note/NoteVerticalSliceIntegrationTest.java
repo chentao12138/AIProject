@@ -25,6 +25,7 @@ import java.util.List;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -455,6 +456,13 @@ class NoteVerticalSliceIntegrationTest {
                 .andExpect(jsonPath("$.contentBlockId").value(nullValue()))
                 .andExpect(jsonPath("$.sourcePageId").value(nullValue()))
                 .andExpect(jsonPath("$.sourceId").value(nullValue()));
+
+        // The response used to be the only evidence: updateById skips null
+        // fields, so the row kept the old block while the body said it was gone.
+        assertNull(
+                jdbcTemplate.queryForObject(
+                        "SELECT content_block_id FROM note WHERE id = ?", Long.class, noteId),
+                "omitted context pointer must be cleared in the row");
     }
 
     /** (13) DELETE removes the note and its M:N link rows. */
@@ -503,6 +511,101 @@ class NoteVerticalSliceIntegrationTest {
                 .andExpect(jsonPath("$.totalItems").value(0))
                 .andExpect(jsonPath("$.items.length()").value(0));
         assertEquals(1, countRows("note", noteId), "archive must not delete the row");
+    }
+
+    /**
+     * (14b) C-Notes-archive: archive was one-way and invisible — the row left the
+     * list, {@code NoteView} had no {@code archivedAt}, and no verb could bring
+     * the note back. The archive tab and restore close both halves.
+     */
+    @Test
+    void archiveIsVisibleAndRestorable() throws Exception {
+        String token = tokenFor("biz-note-user-1");
+        Long spaceId = insertSpace("biz-note-user-1", "笔记空间");
+        Long noteId = createNote(token, spaceId, "{\"content\":\"要归档\"}");
+
+        mockMvc.perform(post(NOTES + "/{noteId}/archive", spaceId, noteId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get(NOTES, spaceId).param("archived", "true")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(noteId))
+                .andExpect(jsonPath("$.items[0].archivedAt").exists());
+
+        mockMvc.perform(post(NOTES + "/{noteId}/restore", spaceId, noteId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+
+        // updateById would have skipped the null archived_at and answered 204
+        // anyway, leaving the note stuck in the archive.
+        mockMvc.perform(get(NOTES, spaceId).header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.items[0].archivedAt").value(nullValue()));
+    }
+
+    /**
+     * (14c) C-Notes-reverse: A8.3 only had the note → entity direction. The
+     * entity filter lists the notes attached through the M:N table, which is
+     * where a multi-link note actually lives.
+     */
+    @Test
+    void listFiltersByLinkedKnowledgePoint() throws Exception {
+        String token = tokenFor("biz-note-user-1");
+        Long spaceId = insertSpace("biz-note-user-1", "笔记空间");
+        Long kpId = insertKnowledgePoint(spaceId);
+        Long otherKpId = insertKnowledgePoint(spaceId);
+        Long noteId = createNote(token, spaceId, "{\"content\":\" linked\"}");
+        mockMvc.perform(post(NOTES + "/{noteId}/knowledge-points", spaceId, noteId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[" + kpId + "]")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated());
+        createNote(token, spaceId, "{\"content\":\"无关\"}");
+
+        mockMvc.perform(get(NOTES, spaceId).param("knowledgePointId", String.valueOf(kpId))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(noteId));
+
+        mockMvc.perform(get(NOTES, spaceId).param("knowledgePointId", String.valueOf(otherKpId))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItems").value(0));
+    }
+
+    /**
+     * (14d) C-Notes-link-noop: an id that is not in the caller's space used to
+     * make the service return early while the controller still answered 201 with
+     * no body, so "linked" and "ignored" were the same response.
+     */
+    @Test
+    void linkingAnUnknownKnowledgePointIsRejected() throws Exception {
+        String token = tokenFor("biz-note-user-1");
+        Long spaceId = insertSpace("biz-note-user-1", "笔记空间");
+        Long noteId = createNote(token, spaceId, "{\"content\":\"正文\"}");
+
+        mockMvc.perform(post(NOTES + "/{noteId}/knowledge-points", spaceId, noteId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[987654321]")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("KNOWLEDGE_POINT_NOT_FOUND"));
+
+        mockMvc.perform(post(NOTES + "/{noteId}/knowledge-points", spaceId, 987654321L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[" + insertKnowledgePoint(spaceId) + "]")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOTE_NOT_FOUND"));
+
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM note_knowledge_point WHERE note_id = ?",
+                Integer.class, noteId));
     }
 
     // ==================== ownership ====================

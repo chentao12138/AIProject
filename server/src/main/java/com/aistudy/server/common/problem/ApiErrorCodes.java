@@ -22,6 +22,15 @@ public final class ApiErrorCodes {
     public static final String SPACE_NOT_FOUND = "SPACE_NOT_FOUND";
     public static final String SOURCE_NOT_FOUND = "SOURCE_NOT_FOUND";
     public static final String QUESTION_NOT_FOUND = "QUESTION_NOT_FOUND";
+    /**
+     * Note link endpoints used to answer 201 with an empty body when the note or
+     * the link target did not belong to the caller, so a client could not tell a
+     * successful link from a silently ignored one (contract request
+     * C-Notes-link-noop).
+     */
+    public static final String NOTE_NOT_FOUND = "NOTE_NOT_FOUND";
+    public static final String KNOWLEDGE_POINT_NOT_FOUND = "KNOWLEDGE_POINT_NOT_FOUND";
+    public static final String CONTENT_BLOCK_NOT_FOUND = "CONTENT_BLOCK_NOT_FOUND";
     public static final String INGESTION_NOT_READY = "INGESTION_NOT_READY";
     /**
      * A second ingestion job was submitted for an asset whose first job is

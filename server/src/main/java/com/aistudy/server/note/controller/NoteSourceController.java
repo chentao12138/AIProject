@@ -1,5 +1,7 @@
 package com.aistudy.server.note.controller;
 
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import com.aistudy.server.note.entity.Note;
 import com.aistudy.server.note.service.NoteService;
 import com.aistudy.server.note.service.NoteSourceService;
@@ -8,7 +10,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -49,7 +50,8 @@ public class NoteSourceController {
         List<Long> blockIds = noteSourceService.listContentBlockIds(
                 authentication.getName(), spaceId, noteId);
         if (blockIds == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Note not found");
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCodes.NOTE_NOT_FOUND,
+                    "note " + noteId + " not found in this space");
         }
         return sourceReferenceService.byContentBlockIds(spaceId, blockIds);
     }
@@ -67,7 +69,8 @@ public class NoteSourceController {
     private void requireOwnedNote(String ownerSubject, Long spaceId, Long noteId) {
         Note note = noteService.getMine(ownerSubject, spaceId, noteId);
         if (note == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Note not found");
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCodes.NOTE_NOT_FOUND,
+                    "note " + noteId + " not found in this space");
         }
     }
 }

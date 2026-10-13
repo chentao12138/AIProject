@@ -1,11 +1,14 @@
 package com.aistudy.server.note.service;
 
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import com.aistudy.server.note.entity.Note;
 import com.aistudy.server.note.entity.NoteSource;
 import com.aistudy.server.note.mapper.NoteMapper;
 import com.aistudy.server.note.mapper.NoteSourceMapper;
 import com.aistudy.server.source.content.service.ContentBlockService;
 import com.aistudy.server.space.service.LearningSpaceService;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,20 +47,28 @@ public class NoteSourceService {
         return noteSourceMapper.selectContentBlockIdsByNote(noteId, spaceId, ownerSubject);
     }
 
+    /**
+     * Links every given content block, skipping the ones already linked.
+     *
+     * <p>An unknown or foreign id is a 404 naming it, not a silent
+     * {@code return}: the controller answers 201, so linking nothing used to be
+     * indistinguishable from linking everything (contract request
+     * C-Notes-link-noop).
+     *
+     * @throws ApiException 404 {@code SPACE_NOT_FOUND} / {@code NOTE_NOT_FOUND} /
+     *         {@code CONTENT_BLOCK_NOT_FOUND}
+     */
     @Transactional
     public void linkContentBlocks(String ownerSubject, Long spaceId, Long noteId, List<Long> blockIds) {
-        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
-            return;
-        }
-        Note note = noteMapper.selectByIdAndSpaceAndOwner(noteId, spaceId, ownerSubject);
-        if (note == null) {
-            return;
-        }
+        requireSpace(ownerSubject, spaceId);
+        requireNote(ownerSubject, spaceId, noteId);
 
         Set<Long> uniqueIds = new LinkedHashSet<>(blockIds);
         for (Long blockId : uniqueIds) {
-            if (contentBlockService.getMine(ownerSubject, spaceId, blockId) == null) {
-                return;
+            if (blockId == null || contentBlockService.getMine(ownerSubject, spaceId, blockId) == null) {
+                throw new ApiException(HttpStatus.NOT_FOUND,
+                        ApiErrorCodes.CONTENT_BLOCK_NOT_FOUND,
+                        "content block " + blockId + " is not in this space");
             }
         }
 
@@ -80,9 +91,22 @@ public class NoteSourceService {
 
     @Transactional
     public void unlinkContentBlock(String ownerSubject, Long spaceId, Long noteId, Long blockId) {
-        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
-            return;
-        }
+        requireSpace(ownerSubject, spaceId);
+        requireNote(ownerSubject, spaceId, noteId);
         noteSourceMapper.deleteByNoteIdAndBlockId(noteId, blockId);
+    }
+
+    private void requireSpace(String ownerSubject, Long spaceId) {
+        if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCodes.SPACE_NOT_FOUND,
+                    "learning space " + spaceId + " not found");
+        }
+    }
+
+    private void requireNote(String ownerSubject, Long spaceId, Long noteId) {
+        if (noteMapper.selectByIdAndSpaceAndOwner(noteId, spaceId, ownerSubject) == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCodes.NOTE_NOT_FOUND,
+                    "note " + noteId + " not found in this space");
+        }
     }
 }

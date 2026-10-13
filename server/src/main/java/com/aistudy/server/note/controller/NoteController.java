@@ -4,6 +4,8 @@ import com.aistudy.server.note.dto.NoteCreateRequest;
 import com.aistudy.server.note.dto.NotePageResponse;
 import com.aistudy.server.note.dto.NoteUpdateRequest;
 import com.aistudy.server.note.dto.NoteView;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import com.aistudy.server.note.entity.Note;
 import com.aistudy.server.note.service.NoteService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -45,9 +47,15 @@ public class NoteController {
                                  @RequestParam(defaultValue = "0") int page,
                                  @RequestParam(defaultValue = "20") int size,
                                  @RequestParam(required = false) String keyword,
+                                 @RequestParam(required = false) Long knowledgePointId,
+                                 @RequestParam(required = false) Long sourceId,
+                                 @RequestParam(required = false) Long contentBlockId,
+                                 @RequestParam(required = false) Long questionId,
+                                 @RequestParam(required = false) Boolean archived,
                                  Authentication authentication) {
-        NotePageResponse result = noteService.listPage(
-                authentication.getName(), spaceId, page, size, keyword);
+        NotePageResponse result = noteService.listPage(authentication.getName(), spaceId,
+                page, size, keyword, knowledgePointId, sourceId, contentBlockId, questionId,
+                archived);
         if (result == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "LearningSpace not found");
         }
@@ -101,10 +109,24 @@ public class NoteController {
         noteService.archive(authentication.getName(), spaceId, noteId);
     }
 
+    /**
+     * Undo of {@code /archive}. Without it archiving a note was one-way: the row
+     * left the list and no verb could bring it back.
+     */
+    @PostMapping(value = "/{noteId}/restore")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void restore(@PathVariable Long spaceId,
+                        @PathVariable Long noteId,
+                        Authentication authentication) {
+        requireNote(authentication, spaceId, noteId);
+        noteService.restore(authentication.getName(), spaceId, noteId);
+    }
+
     private Note requireNote(Authentication authentication, Long spaceId, Long noteId) {
         Note note = noteService.getMine(authentication.getName(), spaceId, noteId);
         if (note == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Note not found");
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCodes.NOTE_NOT_FOUND,
+                    "note " + noteId + " not found in this space");
         }
         return note;
     }

@@ -10,6 +10,7 @@ import com.aistudy.server.note.dto.NoteUpdateRequest;
 import com.aistudy.server.note.dto.NoteView;
 import com.aistudy.server.note.entity.Note;
 import com.aistudy.server.note.mapper.NoteKnowledgePointMapper;
+import com.aistudy.server.note.mapper.NoteListQuery;
 import com.aistudy.server.note.mapper.NoteMapper;
 import com.aistudy.server.note.mapper.NoteSourceMapper;
 import com.aistudy.server.question.entity.Question;
@@ -78,8 +79,18 @@ public class NoteService {
     /**
      * One page of notes, newest change first. Returns {@code null} when the
      * caller has no such space (the controller turns that into 404).
+     *
+     * <p>The entity filters carry the reverse direction of checklist A8.3: a
+     * knowledge point (or source, block, question) page lists the notes attached
+     * to it by filtering this endpoint, so it gets paging for free instead of a
+     * second collection route per entity.
+     *
+     * @param archived {@code true} for the archive tab; {@code null} or false
+     *                 for active notes only
      */
-    public NotePageResponse listPage(String ownerSubject, Long spaceId, int page, int size, String keyword) {
+    public NotePageResponse listPage(String ownerSubject, Long spaceId, int page, int size,
+                                     String keyword, Long knowledgePointId, Long sourceId,
+                                     Long contentBlockId, Long questionId, Boolean archived) {
         if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
             return null;
         }
@@ -89,12 +100,13 @@ public class NoteService {
                 ? null
                 : "%" + SearchLikeEscape.escape(keyword.trim()) + "%";
 
-        long totalItems = noteMapper.countBySpaceAndOwner(spaceId, ownerSubject, keywordLike);
+        NoteListQuery query = new NoteListQuery(spaceId, ownerSubject, keywordLike,
+                knowledgePointId, sourceId, contentBlockId, questionId, archived,
+                safeSize, safePage * safeSize);
+        long totalItems = noteMapper.countByFilter(query);
         List<NoteView> items = totalItems == 0
                 ? List.of()
-                : noteMapper.selectPageBySpaceAndOwner(spaceId, ownerSubject, keywordLike,
-                        safeSize, safePage * safeSize)
-                        .stream().map(NoteView::from).toList();
+                : noteMapper.selectPageByFilter(query).stream().map(NoteView::from).toList();
         int totalPages = (int) ((totalItems + safeSize - 1) / safeSize);
         return new NotePageResponse(items, safePage, safeSize, totalItems, totalPages);
     }
@@ -139,18 +151,36 @@ public class NoteService {
         applyContext(ownerSubject, existing, spaceId, request.sourceId(), request.sourcePageId(),
                 request.contentBlockId(), request.knowledgePointId(), request.questionId());
         existing.setUpdatedAt(LocalDateTime.now());
-        noteMapper.updateById(existing);
+        noteMapper.updateDocument(noteId, spaceId, ownerSubject, existing.getTitle(),
+                existing.getContent(), existing.getContentFormat(), existing.getSourceId(),
+                existing.getSourcePageId(), existing.getContentBlockId(),
+                existing.getKnowledgePointId(), existing.getQuestionId(),
+                existing.getUpdatedAt());
         return existing;
     }
 
     @Transactional
     public void archive(String ownerSubject, Long spaceId, Long noteId) {
-        Note existing = getMine(ownerSubject, spaceId, noteId);
-        if (existing == null) {
+        setArchived(ownerSubject, spaceId, noteId, true);
+    }
+
+    /**
+     * Brings an archived note back. Archive used to be one-way: only questions,
+     * spaces, sources and knowledge points had a restore verb.
+     */
+    @Transactional
+    public void restore(String ownerSubject, Long spaceId, Long noteId) {
+        setArchived(ownerSubject, spaceId, noteId, false);
+    }
+
+    private void setArchived(String ownerSubject, Long spaceId, Long noteId, boolean archived) {
+        if (getMine(ownerSubject, spaceId, noteId) == null) {
             return;
         }
-        existing.setArchivedAt(LocalDateTime.now());
-        noteMapper.updateById(existing);
+        // A dedicated statement: updateById skips null fields, so restoring
+        // through it would leave archived_at set and still report success.
+        noteMapper.updateArchivedAt(noteId, spaceId, ownerSubject,
+                archived ? LocalDateTime.now() : null, LocalDateTime.now());
     }
 
     /**

@@ -25,7 +25,8 @@ public record NoteView(
         Long knowledgePointId,
         Long questionId,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        LocalDateTime archivedAt
 ) {
     public static NoteView from(Note note) {
         return new NoteView(
@@ -40,6 +41,10 @@ public record NoteView(
                 note.getKnowledgePointId(),
                 note.getQuestionId(),
                 note.getCreatedAt(),
-                note.getUpdatedAt());
+                note.getUpdatedAt(),
+                // Without this the archive is invisible: the list hides archived
+                // rows, so a client could neither tell what was archived nor
+                // offer a restore.
+                note.getArchivedAt());
     }
 }
