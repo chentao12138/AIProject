@@ -21,7 +21,8 @@
  *   cd server && .\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=it
  */
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,9 +34,27 @@ const TMP_FILE = join(OUT_DIR, 'openapi.json');
 
 console.log(`[api:generate] fetching ${OPENAPI_URL} ...`);
 
-const response = await fetch(OPENAPI_URL, {
-  headers: { Accept: 'application/json' },
-});
+/**
+ * A refused connection must read as the documented failure, not as an
+ * unhandled rejection. `fetch` rejects instead of returning a response object,
+ * so without this guard the script dumped a Node stack trace even though its
+ * own header promises it "deliberately FAILS (non-zero exit) when the server is
+ * not reachable".
+ */
+let response;
+try {
+  response = await fetch(OPENAPI_URL, {
+    headers: { Accept: 'application/json' },
+  });
+} catch (error) {
+  console.error(
+    `[api:generate] FAILED: cannot reach ${OPENAPI_URL} (${error.cause?.code ?? error.message}). ` +
+      'Is the AIStudy server running, and is that the right port? ' +
+      'Another service on this port would be rejected below anyway. ' +
+      'Not writing any generated file.'
+  );
+  process.exit(1);
+}
 if (!response.ok) {
   console.error(
     `[api:generate] FAILED: HTTP ${response.status} from ${OPENAPI_URL}. ` +
@@ -46,11 +65,42 @@ if (!response.ok) {
 
 const openapiJson = await response.text();
 
-// Cheap sanity check: must look like an OpenAPI document.
-if (!openapiJson.includes('"openapi"') || !openapiJson.includes('"paths"')) {
+/**
+ * The document must be AIStudy's, not merely "some OpenAPI".
+ *
+ * A regeneration pulled whatever Spring Boot service happened to own port 8080
+ * and overwrote the contract with 124 `/api/identity/...` paths: the previous
+ * check only asked whether the payload looked like an OpenAPI document, which
+ * any Spring app satisfies, and it ran after nothing had been written only by
+ * luck of ordering. Anchoring on paths this client cannot function without
+ * turns a silent clobber into a refusal that names the intruder.
+ */
+let doc;
+try {
+  doc = JSON.parse(openapiJson);
+} catch (error) {
   console.error(
-    '[api:generate] FAILED: response does not look like an OpenAPI document. ' +
+    `[api:generate] FAILED: response is not valid JSON (${error.message}). ` +
       'Not writing any generated file.'
+  );
+  process.exit(1);
+}
+if (!doc.openapi || !doc.paths || typeof doc.paths !== 'object') {
+  console.error(
+    '[api:generate] FAILED: response has no openapi/paths members. ' +
+      'Not writing any generated file.'
+  );
+  process.exit(1);
+}
+
+const ANCHOR_PATHS = ['/api/v1/spaces', '/api/v1/auth/login'];
+const missingAnchors = ANCHOR_PATHS.filter((path) => !doc.paths[path]);
+if (missingAnchors.length > 0) {
+  console.error(
+    `[api:generate] FAILED: ${OPENAPI_URL} is not the AIStudy API — it has none ` +
+      `of ${missingAnchors.join(', ')} (title: ${doc.info?.title ?? 'unknown'}, ` +
+      `${Object.keys(doc.paths).length} paths). Another service probably owns ` +
+      'this port; pass OPENAPI_URL pointing at AIStudy. Not writing any file.'
   );
   process.exit(1);
 }
@@ -81,8 +131,10 @@ try {
 const manifest = {
   generatedFrom: {
     url: OPENAPI_URL,
-    openapi: JSON.parse(openapiJson).openapi ?? null,
-    infoVersion: JSON.parse(openapiJson).info?.version ?? null,
+    openapi: doc.openapi ?? null,
+    // springdoc leaves this as "v0" unless api.info.version is configured;
+    // the hash is what actually identifies the snapshot.
+    infoVersion: doc.info?.version ?? null,
   },
   recordedAt: new Date().toISOString(),
   files: {
