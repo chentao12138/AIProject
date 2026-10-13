@@ -132,6 +132,25 @@ endpoint exists.
 queue time): the page-listing endpoint was not found in `SourceController`, so
 these stay open questions rather than claims.
 
+**Not a frontend dependency.** The backend's own audit lists F-15 (the asset
+content endpoint returns the whole body with no `Range`/`206` support). Checked
+against this client: the renderer never points a browser at a raw asset URL —
+there is no `<img src>`, `<iframe>`, `<object>` or `<embed>` referencing
+`/assets/{assetId}/content`, and the workbench reader renders extracted
+`ContentBlock` text. So no seek/progressive-load path exists and Range support is
+not needed for the Desktop scope as written. It is not in the queue below.
+
+**One scope decision for the product owner, not a contract gap.** Because the
+reader shows extracted text only, an image source (or an image-only PDF, which
+OCR is excluded from processing) currently ends at the notice
+「图片已成功处理。当前版本不提供 OCR 文本提取。」 with no visual rendering of the
+uploaded image itself. Master A1–A11 does not ask for it, and B12.1 excludes OCR
+while B12.3 excludes a PDF canvas/thumbnail/annotation UI — but "show the
+uploaded image" is not named in either list. Per the A/B discipline it must be
+decided explicitly rather than assumed: either it is B (permanently out, and the
+notice is the finished behaviour) or it is A and needs a decision plus the
+content-URL plumbing. Flagged, not built, not silently dropped.
+
 **Coordination:** asks go to the backend session one at a time, waiting for each
 reply. The one currently standing is "start the server + a desktop login
 account"; the regeneration itself is frontend work, not theirs.
@@ -421,11 +440,29 @@ needed that grading compares array order; otherwise wait for C09's
 
 ## Resolution order
 
-1. A8 Notes — highest priority (entire feature blocked).
-2. A2.1 provenance — unblock full Source/Page/Block navigation.
-3. A3.2 AI context — unblock context-aware AI Tutor.
-4. A3.3 AI reference IDs — polish citation deep-links (can follow A3.2).
-5. A4.5 Question update — unblocks question correction before content is published.
-6. A5.3 Practice result — makes a finished practice session readable again.
+Rewritten after the `main` merge, because the original list assumed the backend
+still had to build Notes and question update — both are already in the server
+sources, so the first step is no longer an ask at all.
 
-Once the above contracts are reflected in `packages/api-client/src/generated/api.d.ts` and typecheck passes, the frontend will implement the remaining UI in a single follow-up pass.
+1. **Start the server + a desktop login account** (the only standing ask). Then
+   the frontend runs `npm run api:generate`, which alone unblocks: Notes CRUD and
+   archive (C01), question update (C05), question archive/restore (C07), the
+   ordered/pair answer fields (C09), the practice answers list, and the `NOTE`
+   search type.
+2. **C02 provenance ids** — `sourceId` / `sourcePageId` on
+   `KnowledgePointSourceResponse`, otherwise knowledge points can never deep-link
+   to a page.
+3. **C03 AI context ids**, then **C04 citation ids** — the tutor cannot be scoped
+   to a source/page/block, and citations cannot navigate.
+4. **C10 saved exam answers** (reload recovery), then **C11 attempt list**
+   (reopen a past attempt).
+5. **C-Paging** for the question list, and **C06** for a finished session's score
+   summary (the per-question review is already reachable via the answers list).
+6. **C12** — mechanical: pass the existing `ApiErrorCodes` values as the ProblemDetail
+   `code` at the two `ExamAttemptService` throw sites.
+7. **C14 / C15** — verify after regeneration; they may already exist.
+
+Once each item is reflected in `packages/api-client/src/generated/api.d.ts` and
+typecheck passes, the frontend implements the matching UI in the same pass — no
+item is deferred to a later version, and none is closed on the strength of a unit
+test alone.
