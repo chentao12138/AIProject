@@ -267,7 +267,7 @@ contract; they need execution, not a backend change.
 | Search hit of type NOTE | C-Search: enum has `NOTE`, hit carries `noteId` |
 | 排序/配对 authoring + answering + grading | C09 write side: `correctOrder`/`matches`, `orderingAnswer`/`matchingAnswer` |
 | Exam created with a time limit, and the countdown that depends on it | Field-name correction: the server binds `timeLimitMinutes`; the frontend had been sending `durationMinutes`, so no exam ever got a limit and `deadlineAt` came back null |
-| Installed-app login / restore / logout (A10, steps 1–11 above) | Nothing but a running backend and a desktop test account — these must be executed on `dist/AIStudy Setup*.exe`, not on the unpacked build |
+| Installed-app login / restore / logout (A10, steps 1–11 above) | Only a desktop test account now. `dev` / `devpassword123` on `:8081` (space 87) **was** issued on 2026-10-14 16:28 and has since been removed by the backend's own integration-test run — `/health` answers UP while login returns `401 UNAUTHORIZED`, and a restore has been requested. R02 (install → launch → uninstall) is proven and needs no account; these steps are not proven until one exists, and must be executed on `dist/AIStudy Setup*.exe`, not the unpacked build |
 
 Before any of the above is run: `OPENAPI_URL=<server>/v3/api-docs npm run api:live`
 must be green. The `durationMinutes` incident is exactly what that gate now
