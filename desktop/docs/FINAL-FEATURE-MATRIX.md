@@ -49,6 +49,31 @@ to every route for no observed gain, so the checklist item is closed as
 **measured, no action**. Re-open it only with a startup or navigation
 measurement that shows a regression.
 
+## Verification evidence, 2026-10-13 (branch `feat/fe-001`, after merging `main`)
+
+Real command output, not a historical claim:
+
+| Gate | Command | Result |
+|------|---------|--------|
+| Lint | `npm run lint` | 0 errors, 0 warnings |
+| Typecheck | `npx tsc --noEmit -p tsconfig.node.json` / `-p tsconfig.web.json` | 0 errors |
+| Contract gate | `npm run api:check` | `openapi.json and api.d.ts are in sync` |
+| Unit | `npm run test:run` | 63 files / 755 tests passed |
+| Coverage | `npm run test:coverage` | statements 89.89% (7241/8055), branches 84.38%, functions 81.5% |
+| Build | `npm run build` | main 13.93 kB, preload 1.65 kB, renderer 775.91 kB |
+| Package | `npm run dist:win` (with the two mirror variables in README) | `dist/AIStudy Setup 0.1.0.exe`, 111 MB, timestamp matches the built commit |
+
+What this does **not** prove, and remains open A-class work:
+
+- The installer was produced, not installed. R02/A11.1 (install → launch →
+  shortcut → uninstall → user-data policy) is unverified.
+- R03 installed-app auth (login → restart → restore → logout → anonymous
+  restart) needs a running backend plus a test account, as do the R04/R05
+  end-to-end journeys; every contract-gated row above is still gated.
+- 755 passing tests cover renderer behaviour against mocked client responses.
+  They cannot detect a contract that does not exist, so no E2E PASS is claimed
+  from this table (see `docs/SMOKE-INSTRUCTIONS.md`).
+
 ## Out of scope (B-class)
 
 See `AISTUDY-FRONTEND-FINAL-COMPLETION-MASTER-CHECKLIST.md` section 12 for the full B-class list:
