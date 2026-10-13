@@ -68,6 +68,31 @@ public class QuestionService {
 
     @Transactional
     public Question create(String ownerSubject, Long spaceId, CreateQuestionRequest request) {
+        return createWithOrigin(ownerSubject, spaceId, request, ORIGIN_TYPE_USER_CURATED);
+    }
+
+    /**
+     * Authoring path for rows a machine produced (audit F-20). AI generation
+     * must not keep its own copy of the write rules: this route applies the same
+     * per-type structure validation, the same option insertion and the same
+     * same-space knowledge-point checks the human path uses, and only the
+     * {@code originType} differs.
+     *
+     * @param originType {@code ORIGIN_TYPE_AI_DERIVED} or another governed value;
+     *                   never taken from the model output
+     * @return the stored DRAFT question, or {@code null} when the space or one of
+     *         the referenced knowledge points is not the caller's
+     * @throws ResponseStatusException 400 when the payload violates the type's
+     *         structure contract
+     */
+    @Transactional
+    public Question createDerived(String ownerSubject, Long spaceId,
+                                  CreateQuestionRequest request, String originType) {
+        return createWithOrigin(ownerSubject, spaceId, request, originType);
+    }
+
+    private Question createWithOrigin(String ownerSubject, Long spaceId,
+                                      CreateQuestionRequest request, String originType) {
         if (learningSpaceService.getMine(ownerSubject, spaceId) == null) {
             return null;
         }
@@ -93,7 +118,7 @@ public class QuestionService {
         question.setStem(request.stem());
         question.setExplanation(request.explanation());
         question.setDifficulty(request.difficulty());
-        question.setOriginType(ORIGIN_TYPE_USER_CURATED);
+        question.setOriginType(originType);
         question.setStatus(STATUS_DRAFT);
         question.setCreatedByUserId(ownerSubject);
         question.setCreatedAt(now);

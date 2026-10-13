@@ -118,6 +118,41 @@ public class KnowledgePointSourceService {
     }
 
     /**
+     * Links a knowledge point to the SOURCE an AI extraction read
+     * (audit F-19). Separate from {@link #link} because a batch job knows which
+     * source it consumed, not which blocks the model looked at, and writing a
+     * block id it does not have would fabricate a citation.
+     *
+     * <p>Only writes when the point belongs to the caller in this space, so a
+     * generator cannot attach provenance to somebody else's point.
+     *
+     * @return the created link, or {@code null} when the point is not the
+     *         caller's or {@code sourceId} is missing
+     */
+    @Transactional
+    public KnowledgePointSource linkDerivedSource(String ownerSubject, Long spaceId,
+                                                  Long knowledgePointId, Long sourceId) {
+        if (sourceId == null || knowledgePointId == null) {
+            return null;
+        }
+        KnowledgePoint point = knowledgePointService.getMine(
+                ownerSubject, spaceId, knowledgePointId);
+        if (point == null) {
+            return null;
+        }
+        KnowledgePointSource link = new KnowledgePointSource();
+        link.setSpaceId(spaceId);
+        link.setKnowledgePointId(knowledgePointId);
+        link.setSourceId(sourceId);
+        link.setRelationType("AI_DERIVED");
+        link.setRelevanceScore(1.0);
+        link.setCreatedByUserId(ownerSubject);
+        link.setCreatedAt(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS));
+        knowledgePointSourceMapper.insert(link);
+        return link;
+    }
+
+    /**
      * Lists the provenance links of the caller's own point.
      *
      * @return links (possibly empty), or {@code null} when the point

@@ -4,31 +4,37 @@ import com.aistudy.server.ai.provider.AiChatMessage;
 import com.aistudy.server.ai.provider.AiChatRequest;
 import com.aistudy.server.ai.provider.AiChatResponse;
 import com.aistudy.server.ai.provider.AiProvider;
+import com.aistudy.server.ai.service.AiUsageRecordService;
 import com.aistudy.server.knowledge.point.entity.KnowledgePoint;
-import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
-import com.aistudy.server.question.eval.AnswerDataCodec;
+import com.aistudy.server.knowledge.point.service.KnowledgePointService;
+import com.aistudy.server.question.dto.CreateQuestionRequest;
 import com.aistudy.server.question.entity.Question;
-import com.aistudy.server.question.entity.QuestionKnowledgePoint;
-import com.aistudy.server.question.mapper.QuestionKnowledgePointMapper;
-import com.aistudy.server.question.mapper.QuestionMapper;
-import com.aistudy.server.question.mapper.QuestionOptionMapper;
+import com.aistudy.server.question.service.QuestionService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Turns one knowledge point into a DRAFT question through the provider.
+ *
+ * <p>The row is written by {@link QuestionService#createDerived}, not by this
+ * class: per-type structure validation, option insertion and the same-space
+ * knowledge-point checks live in the authoring module, and duplicating them
+ * here meant an AI question could pass a weaker check than a human one
+ * (audit F-20). This service only decides whether the model's answer is
+ * consistent with the model's own options, which is a provider problem rather
+ * than an authoring rule.
+ */
 @Service
 public class AiQuestionGenerationService {
+
     private static final Logger log = LoggerFactory.getLogger(AiQuestionGenerationService.class);
 
     private static final String PROMPT = """
@@ -39,53 +45,52 @@ public class AiQuestionGenerationService {
             """;
 
     private final AiProvider aiProvider;
-    private final KnowledgePointMapper knowledgePointMapper;
-    private final QuestionMapper questionMapper;
-    private final QuestionOptionMapper questionOptionMapper;
-    private final QuestionKnowledgePointMapper questionKnowledgePointMapper;
+    private final KnowledgePointService knowledgePointService;
+    private final QuestionService questionService;
+    private final AiUsageRecordService aiUsageRecordService;
     private final ObjectMapper objectMapper;
 
     public AiQuestionGenerationService(AiProvider aiProvider,
-                                       KnowledgePointMapper knowledgePointMapper,
-                                       QuestionMapper questionMapper,
-                                       QuestionOptionMapper questionOptionMapper,
-                                       QuestionKnowledgePointMapper questionKnowledgePointMapper,
+                                       KnowledgePointService knowledgePointService,
+                                       QuestionService questionService,
+                                       AiUsageRecordService aiUsageRecordService,
                                        ObjectMapper objectMapper) {
         this.aiProvider = aiProvider;
-        this.knowledgePointMapper = knowledgePointMapper;
-        this.questionMapper = questionMapper;
-        this.questionOptionMapper = questionOptionMapper;
-        this.questionKnowledgePointMapper = questionKnowledgePointMapper;
+        this.knowledgePointService = knowledgePointService;
+        this.questionService = questionService;
+        this.aiUsageRecordService = aiUsageRecordService;
         this.objectMapper = objectMapper;
     }
 
     /**
-     * Generates one DRAFT question for a knowledge point the caller owns.
+     * Generates and stores one DRAFT question for a knowledge point the caller
+     * owns.
      *
-     * <p>Validation before persistence (audit F-20): the options are parsed
-     * first, their keys must be unique and non-blank, and the declared
-     * {@code correctOptionKey} must actually be one of them. Writing a question
-     * whose answer is not among its own options would produce an ungradeable
-     * item that still counts in practice and mastery, so an inconsistent
-     * response is refused instead.
+     * <p>Validation before persistence: option keys must be non-blank and
+     * unique, at least two options are required, and the declared
+     * {@code correctOptionKey} must be one of them. An inconsistent answer would
+     * otherwise produce an ungradeable item that still counts in practice and
+     * mastery.
      *
-     * <p>Atomicity: {@code @Transactional} with no catch-and-return. Previously
-     * a failure after {@code questionMapper.insert} left an orphan DRAFT with no
-     * options, and the {@code null} return hid that from the worker, which then
-     * reported "produced no result" rather than a real failure.
+     * <p>No failure is swallowed: a broken response throws instead of returning
+     * {@code null}, which previously let the worker report "produced no result"
+     * and hid the reason. Nothing is written when it throws.
      *
-     * <p>Provenance: the KP link is written to {@code question_knowledge_point}.
-     * A source link cannot be written from here — {@code question_source} only
-     * carries {@code content_block_id}, and a generation job knows the source,
-     * not a block, so inventing a block id would record a false citation.
+     * <p>Provenance: the knowledge-point link is written by the authoring
+     * service from {@code knowledgePointIds}. A {@code question_source} row is
+     * deliberately not written, because that table only references a content
+     * block and a generation job knows the source, not a block — inventing a
+     * block id would record a false citation.
      *
-     * @throws IllegalStateException when the knowledge point is not the caller's,
-     *         the provider response is unusable, or the answer is inconsistent
+     * @param userSubject        JWT subject; also the space and ownership check
+     * @param spaceId            owning space, taken from the job, never the model
+     * @param knowledgePointId   the point the question is generated for
+     * @return the persisted DRAFT question
+     * @throws IllegalStateException when the point is not the caller's, the
+     *         provider response is unusable, or the answer is inconsistent
      */
-    @Transactional
     public Question generate(String userSubject, Long spaceId, Long knowledgePointId) {
-        KnowledgePoint kp = knowledgePointMapper.selectByIdSpaceOwner(
-                knowledgePointId, spaceId, userSubject);
+        KnowledgePoint kp = knowledgePointService.getMine(userSubject, spaceId, knowledgePointId);
         if (kp == null) {
             throw new IllegalStateException(
                     "knowledge point is not in this space or does not exist");
@@ -95,17 +100,28 @@ public class AiQuestionGenerationService {
                 + "\n\nSummary: " + (kp.getSummary() != null ? kp.getSummary() : kp.getContent());
 
         JsonNode node;
+        AiChatResponse response = null;
+        long startedNanos = System.nanoTime();
         try {
-            AiChatResponse response = aiProvider.chat(new AiChatRequest(
+            response = aiProvider.chat(new AiChatRequest(
                     List.of(AiChatMessage.user(prompt)),
                     0.0,
                     2000
             ), userSubject);
             node = objectMapper.readTree(stripFences(response.content().trim()));
         } catch (Exception e) {
+            // Recorded before rethrowing: the tokens were spent even when the
+            // answer is unusable, and a skipped row would hide the cost.
+            aiUsageRecordService.recordProviderCall(userSubject, spaceId,
+                    AiUsageRecordService.PURPOSE_QUESTION_GENERATION, response,
+                    AiUsageRecordService.elapsedMs(startedNanos),
+                    response == null ? "AI_PROVIDER_CALL_FAILED" : "AI_RESPONSE_INVALID");
             throw new IllegalStateException(
                     "AI question generation failed: " + bounded(e.getMessage()), e);
         }
+        aiUsageRecordService.recordProviderCall(userSubject, spaceId,
+                AiUsageRecordService.PURPOSE_QUESTION_GENERATION, response,
+                AiUsageRecordService.elapsedMs(startedNanos), null);
 
         String questionType = node.path("questionType").asText("SINGLE_CHOICE");
         String stem = node.path("stem").asText("");
@@ -117,10 +133,11 @@ public class AiQuestionGenerationService {
                     "AI question generation returned an empty stem or answer");
         }
 
-        List<String[]> options = new ArrayList<>();
+        List<CreateQuestionRequest.QuestionOptionInput> options = new ArrayList<>();
         Set<String> keys = new HashSet<>();
         JsonNode optionsNode = node.get("options");
         if (optionsNode != null && optionsNode.isArray()) {
+            int sortOrder = 0;
             for (JsonNode opt : optionsNode) {
                 String key = opt.path("key").asText("");
                 String content = opt.path("content").asText("");
@@ -128,7 +145,7 @@ public class AiQuestionGenerationService {
                     throw new IllegalStateException(
                             "AI question generation returned a blank or duplicate option key");
                 }
-                options.add(new String[]{key, content});
+                options.add(new CreateQuestionRequest.QuestionOptionInput(key, content, sortOrder++));
             }
         }
         if (options.size() < 2) {
@@ -140,56 +157,19 @@ public class AiQuestionGenerationService {
                     "AI question generation's correct option is not among its options");
         }
 
-        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
-        Question question = new Question();
-        question.setSpaceId(spaceId);
-        question.setQuestionType(questionType);
-        question.setStem(stem);
-        question.setExplanation(explanation);
-        question.setDifficulty(difficulty);
-        question.setOriginType("AI_DERIVED");
-        // DRAFT: publishing stays a human decision (the search/AI read path is
-        // gated on status='PUBLISHED').
-        question.setStatus("DRAFT");
-        question.setCreatedByUserId(userSubject);
-        question.setCreatedAt(now);
-        question.setUpdatedAt(now);
-        question.setAnswerDataJson(
-                AnswerDataCodec.buildAnswerDataJson(correctOptionKey, null, null, null));
-        questionMapper.insert(question);
-
-        int sortOrder = 0;
-        for (String[] option : options) {
-            com.aistudy.server.question.entity.QuestionOption entity =
-                    new com.aistudy.server.question.entity.QuestionOption();
-            entity.setSpaceId(spaceId);
-            entity.setQuestionId(question.getId());
-            entity.setOptionKey(option[0]);
-            entity.setContent(option[1]);
-            entity.setSortOrder(sortOrder++);
-            entity.setCreatedAt(now);
-            questionOptionMapper.insert(entity);
+        Question question = questionService.createDerived(userSubject, spaceId,
+                new CreateQuestionRequest(questionType, stem, explanation, difficulty,
+                        options, correctOptionKey, null, null, null, null, null,
+                        List.of(knowledgePointId)),
+                QuestionService.ORIGIN_TYPE_AI_DERIVED);
+        if (question == null) {
+            throw new IllegalStateException(
+                    "the space or knowledge point is not available to this caller");
         }
-
-        QuestionKnowledgePoint link = new QuestionKnowledgePoint();
-        link.setSpaceId(spaceId);
-        link.setQuestionId(question.getId());
-        link.setKnowledgePointId(knowledgePointId);
-        link.setWeight(1);
-        link.setCreatedAt(now);
-        questionKnowledgePointMapper.insert(link);
 
         log.info("AI generated question {} for knowledge point {}",
                 question.getId(), knowledgePointId);
         return question;
-    }
-
-    /** Keeps a provider/JSON error message short enough to store safely. */
-    private static String bounded(String message) {
-        if (message == null) {
-            return "unknown error";
-        }
-        return message.length() > 200 ? message.substring(0, 200) : message;
     }
 
     private static String stripFences(String json) {
@@ -202,5 +182,13 @@ public class AiQuestionGenerationService {
             json = json.substring(0, json.length() - 3);
         }
         return json.trim();
+    }
+
+    /** Keeps a provider/JSON error message short enough to store safely. */
+    private static String bounded(String message) {
+        if (message == null) {
+            return "unknown error";
+        }
+        return message.length() > 200 ? message.substring(0, 200) : message;
     }
 }

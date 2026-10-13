@@ -1,5 +1,7 @@
 package com.aistudy.server.ai.service;
 
+import com.aistudy.server.ai.provider.AiChatResponse;
+import com.aistudy.server.ai.provider.AiUsage;
 import com.aistudy.server.ai.entity.AiUsageRecord;
 import com.aistudy.server.ai.mapper.AiUsageRecordMapper;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,59 @@ public class AiUsageRecordService {
                        String purpose, String requestId, String status) {
         record(userSubject, spaceId, provider, model, purpose, requestId,
                 null, null, null, null, status, null);
+    }
+
+    /** Ledger statuses; matches the values the tutor/coach paths already write. */
+    public static final String STATUS_SUCCESS = "SUCCESS";
+    public static final String STATUS_FAILED = "FAILED";
+
+    /** Purposes of the batch generators, which previously wrote no ledger row. */
+    public static final String PURPOSE_KNOWLEDGE_EXTRACTION = "KNOWLEDGE_EXTRACTION";
+    public static final String PURPOSE_QUESTION_GENERATION = "QUESTION_GENERATION";
+    public static final String PURPOSE_CONTENT_STRUCTURE = "CONTENT_STRUCTURE";
+    public static final String PURPOSE_VARIANT = "VARIANT";
+
+    /**
+     * Records one provider call made by a generator or the variant service
+     * (audit F-23), taking provider, model and token counts from the response so
+     * every caller cannot derive them differently.
+     *
+     * <p>{@code provider} and {@code model} are NOT NULL in V052, so a failure
+     * that never produced a response is stored as {@code unknown} instead of
+     * being skipped: a missing row would make an outage look like no traffic.
+     *
+     * @param purpose   one of the {@code PURPOSE_*} constants
+     * @param response  the provider response, or {@code null} when the call failed
+     * @param latencyMs wall-clock milliseconds of the attempt
+     * @param errorCode stable code when the call failed, {@code null} on success
+     */
+    public void recordProviderCall(String userSubject, Long spaceId, String purpose,
+                                   AiChatResponse response, int latencyMs, String errorCode) {
+        AiUsage usage = response == null ? null : response.usage();
+        record(userSubject, spaceId,
+                response == null ? "unknown" : orUnknown(response.provider()),
+                response == null ? "unknown" : orUnknown(response.model()),
+                purpose, null,
+                usage == null ? null : usage.promptTokens(),
+                usage == null ? null : usage.completionTokens(),
+                usage == null ? null : usage.totalTokens(),
+                latencyMs,
+                errorCode == null ? STATUS_SUCCESS : STATUS_FAILED,
+                errorCode);
+    }
+
+    private static String orUnknown(String value) {
+        return value == null || value.isBlank() ? "unknown" : value;
+    }
+
+    /**
+     * Milliseconds elapsed since {@code startedNanos}, for
+     * {@link #recordProviderCall}. Exists so no caller has to repeat the
+     * nanosecond conversion and so a latency is never guessed.
+     */
+    public static int elapsedMs(long startedNanos) {
+        long ms = (System.nanoTime() - startedNanos) / 1_000_000L;
+        return (int) Math.max(0L, Math.min(ms, Integer.MAX_VALUE));
     }
 
     public void record(String userSubject, Long spaceId, String provider, String model,

@@ -4,10 +4,10 @@ import com.aistudy.server.ai.provider.AiChatMessage;
 import com.aistudy.server.ai.provider.AiChatRequest;
 import com.aistudy.server.ai.provider.AiChatResponse;
 import com.aistudy.server.ai.provider.AiProvider;
+import com.aistudy.server.ai.service.AiUsageRecordService;
 import com.aistudy.server.knowledge.point.entity.KnowledgePoint;
 import com.aistudy.server.knowledge.point.mapper.KnowledgePointMapper;
-import com.aistudy.server.knowledge.source.entity.KnowledgePointSource;
-import com.aistudy.server.knowledge.source.mapper.KnowledgePointSourceMapper;
+import com.aistudy.server.knowledge.source.service.KnowledgePointSourceService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -35,16 +35,19 @@ public class AiKnowledgeExtractionService {
 
     private final AiProvider aiProvider;
     private final KnowledgePointMapper knowledgePointMapper;
-    private final KnowledgePointSourceMapper knowledgePointSourceMapper;
+    private final KnowledgePointSourceService knowledgePointSourceService;
+    private final AiUsageRecordService aiUsageRecordService;
     private final ObjectMapper objectMapper;
 
     public AiKnowledgeExtractionService(AiProvider aiProvider,
                                         KnowledgePointMapper knowledgePointMapper,
-                                        KnowledgePointSourceMapper knowledgePointSourceMapper,
+                                        KnowledgePointSourceService knowledgePointSourceService,
+                                        AiUsageRecordService aiUsageRecordService,
                                         ObjectMapper objectMapper) {
         this.aiProvider = aiProvider;
         this.knowledgePointMapper = knowledgePointMapper;
-        this.knowledgePointSourceMapper = knowledgePointSourceMapper;
+        this.knowledgePointSourceService = knowledgePointSourceService;
+        this.aiUsageRecordService = aiUsageRecordService;
         this.objectMapper = objectMapper;
     }
 
@@ -78,17 +81,28 @@ public class AiKnowledgeExtractionService {
         String prompt = PROMPT + "\n\nContent:\n" + truncate(content, 8000);
 
         JsonNode arr;
+        AiChatResponse response = null;
+        long startedNanos = System.nanoTime();
         try {
-            AiChatResponse response = aiProvider.chat(new AiChatRequest(
+            response = aiProvider.chat(new AiChatRequest(
                     List.of(AiChatMessage.user(prompt)),
                     0.0,
                     2000
             ), userSubject);
             arr = objectMapper.readTree(stripFences(response.content().trim()));
         } catch (Exception e) {
+            // The ledger has to show the attempt even when it produced nothing,
+            // otherwise a provider outage is indistinguishable from no traffic.
+            aiUsageRecordService.recordProviderCall(userSubject, spaceId,
+                    AiUsageRecordService.PURPOSE_KNOWLEDGE_EXTRACTION, response,
+                    AiUsageRecordService.elapsedMs(startedNanos),
+                    response == null ? "AI_PROVIDER_CALL_FAILED" : "AI_RESPONSE_INVALID");
             throw new IllegalStateException(
                     "AI knowledge extraction failed: " + bounded(e.getMessage()), e);
         }
+        aiUsageRecordService.recordProviderCall(userSubject, spaceId,
+                AiUsageRecordService.PURPOSE_KNOWLEDGE_EXTRACTION, response,
+                AiUsageRecordService.elapsedMs(startedNanos), null);
         if (!arr.isArray()) {
             throw new IllegalStateException(
                     "AI knowledge extraction returned a non-array payload");
@@ -127,17 +141,10 @@ public class AiKnowledgeExtractionService {
         List<KnowledgePoint> created = new ArrayList<>();
         for (KnowledgePoint kp : parsed) {
             knowledgePointMapper.insert(kp);
-            if (sourceId != null) {
-                KnowledgePointSource link = new KnowledgePointSource();
-                link.setSpaceId(spaceId);
-                link.setKnowledgePointId(kp.getId());
-                link.setSourceId(sourceId);
-                link.setRelationType("AI_DERIVED");
-                link.setRelevanceScore(1.0);
-                link.setCreatedByUserId(userSubject);
-                link.setCreatedAt(now);
-                knowledgePointSourceMapper.insert(link);
-            }
+            // Provenance is written by the module that owns the link table,
+            // which also re-checks that the point is in this space.
+            knowledgePointSourceService.linkDerivedSource(userSubject, spaceId,
+                    kp.getId(), sourceId);
             created.add(kp);
         }
 
