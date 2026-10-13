@@ -30,6 +30,7 @@ function renderShell(initialEntries: string[], apiClient: ApiClient) {
           path="spaces/:spaceId/knowledge"
           element={<div>knowledge-outlet</div>}
         />
+        <Route path="spaces/:spaceId/notes" element={<div>notes-outlet</div>} />
         <Route path="spaces/:spaceId" element={<div>scope-outlet</div>} />
       </Route>
     </Routes>,
@@ -97,6 +98,35 @@ describe('AppShell — shell structure and navigation (PHASE 8)', () => {
     expect(
       screen.getByRole('link', { name: '学习来源' })
     ).toBeInTheDocument();
+  });
+
+  it('reaches every A-class section from the navigation (A9.1)', async () => {
+    // The audit's complaint was that a page existed in code but could only be
+    // reached by typing a URL. Notes is the case that used to be unreachable.
+    renderShell(['/spaces/7/notes'], spaceOkApiClient());
+
+    // Child links render only once the space query has succeeded.
+    expect(await screen.findByText('My Research Space')).toBeInTheDocument();
+
+    for (const [name, slug] of [
+      ['学习来源', 'sources'],
+      ['知识库', 'knowledge'],
+      ['笔记', 'notes'],
+      ['题库', 'questions'],
+      ['练习', 'practice'],
+      ['考试', 'exams'],
+      ['搜索', 'search'],
+      ['AI 辅导', 'ai'],
+    ]) {
+      expect(
+        screen.getByRole('link', { name }).getAttribute('href'),
+        `${name} is not reachable from the nav`
+      ).toBe(`/spaces/7/${slug}`);
+    }
+
+    // The entry URL matched the notes route itself, not the not-found screen —
+    // a nav list rendering over a dead route would prove nothing.
+    expect(screen.getByText('notes-outlet')).toBeInTheDocument();
   });
 
   it('shows no Sources/Knowledge links without a valid current space', () => {

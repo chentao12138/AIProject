@@ -109,6 +109,14 @@ export function AppShell() {
                     知识库
                   </NavLink>
                   <NavLink
+                    to={`/spaces/${spaceId}/notes`}
+                    className={({ isActive }) =>
+                      isActive ? 'nav-link nav-link--active' : 'nav-link'
+                    }
+                  >
+                    笔记
+                  </NavLink>
+                  <NavLink
                     to={`/spaces/${spaceId}/questions`}
                     className={({ isActive }) =>
                       isActive ? 'nav-link nav-link--active' : 'nav-link'

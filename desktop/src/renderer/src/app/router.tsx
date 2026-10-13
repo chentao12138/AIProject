@@ -19,6 +19,8 @@ import { SourcesPage } from '../features/sources/SourcesPage';
 import { SourceWorkbenchPage } from '../features/sources/SourceWorkbenchPage';
 import { KnowledgePage } from '../features/knowledge/KnowledgePage';
 import { KnowledgePointDetailPage } from '../features/knowledge/KnowledgePointDetailPage';
+import { NotesPage } from '../features/notes/NotesPage';
+import { NoteDetailPage } from '../features/notes/NoteDetailPage';
 import { AiSettingsPage } from '../features/ai/AiSettingsPage';
 import { AiChatPage } from '../features/ai/AiChatPage';
 import { QuestionsPage } from '../features/questions/QuestionsPage';
@@ -59,6 +61,8 @@ export const router = createHashRouter([
             path: 'knowledge/:knowledgePointId',
             element: <KnowledgePointDetailPage />,
           },
+          { path: 'notes', element: <NotesPage /> },
+          { path: 'notes/:noteId', element: <NoteDetailPage /> },
           { path: 'ai', element: <AiChatPage /> },
           { path: 'ai/:conversationId', element: <AiChatPage /> },
           { path: 'questions', element: <QuestionsPage /> },
