@@ -206,7 +206,14 @@ account"; the regeneration itself is frontend work, not theirs.
 
 ---
 
-## Contract verification, 2026-10-13
+## Contract verification, 2026-10-13 — SUPERSEDED
+
+> Kept because it records what was known at the time, but the table below was
+> read off the **67-path snapshot**. The "Status after regenerating from the live
+> server (2026-10-14)" section above replaces every row in it: C01, C05, C07,
+> C06 (review half), C09 (write half) and C-Search all landed, and the asks that
+> survived are listed there with current evidence. Do not quote a row below as
+> the present state of the contract.
 
 Every row above was re-checked field by field against
 `packages/api-client/src/generated/openapi.json` (67 paths) rather than from

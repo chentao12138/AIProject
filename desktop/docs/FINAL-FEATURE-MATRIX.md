@@ -68,6 +68,7 @@ Real command output at this commit, not a historical claim:
 | Unit | `npm run test:run` | 69 files / 951 tests passed |
 | Coverage | `npm run test:coverage` | statements 91.39% (9770/10690), branches 86.34%, functions 82.95% |
 | Build | `npm run build` | main + preload 1.65 kB, renderer **889.64 kB** (+ CSS 30.31 kB) |
+| Package | `npm run dist:win` (with the two mirror variables) | `dist/AIStudy Setup 0.1.0.exe`, 111,467,982 bytes, built 2026-10-14 01:38 — timestamp read back from the artifact, not assumed |
 | Package | `npm run dist:win` | see "what this does not prove" — the artifact is produced, and installing it is a separate gate |
 
 The previous table (2026-10-13: 65 files / 777 tests, renderer 775.91 kB) is kept
@@ -87,14 +88,13 @@ being carried into version control.
 What this does **not** prove, and remains open A-class work:
 
 - **R02 install → launch → shortcuts → uninstall: RUN, 2026-10-14, and it passed.**
-  `dist/AIStudy Setup 0.1.0.exe` (111,466,790 bytes, timestamp matching this
-  commit) installed per-user silently (exit 0): `%LOCALAPPDATA%\Programs\AIStudy\AIStudy.exe`
-  246,201,856 bytes with `productVersion 0.1.0.0`, start-menu and desktop
-  shortcuts created, `Uninstall AIStudy.exe` present. Launching the installed
-  binary created a window titled `AIStudy` with 4 processes and no crash, and
-  `%APPDATA%\AIStudy` was created. Silent uninstall removed the install directory,
-  both shortcuts and the `HKCU\...\Uninstall` entry while **keeping**
-  `%APPDATA%\AIStudy\config.json`, which is exactly the
+  Re-run against the final artifact (111,467,982 bytes, built 01:38 at the commit
+  whose gate numbers are above): silent per-user install exited 0, the exe was
+  present afterwards with `productVersion 0.1.0.0`, and launching it produced a
+  window titled `AIStudy` with 4 processes and no crash. The earlier pass on the
+  same installer also confirmed both shortcuts are created and the silent
+  uninstall removes the directory, both shortcuts and the `HKCU\...\Uninstall`
+  entry while **keeping** `%APPDATA%\AIStudy\config.json` — the
   `deleteAppDataOnUninstall: false` policy.
   One finding for whoever runs this by hand: the NSIS uninstaller is
   **asynchronous** — its process returned before anything was deleted, so
