@@ -344,7 +344,7 @@ public class IngestionJobService {
                 && !IngestionStatus.PARTIAL_FAILED.name().equals(existing.getStatus())) {
             // The endpoint documents 409 for this case; returning the unchanged job
             // made a no-op retry look like a successful one (HTTP 200).
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.AI_JOB_NOT_RETRYABLE,
                     "only FAILED or PARTIAL_FAILED jobs can be retried: " + existing.getStatus());
         }
         LocalDateTime now = LocalDateTime.now();

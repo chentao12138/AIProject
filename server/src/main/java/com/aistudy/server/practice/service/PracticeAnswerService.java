@@ -89,7 +89,7 @@ public class PracticeAnswerService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "PracticeSession not found");
         }
         if (!PracticeSessionService.STATUS_IN_PROGRESS.equals(session.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.PRACTICE_SESSION_NOT_IN_PROGRESS,
                     "answers are only accepted while the session is IN_PROGRESS: "
                             + session.getStatus());
         }
@@ -136,7 +136,7 @@ public class PracticeAnswerService {
                     answerPayloadJson, grade.isCorrect(), grade.score(),
                     now, request.durationMs(), null, grade.correctAnswerSummary(), now);
             if (updated == 0) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                throw ApiException.conflict(ApiErrorCodes.PRACTICE_ANSWER_STALE,
                         "answer row changed concurrently");
             }
             existing.setAnswerDataJson(answerPayloadJson);
@@ -166,7 +166,7 @@ public class PracticeAnswerService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "PracticeSession not found");
         }
         if (!PracticeSessionService.STATUS_IN_PROGRESS.equals(session.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.PRACTICE_SESSION_NOT_IN_PROGRESS,
                     "only IN_PROGRESS sessions can be finished: " + session.getStatus());
         }
 
@@ -230,7 +230,7 @@ public class PracticeAnswerService {
                 PracticeSessionService.STATUS_IN_PROGRESS,
                 PracticeSessionService.STATUS_SUBMITTED, now, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.PRACTICE_SESSION_STALE,
                     "practice session state changed concurrently");
         }
 

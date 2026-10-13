@@ -54,6 +54,19 @@ public final class ApiErrorCodes {
      * or differently-shaped paper than the one the user reviewed.
      */
     public static final String EXAM_BLUEPRINT_UNSATISFIED = "EXAM_BLUEPRINT_UNSATISFIED";
+    /** The blueprint has already produced a paper (USED), so it cannot generate again. */
+    public static final String EXAM_BLUEPRINT_NOT_DRAFT = "EXAM_BLUEPRINT_NOT_DRAFT";
+    /** No published question in the space matches the blueprint's scope filters. */
+    public static final String EXAM_BLUEPRINT_NO_CANDIDATES = "EXAM_BLUEPRINT_NO_CANDIDATES";
+    public static final String EXAM_NOT_EDITABLE = "EXAM_NOT_EDITABLE";
+    public static final String EXAM_PAPER_NOT_DRAFT = "EXAM_PAPER_NOT_DRAFT";
+    public static final String EXAM_PAPER_STALE = "EXAM_PAPER_STALE";
+    public static final String EXAM_STALE = "EXAM_STALE";
+    public static final String EXAM_QUESTION_ALREADY_IN_PAPER = "EXAM_QUESTION_ALREADY_IN_PAPER";
+    public static final String AI_JOB_NOT_RETRYABLE = "AI_JOB_NOT_RETRYABLE";
+    public static final String REVIEW_TASK_NOT_PENDING = "REVIEW_TASK_NOT_PENDING";
+    public static final String REVIEW_TASK_STALE = "REVIEW_TASK_STALE";
+    public static final String REVIEW_STATE_STALE = "REVIEW_STATE_STALE";
 
     /**
      * Exam conflict codes (contract request C12 / audit F-30). Every one of
@@ -87,6 +100,25 @@ public final class ApiErrorCodes {
     public static final String PRACTICE_SESSION_NOT_SUBMITTED = "PRACTICE_SESSION_NOT_SUBMITTED";
     /** The session predates V066 and therefore has no stored summary. */
     public static final String PRACTICE_RESULT_NOT_RECORDED = "PRACTICE_RESULT_NOT_RECORDED";
+    /** The session is not IN_PROGRESS, so it accepts neither answers nor finish. */
+    public static final String PRACTICE_SESSION_NOT_IN_PROGRESS = "PRACTICE_SESSION_NOT_IN_PROGRESS";
+    /** Another request changed the answer row first; the client must re-read it. */
+    public static final String PRACTICE_ANSWER_STALE = "PRACTICE_ANSWER_STALE";
+    /** Another request moved the session on; the caller's view of it is stale. */
+    public static final String PRACTICE_SESSION_STALE = "PRACTICE_SESSION_STALE";
+    /** Variant generation needs a submitted session to grade against. */
+    public static final String VARIANT_SESSION_NOT_SUBMITTED = "VARIANT_SESSION_NOT_SUBMITTED";
+    /**
+     * Folder import chain conflicts (contract request C12 / audit F-30). The
+     * desktop flow drives these from the UI — resume an upload, retry one entry —
+     * so each needs its own code instead of `code:"CONFLICT"` plus prose.
+     */
+    public static final String FOLDER_SNAPSHOT_ALREADY_PROCESSED = "FOLDER_SNAPSHOT_ALREADY_PROCESSED";
+    public static final String FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS = "FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS";
+    public static final String FOLDER_ENTRY_ALREADY_LINKED = "FOLDER_ENTRY_ALREADY_LINKED";
+    public static final String FOLDER_ENTRY_NOT_PENDING = "FOLDER_ENTRY_NOT_PENDING";
+    public static final String FOLDER_ENTRY_CHECKSUM_MISMATCH = "FOLDER_ENTRY_CHECKSUM_MISMATCH";
+    public static final String FOLDER_ENTRY_STALE = "FOLDER_ENTRY_STALE";
 
     private ApiErrorCodes() {
     }

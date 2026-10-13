@@ -20,6 +20,8 @@ import com.aistudy.server.question.mapper.QuestionMapper;
 import com.aistudy.server.question.service.QuestionSnapshotService;
 import com.aistudy.server.space.service.LearningSpaceService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -126,7 +128,7 @@ public class ExamBlueprintService {
     public ExamBlueprintGenerateResponse generate(String ownerSubject, Long spaceId, Long blueprintId) {
         ExamBlueprint blueprint = getMine(ownerSubject, spaceId, blueprintId);
         if (blueprint == null || !STATUS_DRAFT.equals(blueprint.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_BLUEPRINT_NOT_DRAFT,
                     "blueprint is not in DRAFT state or not found");
         }
 
@@ -134,7 +136,7 @@ public class ExamBlueprintService {
 
         List<Question> candidates = queryCandidates(ownerSubject, spaceId, rules);
         if (candidates.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_BLUEPRINT_NO_CANDIDATES,
                     "no questions match the blueprint rules");
         }
 

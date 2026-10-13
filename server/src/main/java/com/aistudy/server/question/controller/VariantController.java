@@ -12,8 +12,12 @@ import com.aistudy.server.practice.mapper.PracticeSessionMapper;
 import com.aistudy.server.practice.mapper.PracticeSessionQuestionMapper;
 import com.aistudy.server.practice.service.PracticeSessionService;
 import com.aistudy.server.space.service.LearningSpaceService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.MediaType;
@@ -62,6 +66,12 @@ public class VariantController {
         this.learningSpaceService = learningSpaceService;
     }
 
+    @Operation(
+            description = "Requires a SUBMITTED practice session, else 409 `code: VARIANT_SESSION_NOT_SUBMITTED`. The generated variant is stored as a DRAFT and never published automatically.",
+            responses = {
+                    @ApiResponse(responseCode = "201", description = "variant created as DRAFT"),
+                    @ApiResponse(responseCode = "409", description = "`code: VARIANT_SESSION_NOT_SUBMITTED`")
+            })
     @PostMapping(value = "/practice-sessions/{sessionId}/questions/{questionId}/variant",
             produces = MediaType.APPLICATION_JSON_VALUE,
             consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -79,7 +89,7 @@ public class VariantController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "LearningSpace not found");
         }
         if (!PracticeSessionService.STATUS_SUBMITTED.equals(session.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.VARIANT_SESSION_NOT_SUBMITTED,
                     "practice session must be SUBMITTED before generating variants: "
                             + session.getStatus());
         }

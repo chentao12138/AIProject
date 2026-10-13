@@ -13,6 +13,7 @@ import com.aistudy.server.ai.dto.AiDto.StudyCoachResponse;
 import com.aistudy.server.ai.explain.AiAnswerExplanationService;
 import com.aistudy.server.ai.service.AiConversationService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -61,7 +62,9 @@ public class AiTutorController {
         return aiConversationService.createConversation(authentication.getName(), spaceId, title);
     }
 
-    @Operation(summary = "List my ACTIVE AI conversations in this LearningSpace")
+    @Operation(summary = "List my ACTIVE AI conversations in this LearningSpace",
+            description = "Paged conversations, newest activity first: ORDER BY COALESCE(last_message_at, created_at) DESC, id DESC. Page numbers are 0-based.",
+            responses = @ApiResponse(responseCode = "200", description = "conversation page"))
     @GetMapping("/conversations")
     public ConversationPageResponse listConversations(
             @PathVariable Long spaceId,
@@ -93,7 +96,9 @@ public class AiTutorController {
                 authentication.getName(), spaceId, conversationId);
     }
 
-    @Operation(summary = "List messages of one of my AI conversations")
+    @Operation(summary = "List messages of one of my AI conversations",
+            description = "Paged messages of one conversation, OLDEST first: ORDER BY created_at ASC, id ASC, so page 0 is the beginning of the thread and the newest page is totalPages-1. The UI renders a chat transcript by appending later pages, not by reading page 0 as the latest.",
+            responses = @ApiResponse(responseCode = "200", description = "message page in ascending time order"))
     @GetMapping("/conversations/{conversationId}/messages")
     public MessagePageResponse listMessages(
             @PathVariable Long spaceId,

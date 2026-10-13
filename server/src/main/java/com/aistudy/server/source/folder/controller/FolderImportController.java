@@ -3,6 +3,7 @@ package com.aistudy.server.source.folder.controller;
 import com.aistudy.server.source.folder.entity.FolderImportEntry;
 import com.aistudy.server.source.folder.entity.FolderImportSnapshot;
 import com.aistudy.server.source.folder.service.FolderImportService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -48,6 +49,7 @@ public class FolderImportController {
         return created;
     }
 
+    @Operation(description = "Uploads one entry of an awaited snapshot. Conflicts answer 409 with a stable `code`: FOLDER_SNAPSHOT_ALREADY_PROCESSED, FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS, FOLDER_ENTRY_ALREADY_LINKED, FOLDER_ENTRY_NOT_PENDING, FOLDER_ENTRY_CHECKSUM_MISMATCH, FOLDER_ENTRY_STALE. A checksum mismatch means the bytes are not what the snapshot declared; FOLDER_ENTRY_STALE means another request already moved that entry.")
     @PostMapping("/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/entries")
     public FolderImportSnapshot submitEntries(@PathVariable Long spaceId,
                                               @PathVariable Long sourceId,
@@ -66,6 +68,7 @@ public class FolderImportController {
      * in this exact space/source) and integrity (asset sha256 ==
      * entry sha256) — the client path alone is never trusted.
      */
+    @Operation(description = "Binds already-uploaded assets to snapshot entries. Conflicts answer 409 with a stable `code`: FOLDER_SNAPSHOT_ALREADY_PROCESSED, FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS, FOLDER_ENTRY_ALREADY_LINKED, FOLDER_ENTRY_NOT_PENDING, FOLDER_ENTRY_CHECKSUM_MISMATCH, FOLDER_ENTRY_STALE.")
     @PostMapping("/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/bindings")
     public FolderImportSnapshot bindEntries(@PathVariable Long spaceId,
                                             @PathVariable Long sourceId,
@@ -81,6 +84,7 @@ public class FolderImportController {
      * COMPLETED when nothing is pending; otherwise returns the exact
      * to-upload list ({@code completed=false}), never a fake success.
      */
+    @Operation(description = "Closes the snapshot once every entry is resolved. Conflicts answer 409 with a stable `code`: FOLDER_SNAPSHOT_ALREADY_PROCESSED, FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS, FOLDER_ENTRY_ALREADY_LINKED, FOLDER_ENTRY_NOT_PENDING, FOLDER_ENTRY_CHECKSUM_MISMATCH, FOLDER_ENTRY_STALE.")
     @PostMapping("/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/complete")
     public FolderImportService.FolderSyncCompletion completeSync(@PathVariable Long spaceId,
                                                                   @PathVariable Long sourceId,

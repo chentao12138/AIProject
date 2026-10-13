@@ -10,6 +10,8 @@ import com.aistudy.server.exam.dto.ExamAttemptDto.ExamResultView;
 import com.aistudy.server.exam.dto.ExamAttemptDto.GradeAnswerRequest;
 import com.aistudy.server.exam.entity.ExamAttempt;
 import com.aistudy.server.exam.service.ExamAttemptService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.util.List;
 import jakarta.validation.Valid;
@@ -67,6 +69,12 @@ public class ExamAttemptController {
         this.examAttemptService = examAttemptService;
     }
 
+    @Operation(
+            description = "Starts an attempt. 409 `code: EXAM_ACTIVE_ATTEMPT_EXISTS` when the learner already has an unfinished attempt on this paper.",
+            responses = {
+                    @ApiResponse(responseCode = "201", description = "attempt created"),
+                    @ApiResponse(responseCode = "409", description = "`code: EXAM_ACTIVE_ATTEMPT_EXISTS`")
+            })
     @PostMapping(value = "/exams/{examId}/sessions",
             produces = MediaType.APPLICATION_JSON_VALUE)
     public ExamAttemptView create(@PathVariable Long spaceId,
@@ -103,6 +111,12 @@ public class ExamAttemptController {
         return attemptView(attempt);
     }
 
+    @Operation(
+            description = "Saves one answer against the paper's frozen snapshot. Every rejection names a code: EXAM_ATTEMPT_NOT_IN_PROGRESS, EXAM_DEADLINE_EXCEEDED, EXAM_ANSWER_STALE (another request rewrote this answer), EXAM_ANSWER_NOT_GRADABLE.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "answer stored and graded"),
+                    @ApiResponse(responseCode = "409", description = "conflict with a stable `code`")
+            })
     @PostMapping(value = "/exam-attempts/{attemptId}/answers",
             produces = MediaType.APPLICATION_JSON_VALUE,
             consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -114,6 +128,12 @@ public class ExamAttemptController {
                 authentication.getName(), spaceId, attemptId, request);
     }
 
+    @Operation(
+            description = "Submits and grades in one transaction. 409 `code: EXAM_ATTEMPT_ALREADY_SUBMITTED` on a second submit, `code: EXAM_RESULT_NOT_AVAILABLE` when grading produced no result row.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "result of this submission"),
+                    @ApiResponse(responseCode = "409", description = "conflict with a stable `code`")
+            })
     @PostMapping(value = "/exam-attempts/{attemptId}/submit",
             produces = MediaType.APPLICATION_JSON_VALUE)
     public ExamResultView submit(@PathVariable Long spaceId,
@@ -123,6 +143,12 @@ public class ExamAttemptController {
                 authentication.getName(), spaceId, attemptId);
     }
 
+    @Operation(
+            description = "Reads the stored result. 409 `code: EXAM_RESULT_NOT_AVAILABLE` while the attempt is not submitted, `code: EXAM_RESULT_MISSING` when a submitted attempt has no result row to show.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "graded result"),
+                    @ApiResponse(responseCode = "409", description = "conflict with a stable `code`")
+            })
     @GetMapping(value = "/exam-attempts/{attemptId}/result",
             produces = MediaType.APPLICATION_JSON_VALUE)
     public ExamResultView result(@PathVariable Long spaceId,

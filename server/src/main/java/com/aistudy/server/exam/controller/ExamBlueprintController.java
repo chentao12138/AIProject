@@ -3,6 +3,8 @@ package com.aistudy.server.exam.controller;
 import com.aistudy.server.exam.dto.ExamBlueprintDto;
 import com.aistudy.server.exam.dto.ExamBlueprintDto.ExamBlueprintResponse;
 import com.aistudy.server.exam.service.ExamBlueprintService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -57,6 +59,12 @@ public class ExamBlueprintController {
         return ExamBlueprintResponse.from(bp);
     }
 
+    @Operation(
+            description = "Builds the paper from the blueprint's distributions. 409 `code: EXAM_BLUEPRINT_UNSATISFIED` when the question pool cannot meet the declared type/difficulty quotas or the total: the distributions are enforced, so a paper is never silently produced with a different shape (or a shorter length) than the blueprint that was reviewed. 409 `code: EXAM_BLUEPRINT_NOT_DRAFT` when the blueprint has already generated a paper.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "exam, paper and slots created"),
+                    @ApiResponse(responseCode = "409", description = "`code: EXAM_BLUEPRINT_UNSATISFIED`")
+            })
     @PostMapping(value = "/{blueprintId}/generate", produces = MediaType.APPLICATION_JSON_VALUE)
     public ExamBlueprintDto.ExamBlueprintGenerateResponse generate(@PathVariable Long spaceId,
                                                                    @PathVariable Long blueprintId,

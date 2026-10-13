@@ -8,6 +8,8 @@ import com.aistudy.server.wrong.entity.WrongQuestion;
 import com.aistudy.server.wrong.mapper.ReviewRecordMapper;
 import com.aistudy.server.wrong.mapper.ReviewTaskMapper;
 import com.aistudy.server.wrong.mapper.WrongQuestionMapper;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -303,7 +305,7 @@ public class WrongQuestionReviewService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ReviewTask not found");
         }
         if (!TASK_STATUS_PENDING.equals(task.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.REVIEW_TASK_NOT_PENDING,
                     "review task is not PENDING: " + task.getStatus());
         }
 
@@ -323,7 +325,7 @@ public class WrongQuestionReviewService {
         int updated = reviewTaskMapper.completeByIdAndSpace(
                 taskId, spaceId, ownerSubject, TASK_STATUS_PENDING, TASK_STATUS_COMPLETED, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.REVIEW_TASK_STALE,
                     "review task state changed concurrently");
         }
         task.setStatus(TASK_STATUS_COMPLETED);

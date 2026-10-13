@@ -13,6 +13,8 @@ import com.aistudy.server.question.mapper.QuestionMapper;
 import com.aistudy.server.question.mapper.QuestionOptionMapper;
 import com.aistudy.server.question.service.QuestionService;
 import com.aistudy.server.space.service.LearningSpaceService;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -221,7 +223,7 @@ public class PracticeSessionService {
             return null;
         }
         if (!STATUS_CREATED.equals(existing.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.PRACTICE_SESSION_NOT_IN_PROGRESS,
                     "practice session is not in CREATED state: " + existing.getStatus());
         }
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
@@ -229,7 +231,7 @@ public class PracticeSessionService {
                 sessionId, spaceId, ownerSubject,
                 STATUS_CREATED, STATUS_IN_PROGRESS, now, now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.PRACTICE_SESSION_STALE,
                     "practice session state changed concurrently");
         }
         existing.setStatus(STATUS_IN_PROGRESS);

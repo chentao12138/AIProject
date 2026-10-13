@@ -14,6 +14,8 @@ import com.aistudy.server.question.mapper.QuestionMapper;
 import com.aistudy.server.question.service.QuestionService;
 import com.aistudy.server.question.service.QuestionSnapshotService;
 import com.aistudy.server.space.service.LearningSpaceService;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -153,7 +155,7 @@ public class ExamService {
             return null;
         }
         if (!STATUS_DRAFT.equals(existing.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_NOT_EDITABLE,
                     "Cannot update a published or archived exam");
         }
         LocalDateTime now = LocalDateTime.now();
@@ -201,17 +203,17 @@ public class ExamService {
         if (STATUS_DRAFT.equals(exam.getStatus())) {
             ExamPaper paper = paperOf(exam);
             if (paper == null || !PAPER_STATUS_DRAFT.equals(paper.getStatus())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "exam paper is not in DRAFT state");
+                throw ApiException.conflict(ApiErrorCodes.EXAM_PAPER_NOT_DRAFT, "exam paper is not in DRAFT state");
             }
             int paperUpdated = examPaperMapper.updateStatusByIdAndSpace(
                     paper.getId(), spaceId, PAPER_STATUS_DRAFT, PAPER_STATUS_PUBLISHED, now);
             if (paperUpdated == 0) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "paper state changed concurrently");
+                throw ApiException.conflict(ApiErrorCodes.EXAM_PAPER_STALE, "paper state changed concurrently");
             }
             int updated = examMapper.publishByIdAndSpace(
                     examId, spaceId, STATUS_DRAFT, STATUS_PUBLISHED, now, now);
             if (updated == 0) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "exam state changed concurrently");
+                throw ApiException.conflict(ApiErrorCodes.EXAM_STALE, "exam state changed concurrently");
             }
             exam.setStatus(STATUS_PUBLISHED);
             exam.setPublishedAt(now);
@@ -224,7 +226,7 @@ public class ExamService {
             int paperUpdated = examPaperMapper.updateStatusByIdAndSpace(
                     draftPaper.getId(), spaceId, PAPER_STATUS_DRAFT, PAPER_STATUS_PUBLISHED, now);
             if (paperUpdated == 0) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "paper state changed concurrently");
+                throw ApiException.conflict(ApiErrorCodes.EXAM_PAPER_STALE, "paper state changed concurrently");
             }
             exam.setUpdatedAt(now);
         }
@@ -288,7 +290,7 @@ public class ExamService {
         List<ExamQuestion> existing = questionsOf(draft);
         boolean duplicate = existing.stream().anyMatch(eq -> eq.getQuestionId().equals(questionId));
         if (duplicate) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "question already in paper");
+            throw ApiException.conflict(ApiErrorCodes.EXAM_QUESTION_ALREADY_IN_PAPER, "question already in paper");
         }
         int order = existing.size();
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
@@ -334,7 +336,7 @@ public class ExamService {
         ExamPaper draft = ensureDraftPaper(exam);
         int updated = examQuestionMapper.updateSortOrderBatch(draft.getId(), spaceId, slots);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_PAPER_STALE,
                     "paper state changed concurrently");
         }
         return questionsOf(draft);
@@ -357,7 +359,7 @@ public class ExamService {
         int updated = examQuestionMapper.updateScoreByIdAndPaper(
                 examQuestionId, draft.getId(), spaceId, score);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.EXAM_PAPER_STALE,
                     "paper state changed concurrently");
         }
         recomputeTotalScore(exam, draft);

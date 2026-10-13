@@ -27,6 +27,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -319,5 +320,65 @@ class ExamOpenApiContractTest {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['" + DIAGNOSIS + "'].get.security[0].bearerAuth").exists());
+    }
+
+    /**
+     * Contract request C12 / audit F-30: the desktop client branches on
+     * {@code ProblemDetail.code}, so a conflict it must handle has to be named in
+     * the published document, not only returned at runtime. This asserts the whole
+     * set the client was told about, so a code cannot be renamed or dropped
+     * without a red build.
+     */
+    @Test
+    void conflictCodesArePublishedInTheContract() throws Exception {
+        String document = mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        for (String code : java.util.List.of(
+                "EXAM_ACTIVE_ATTEMPT_EXISTS",
+                "EXAM_ATTEMPT_ALREADY_SUBMITTED",
+                "EXAM_ATTEMPT_NOT_IN_PROGRESS",
+                "EXAM_ANSWER_STALE",
+                "EXAM_ANSWER_NOT_GRADABLE",
+                "EXAM_DEADLINE_EXCEEDED",
+                "EXAM_RESULT_NOT_AVAILABLE",
+                "EXAM_BLUEPRINT_UNSATISFIED",
+                "EXAM_BLUEPRINT_NOT_DRAFT",
+                "QUESTION_NOT_EDITABLE",
+                "PRACTICE_SESSION_NOT_SUBMITTED",
+                "PRACTICE_RESULT_NOT_RECORDED",
+                "PRACTICE_SESSION_NOT_IN_PROGRESS",
+                "PRACTICE_SESSION_STALE",
+                "PRACTICE_ANSWER_STALE",
+                "VARIANT_SESSION_NOT_SUBMITTED",
+                "FOLDER_SNAPSHOT_ALREADY_PROCESSED",
+                "FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS",
+                "FOLDER_ENTRY_ALREADY_LINKED",
+                "FOLDER_ENTRY_NOT_PENDING",
+                "FOLDER_ENTRY_CHECKSUM_MISMATCH",
+                "FOLDER_ENTRY_STALE")) {
+            assertTrue(document.contains(code),
+                    "the contract must name the conflict code " + code);
+        }
+    }
+
+    /**
+     * Contract request C-Paging: a paged collection is only usable if the
+     * document says what it is ordered by, because "page 0" means the newest or
+     * the oldest rows depending on the query. Asserted here because this class
+     * already boots the whole application with mocked mappers, so the published
+     * document covers every controller without needing a database.
+     */
+    @Test
+    void pagedCollectionsPublishTheirOrdering() throws Exception {
+        String document = mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertTrue(document.contains("COALESCE(last_message_at, created_at) DESC"),
+                "the conversation list must publish its sort key");
+        assertTrue(document.contains("OLDEST first"),
+                "the message list must say that page 0 is the start of the thread");
     }
 }

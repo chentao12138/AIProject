@@ -8,6 +8,8 @@ import com.aistudy.server.source.folder.mapper.FolderImportEntryMapper;
 import com.aistudy.server.source.folder.mapper.FolderImportSnapshotMapper;
 import com.aistudy.server.source.service.SourceService;
 import com.aistudy.server.space.service.LearningSpaceService;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -182,7 +184,8 @@ public class FolderImportService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "snapshot not found");
         }
         if (!STATUS_DRAFT.equals(snapshot.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "snapshot already processed");
+            throw ApiException.conflict(ApiErrorCodes.FOLDER_SNAPSHOT_ALREADY_PROCESSED,
+                    "snapshot already processed");
         }
 
         List<FolderImportEntryRequest> manifest = entries == null ? List.of() : entries;
@@ -326,7 +329,7 @@ public class FolderImportService {
                                             Long snapshotId, List<FolderEntryBinding> bindings) {
         FolderImportSnapshot snapshot = requireOwnedSnapshot(ownerSubject, spaceId, sourceId, snapshotId);
         if (!STATUS_AWAITING_UPLOAD.equals(snapshot.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS,
                     "snapshot is not awaiting uploads: " + snapshot.getStatus());
         }
         if (bindings == null || bindings.isEmpty()) {
@@ -350,12 +353,12 @@ public class FolderImportService {
                     // Idempotent re-bind of the SAME asset: fine; a
                     // different asset on an already-bound entry is 409.
                     if (!entry.getSourceAssetId().equals(binding.assetId())) {
-                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        throw ApiException.conflict(ApiErrorCodes.FOLDER_ENTRY_ALREADY_LINKED,
                                 "entry already linked to a different asset: " + entry.getRelativePath());
                     }
                     continue;
                 }
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                throw ApiException.conflict(ApiErrorCodes.FOLDER_ENTRY_NOT_PENDING,
                         "entry is not pending: " + entry.getRelativePath() + " [" + entry.getStatus() + "]");
             }
             // Server-side ownership + integrity: the asset must live in
@@ -367,14 +370,14 @@ public class FolderImportService {
                         "asset not found in this space/source: " + binding.assetId());
             }
             if (entry.getSha256() != null && !entry.getSha256().equalsIgnoreCase(asset.getSha256())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                throw ApiException.conflict(ApiErrorCodes.FOLDER_ENTRY_CHECKSUM_MISMATCH,
                         "sha256 mismatch for " + entry.getRelativePath()
                                 + ": manifest says " + entry.getSha256()
                                 + ", uploaded bytes are " + asset.getSha256());
             }
             int updated = entryMapper.bindPendingEntry(entry.getId(), ENTRY_LINKED, asset.getId());
             if (updated == 0) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                throw ApiException.conflict(ApiErrorCodes.FOLDER_ENTRY_STALE,
                         "entry changed concurrently, re-submit: " + entry.getRelativePath());
             }
         }
@@ -403,7 +406,7 @@ public class FolderImportService {
                     ? 0 : snapshot.getPendingFiles(), List.of(), snapshot);
         }
         if (!STATUS_AWAITING_UPLOAD.equals(snapshot.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.FOLDER_SNAPSHOT_NOT_AWAITING_UPLOADS,
                     "snapshot is not in the upload chain: " + snapshot.getStatus());
         }
         List<FolderImportEntry> pending = new ArrayList<>();

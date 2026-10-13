@@ -2,6 +2,8 @@ package com.aistudy.server.wrong.service;
 
 import com.aistudy.server.wrong.entity.ReviewState;
 import com.aistudy.server.wrong.mapper.ReviewStateMapper;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -120,7 +122,7 @@ public class ReviewStateService {
                 result.easeFactor(), result.intervalDays(), newRepetitions,
                 DEFAULT_POLICY_VERSION, nextDue, existing.getCreatedAt(), now);
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw ApiException.conflict(ApiErrorCodes.REVIEW_STATE_STALE,
                     "review state changed concurrently");
         }
         existing.setEaseFactor(result.easeFactor());
