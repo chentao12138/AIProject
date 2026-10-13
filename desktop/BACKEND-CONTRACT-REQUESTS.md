@@ -518,7 +518,16 @@ the UI cannot say "partially graded" from the fields it is given anyway. What th
 frontend needs instead is the attempt's existing `gradingStatus`
 (`GRADED` / `UNGRADED` / `NEEDS_REVIEW` / `PARTIALLY_GRADED`) on `AttemptSummaryView`
 — then the row labels itself and never has to infer a state from "did a number
-arrive". `features/exams/exam-attempt-history.ts` is the single place that switches.
+arrive". **That field arrived on 2026-10-14 while this round was in flight**:
+`AttemptSummaryView.gradingStatus`, contract enum `GRADED / PARTIALLY_GRADED /
+UNGRADED`, `null` while the attempt is open. `exam-attempt-history.ts` switched to
+reading it the same day — `已评分` / `客观题已判分，主观题仍待人工评分` / `已交卷，等待评分`
+are now the server's statements rather than an inference from "did a number arrive",
+and a score prints only for GRADED or PARTIALLY_GRADED. `api:live` is what surfaced
+the addition (paths identical, field-level difference reported at char 7896 by its
+new diagnostic). **Still unmeasured live:** a genuinely `PARTIALLY_GRADED` row,
+which needs an attempt with a subjective answer — the window closed on a restart
+before that ran.
 
 **Also noted from the backend:** a caller who is not a member of the space gets a
 **404 on this path** from `SpaceScopeInterceptor`, not an empty page. The history view

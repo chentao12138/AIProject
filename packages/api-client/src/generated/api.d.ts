@@ -4959,6 +4959,11 @@ export interface components {
             /** Format: int64 */
             examId?: number;
             status?: string;
+            /**
+             * @description Grading state of the attempt, null while it is still open. GRADED is final; PARTIALLY_GRADED means the objective part is scored while some answers still await a human grade.
+             * @enum {string}
+             */
+            gradingStatus?: "GRADED" | "PARTIALLY_GRADED" | "UNGRADED";
             /** Format: date-time */
             startedAt?: string;
             /** Format: date-time */

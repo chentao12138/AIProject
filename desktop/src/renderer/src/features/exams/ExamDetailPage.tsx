@@ -366,7 +366,7 @@ export function ExamDetailPage() {
                   // The server's own status, plus what it says about grading:
                   // 进行中 / 已交卷等待评分 / 已评分 are three different rows,
                   // and only the graded one has a score to show.
-                  const progress = attemptProgressOf(row.status, row.score);
+                  const progress = attemptProgressOf(row);
                   return (
                     <tr key={row.id ?? `row-${index}`}>
                       <td>{isPositiveId(row.id) ? `#${row.id}` : '—'}</td>

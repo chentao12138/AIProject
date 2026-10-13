@@ -44,7 +44,7 @@ wired, the gates pass and the live journey has been run.
 
 | Feature | Contract that closed it | Frontend status |
 |---------|-------------------------|-----------------|
-| Notes archive visible + restorable, and entity → notes lists | `NoteView.archivedAt`, `POST /notes/{id}/restore` (204), `GET /notes?archived=&knowledgePointId=&sourceId=&contentBlockId=&questionId=` | Not yet wired — the list shows only unarchived notes today; the archived filter and the restore action are the remaining frontend work |
+| Notes archive visible + restorable, and entity → notes lists | `NoteView.archivedAt`, `POST /notes/{id}/restore` (204), `GET /notes?archived=&knowledgePointId=&sourceId=&contentBlockId=&questionId=` | **Wired** — 只看已归档 drives the server's own filter through `?archived=1`, and 恢复 appears only on a row the server marked `archivedAt`; a failed restore says so and keeps anti-IDOR copy rather than pretending the row came back. The reverse lists (`knowledgePointId=` etc.) are available on the contract and not yet surfaced as entry points |
 | Question editability | PUT description + `409 QUESTION_NOT_EDITABLE` + the `status` enum | **Wired and measured live** — `编辑` is gone for PUBLISHED/ARCHIVED/REJECTED, the edit form is read-only with the code named, and the 409 itself is handled |
 | Stored order / pair set on the detail page | `QuestionAnswerView.correctOrder` / `.matches` | **Wired and measured live** — the two "cannot be read back" notices are deleted, with a guard that fails if either returns |
 
@@ -82,10 +82,16 @@ Real command output at this commit, not a historical claim:
 | Lint | `npm run lint` | 0 errors, 0 warnings |
 | Typecheck | `npx tsc --noEmit -p tsconfig.node.json` / `-p tsconfig.web.json` | 0 errors |
 | Contract gate | `npm run api:check` | `openapi.json and api.d.ts are in sync` |
-| **Live contract gate** | `OPENAPI_URL=http://localhost:8080/v3/api-docs npm run api:live` | `committed snapshot equals http://localhost:8080/v3/api-docs`. Negative proofs: a fixture with `timeLimitMinutes` renamed to `durationMinutes` (no path change) → exit 1; a fixture with `/api/v1/spaces` removed → refused as a non-AIStudy document |
-| Unit | `npm run test:run` | 73 files / 1066 tests passed |
-| Coverage | `npm run test:coverage` | statements 92.15%, branches 87.25%, functions 83.99% |
-| Build | `npm run build` | main 13.95 kB + preload 1.65 kB, renderer **923.63 kB** (+ CSS 30.31 kB) |
+| **Live contract gate** | `OPENAPI_URL=http://localhost:8080/v3/api-docs npm run api:live` | `committed snapshot equals http://localhost:8080/v3/api-docs`. **It cannot run right now** — the backend restarted at ~03:2x to publish the `gradingStatus` field and `127.0.0.1:8080` has been refusing since, so the 198-path snapshot below is verified against the last reachable instance, not this minute's. Negative proofs still on file: a fixture with
+`timeLimitMinutes` renamed to `durationMinutes` (no path change) → exit 1; a
+fixture with `/api/v1/spaces` removed → refused as a non-AIStudy document; and
+this round the gate caught a real field addition with an unchanged path set,
+reporting it at char 7896 of the canonical forms. `servers[].url` is excluded from
+the comparison: springdoc echoes the requested Host there, so `localhost` vs
+`127.0.0.1` would make the gate permanently red on identical content. |
+| Unit | `npm run test:run` | 73 files / 1078 tests passed |
+| Coverage | `npm run test:coverage` | statements 92.22%, branches 87.26%, functions 84.09% |
+| Build | `npm run build` | main 13.95 kB + preload 1.65 kB, renderer **929.24 kB** (+ CSS 30.31 kB) |
 | Package | `npm run dist:win` (with the two mirror variables) | `dist/AIStudy Setup 0.1.0.exe`, **111,472,382 bytes, built 2026-10-14 02:53 at this commit**. NOT yet installed: R02 (silent install → launch → shortcuts → uninstall) was run against the 01:55 artifact (111,468,074 bytes), whose renderer differs from this one by the three lanes committed since. The build log's `signing with signtool.exe` lines do **not** mean it is signed (see the signing note below). |
 | Package | `npm run dist:win` | see "what this does not prove" — the artifact is produced, and installing it is a separate gate |
 

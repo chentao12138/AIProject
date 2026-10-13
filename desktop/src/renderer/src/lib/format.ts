@@ -314,6 +314,22 @@ export type PracticeSessionStatus =
   (typeof PRACTICE_SESSION_STATUSES)[keyof typeof PRACTICE_SESSION_STATUSES];
 
 /**
+ * Attempt grading states, as published on `AttemptSummaryView.gradingStatus`
+ * (contract enum: GRADED / PARTIALLY_GRADED / UNGRADED, plus `null` while the
+ * attempt is still open). Pinned to the snapshot by
+ * `features/exams/exam-attempt-history.test.ts`.
+ *
+ * This field is what C11 asked for: before it existed the history row could only
+ * infer "graded" from "a number arrived", which cannot distinguish a partial
+ * score from a final one and would render an ungraded `0` as a verdict.
+ */
+export const EXAM_GRADING_STATUSES = {
+  GRADED: 'GRADED',
+  PARTIALLY_GRADED: 'PARTIALLY_GRADED',
+  UNGRADED: 'UNGRADED',
+} as const;
+
+/**
  * The two 409 codes `GET /practice-sessions/{sessionId}/result` can answer with
  * (backend: the totals are written in the `finish` transaction, V066 added the
  * `score`/`max_score`/`answered_count`/`correct_count` columns).

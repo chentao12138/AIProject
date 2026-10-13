@@ -6,41 +6,52 @@
  * the rows it is given: no local slicing, no local counting, and no status the
  * backend does not emit.
  *
- * `status` is the SERVER's vocabulary (`ExamAttemptService.STATUS_NOT_STARTED /
- * STATUS_IN_PROGRESS / STATUS_SUBMITTED`, pinned by
- * `lib/backend-vocabulary-contract.test.ts`) — not a frontend invention. The
- * contract's `AttemptSummaryView{id, examId, status, startedAt, submittedAt,
- * score, maxScore}` carries no grading status, so "submitted" splits into the
- * two cases the score itself distinguishes:
- *  - `score` is a number → the result row exists → 已评分;
- *  - `score` is null / absent → nothing has been graded yet → 已交卷，等待评分.
+ * Two server fields decide what a row can say:
+ *  - `status` — `ExamAttemptService.STATUS_NOT_STARTED / STATUS_IN_PROGRESS /
+ *     STATUS_SUBMITTED`, pinned by `lib/backend-vocabulary-contract.test.ts`;
+ *  - `gradingStatus` — the contract enum GRADED / PARTIALLY_GRADED / UNGRADED,
+ *     `null` while the attempt is still open. This is the field C11 asked for:
+ *     with it, "submitted but not graded yet" is a server statement rather than
+ *     an inference from "did a number arrive", and a partial score can be
+ *     labelled as partial instead of being shown as final.
  *
- * That distinction is the whole point: a null score is NOT 0 分 and is NOT a
- * verdict. The same tri-state bug (a value the server left null being read as
- * "wrong") was already fixed once in `ExamAttemptPage`'s result view
- * (`isCorrect === true / false / null`) and in `exam-attempt-state.ts`.
+ * A score is printed only when `gradingStatus` says the server has graded
+ * (fully or partially). Anything else shows `—`: an absent score is not 0 分 and
+ * not a verdict (ADR-031).
  */
 
-import { EXAM_ATTEMPT_STATUSES } from '../../lib/format';
+import {
+  EXAM_ATTEMPT_STATUSES,
+  EXAM_GRADING_STATUSES,
+} from '../../lib/format';
+
+/** The fields of `AttemptSummaryView` this module reads. */
+export interface AttemptRowState {
+  status?: string | null;
+  gradingStatus?: string | null;
+  score?: number | null;
+  maxScore?: number | null;
+}
 
 /**
- * What one history row can honestly say, derived from the server's status and
- * whether the server sent a score. `'unknown'` is the case that exists because
- * the contract types `status` as a bare string: anything outside the pinned
- * three values is displayed as what it is instead of being guessed at.
+ * What one history row can honestly say. `'unknown'` exists because a status
+ * outside the server's own vocabulary is not something to guess at: it gets
+ * displayed as what it is, with no promised action.
  */
 export type AttemptProgress =
   | 'not-started'
   | 'in-progress'
   | 'awaiting-grade'
+  | 'partially-graded'
   | 'graded'
   | 'unknown';
 
-/** The three cases the audit asks for, plus the two it must not be told apart from. */
+/** The four cases the audit asks for, plus the two it must not be told apart from. */
 export const ATTEMPT_PROGRESS_NOTES: Record<AttemptProgress, string> = {
   'not-started': '尚未开始作答',
   'in-progress': '作答进行中',
   'awaiting-grade': '已交卷，等待评分',
+  'partially-graded': '客观题已判分，主观题仍待人工评分',
   graded: '已评分',
   unknown: '服务器未报告可识别的状态',
 };
@@ -54,33 +65,33 @@ export const ATTEMPT_PROGRESS_NOTES: Record<AttemptProgress, string> = {
 export const ATTEMPT_PROGRESS_ACTIONS: Record<AttemptProgress, string> = {
   'not-started': '开始作答',
   'in-progress': '继续作答',
-  'awaiting-grade': '查看成绩',
+  'awaiting-grade': '查看作答',
+  'partially-graded': '查看成绩',
   graded: '查看成绩',
   unknown: '查看作答',
 };
 
-/** The server's status verbatim, normalised for case and stray whitespace. */
-function normalizeStatus(status?: string | null): string {
-  return (status ?? '').trim().toUpperCase();
+function normalizeCode(value?: string | null): string {
+  return (value ?? '').trim().toUpperCase();
 }
 
-/**
- * Classify one attempt row. `score` is typed `number` by the generated client,
- * but the contract marks it optional and the server sends `null` for an
- * attempt with no graded result, so the check is `typeof === 'number'` — `0`
- * is a real score and must not fall through to "not graded".
- */
-export function attemptProgressOf(
-  status?: string | null,
-  score?: number | null
-): AttemptProgress {
-  const normalized = normalizeStatus(status);
-  if (normalized === EXAM_ATTEMPT_STATUSES.NOT_STARTED) return 'not-started';
-  if (normalized === EXAM_ATTEMPT_STATUSES.IN_PROGRESS) return 'in-progress';
-  if (normalized === EXAM_ATTEMPT_STATUSES.SUBMITTED) {
-    return typeof score === 'number' ? 'graded' : 'awaiting-grade';
-  }
-  return 'unknown';
+/** The grading states in which the server's number is a real statement. */
+const SCORED: readonly string[] = [
+  EXAM_GRADING_STATUSES.GRADED,
+  EXAM_GRADING_STATUSES.PARTIALLY_GRADED,
+];
+
+export function attemptProgressOf(row: AttemptRowState): AttemptProgress {
+  const status = normalizeCode(row.status);
+  if (status === EXAM_ATTEMPT_STATUSES.NOT_STARTED) return 'not-started';
+  if (status === EXAM_ATTEMPT_STATUSES.IN_PROGRESS) return 'in-progress';
+  if (status !== EXAM_ATTEMPT_STATUSES.SUBMITTED) return 'unknown';
+
+  const grading = normalizeCode(row.gradingStatus);
+  if (grading === EXAM_GRADING_STATUSES.GRADED) return 'graded';
+  if (grading === EXAM_GRADING_STATUSES.PARTIALLY_GRADED) return 'partially-graded';
+  // UNGRADED, or null while the server has not graded anything: nothing to show.
+  return 'awaiting-grade';
 }
 
 /**
@@ -90,23 +101,25 @@ export function attemptProgressOf(
  * the attempt page reads the server's `deadlineAt` and ends it there.
  */
 export function canResumeAttempt(status?: string | null): boolean {
-  const progress = attemptProgressOf(status, null);
+  const progress = attemptProgressOf({ status });
   return progress === 'not-started' || progress === 'in-progress';
 }
 
 /**
- * The score cell. A score is printed ONLY for a graded attempt; everything
- * else — an attempt still being answered, one submitted but not graded, one
- * whose status the client cannot map — shows `—`, never `0 / 0` and never a
- * 答对/答错 verdict the backend never issued.
+ * The score cell. A number is printed only when `gradingStatus` says the server
+ * graded (fully or partially); everything else — open, submitted and ungraded,
+ * or a status the client cannot map — shows `—`, never `0 / 0` and never a
+ * verdict the backend never issued.
  */
-export function attemptScoreText(row: {
-  status?: string | null;
-  score?: number | null;
-  maxScore?: number | null;
-}): string {
-  if (attemptProgressOf(row.status, row.score) !== 'graded') return '—';
-  const score = typeof row.score === 'number' ? row.score : '—';
-  const maxScore = typeof row.maxScore === 'number' ? row.maxScore : '—';
-  return `${score} / ${maxScore}`;
+export function attemptScoreText(row: AttemptRowState): string {
+  const grading = normalizeCode(row.gradingStatus);
+  if (!SCORED.includes(grading)) {
+    return '—';
+  }
+  if (typeof row.score !== 'number') {
+    // Graded, but the row carries no number to print. `— / 20` would read as
+    // "0 of 20", so the whole cell stays empty.
+    return '—';
+  }
+  return `${row.score} / ${typeof row.maxScore === 'number' ? row.maxScore : '—'}`;
 }

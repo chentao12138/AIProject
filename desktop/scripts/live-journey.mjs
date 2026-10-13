@@ -257,6 +257,37 @@ if (attemptId) {
     row ? row.score === null || row.score === undefined : false,
     `score=${JSON.stringify(row?.score ?? null)} maxScore=${JSON.stringify(row?.maxScore ?? null)} status=${row?.status}`
   );
+  // The field this round asked for: the row must state its grading, not leave
+  // the UI to infer it from "did a number arrive".
+  check(
+    'history row carries gradingStatus (C11 follow-up)',
+    'gradingStatus' in (row ?? {}),
+    `gradingStatus=${JSON.stringify(row?.gradingStatus ?? null)}`
+  );
+
+  // Answer the last open C11 question by measurement: submit an attempt and see
+  // whether `score` arrives before a human has graded anything.
+  const submitted = await call(
+    'POST',
+    `/api/v1/spaces/${spaceId}/exam-attempts/${attemptId}/submit`,
+    {}
+  );
+  const historyAfter = await call(
+    'GET',
+    `/api/v1/spaces/${spaceId}/exam-attempts?examId=${examId}&page=0&size=10`
+  );
+  const submittedRow = (historyAfter.data?.items ?? []).find(
+    (r) => r.id === attemptId
+  );
+  check(
+    'submitted attempt shows gradingStatus + null score while ungraded',
+    submitted.status === 200 &&
+      String(submittedRow?.gradingStatus ?? '').toUpperCase() === 'UNGRADED' &&
+      (submittedRow?.score === null || submittedRow?.score === undefined),
+    `submit=${submitted.status} gradingStatus=${JSON.stringify(
+      submittedRow?.gradingStatus ?? null
+    )} score=${JSON.stringify(submittedRow?.score ?? null)}`
+  );
 }
 
 const failed = rows.filter((r) => !r.pass).length;

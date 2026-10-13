@@ -866,3 +866,32 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
 - 门禁：lint 0 / `tsc` 0 / **73 files 1070 tests 全绿** / `api:check` + `api:live` 绿。
 - 仍未做：Notes 的 `archived` 过滤 + restore 按钮接线（本轮后端刚给）、打包版 R03–R05、
   制品重安装；`matchingAnswer` 的 typed pairs 与练习模块专属冲突码仍缺。
+
+## 2026-10-14（第六轮）：窗口里后端又在跑，`api:live` 抓到一个"路径不变、字段变了"
+
+- 上一段验证窗口结束后，后端**当场又发了新东西**：`AttemptSummaryView.gradingStatus`
+  （枚举 `GRADED / PARTIALLY_GRADED / UNGRADED`，attempt 未判完时为 null）。
+  这就是我在 C11 里要的那一个字段——**`api:live` 在路径集合完全相同的情况下抓到了它**
+  （新加的诊断打印出"两份 canonical 第一个差异在字符 7896"），否则我只会以为自己那两条
+  负向 fixture 才是它唯一能做的事。契约重生成后 path 仍 198，`api:check` 绿。
+- 于是 attempt 历史的三态**不再靠"有没有数字"反推**：`exam-attempt-history.ts` 改读
+  `gradingStatus`，`已评分 / 客观题已判分，主观题仍待人工评分 / 已交卷，等待评分`
+  都成了服务端的说法；分数只在 GRADED 与 PARTIALLY_GRADED 时打印。
+  枚举由 `exam-attempt-history.test.ts` 直接对着 `openapi.json` 钉住（写死前端常量就红）。
+  `EXAM_GRADING_STATUSES` 的顺序刻意与契约枚举一致，不是按字母排的。
+- Notes 接上了刚交付的那半边：`只看已归档` 把 `archived=true` 交给服务端（列表默认隐藏归档行，
+  这不是前端能"看见"的东西），`NoteView.archivedAt` 决定哪一行出现「恢复」，
+  `POST /notes/{id}/restore` 成功后失效列表缓存；失败时保留行的可见状态并显示
+  反 IDOR 文案，不假装笔记回来了。反查（`?knowledgePointId=` 等）契约已有、入口未接，记在矩阵里。
+- C05 补了最后一个不自洽的地方：409 `QUESTION_NOT_EDITABLE` 之后页面**重读题目**，
+  横幅变成"非草稿不可编辑"、保存禁用。第一版我用 `useEffect` 在 `query.data` 变化时重置草稿，
+  结果 react-query 每次 refetch 都换引用，正在输入的草稿会被抹掉——这是真回归，
+  所以改成**什么都不重置**：`dirty` 只在可编辑时才成立，用户输入留在屏幕上但不再宣称"未保存"
+  （一个永远不会被接受的保存不是待提交修改）。测试同时钉住"错误文案还在"和"输入没被吞掉"。
+- 本轮实测状态要说清楚：**`gradingStatus` 与 Notes 归档/恢复都没跑过 live**。
+  后端为发这个字段重启了实例，之后 `127.0.0.1:8080` 连续 6 次探活都是 ECONNREFUSED，
+  我没有自行把服务拉起来（也不该拉）。已把 `api:live` 当前**跑不了**这件事写进矩阵证据表：
+  `api:check` 绿只证明快照与类型自洽，不证明它等于运行中的服务。
+- 门禁（实跑）：lint 0 warnings / `tsc` node+web 0 / **73 files 1078 tests 全绿** /
+  coverage statements 92.22% / build renderer **929.24 kB**。制品仍是 02:53 那个包，
+  本轮改动之后未重构建，也从未安装过 R03–R05 需要的那一版。

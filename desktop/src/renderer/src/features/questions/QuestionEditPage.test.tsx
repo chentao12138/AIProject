@@ -258,9 +258,20 @@ describe('QuestionEditPage — what is locked, and why', () => {
     }
   );
 
-  it('names the 409 code when the question changes state while the form is open', async () => {
+  it('names the 409 code and re-reads the question when it changes state', async () => {
     const user = userEvent.setup();
+    // First read says DRAFT (so the form opens editable); the server has since
+    // published it, and the second read is what the recovery asks for.
+    let reads = 0;
+    const getQuestion = vi.fn(async () => {
+      reads += 1;
+      return {
+        data: { ...stored, status: reads === 1 ? 'DRAFT' : 'PUBLISHED' },
+        response: { status: 200 },
+      };
+    });
     const api = editApi({
+      getQuestion,
       updateQuestion: vi.fn(async () => ({
         error: { code: 'QUESTION_NOT_EDITABLE', detail: 'the question is not a DRAFT' },
         response: { status: 409 },
@@ -276,6 +287,17 @@ describe('QuestionEditPage — what is locked, and why', () => {
     expect(error).toHaveTextContent('已经不是草稿');
     // The server's English reason never reaches the screen.
     expect(error).not.toHaveTextContent('not a DRAFT');
+
+    // Recovery: the page re-reads, and the now-published document turns the
+    // editable form into the refused one — with the draft edits dropped, because
+    // continuing to offer them (or 有未保存的修改) would be a lie.
+    const banner = await screen.findByTestId('not-editable-banner');
+    expect(banner).toHaveTextContent('PUBLISHED');
+    await waitFor(() => expect(getQuestion).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('edit-save-button')).toBeDisabled();
+    expect(screen.queryByTestId('edit-dirty-flag')).not.toBeInTheDocument();
+    // The typed text is still on screen: refusing the save is not discarding it.
+    expect(screen.getByLabelText('题干')).toHaveValue('中国的首都是？再改一点');
   });
 
   it('marks the form dirty only after a real change', async () => {

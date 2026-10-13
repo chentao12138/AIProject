@@ -4,9 +4,9 @@
     "openapi": "3.1.0",
     "infoVersion": "v0"
   },
-  "recordedAt": "2026-10-13T19:29:59.849Z",
+  "recordedAt": "2026-10-13T20:55:38.565Z",
   "files": {
-    "openapi.json": "sha256-1ecb98aae4d5ff4ec676040d07893cd01c18b59df346ed92bdf408ba76847212",
-    "api.d.ts": "sha256-b7df1d293e3f80af51fbd6818fa604284908ffdf6249eff7d485bf7290052709"
+    "openapi.json": "sha256-c2e8218f01b6eb7d3e082cc48e05ec8d8b4d3a3579111f1b5b02dff9ae9974df",
+    "api.d.ts": "sha256-a94a3810b633b38dbb12a0f231eda4bac26c0ca60471342eb46a893b5386c7e0"
   }
 }

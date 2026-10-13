@@ -98,6 +98,12 @@ export function QuestionEditPage() {
   const [difficulty, setDifficulty] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
 
+  // A rejected save leaves the banner on screen (so a retry shows the same
+  // reason). Nothing is reset here on purpose: the text the user typed stays
+  // visible, and `dirty` below simply stops claiming "unsaved changes" once the
+  // document can no longer be saved — a save that will never be accepted is not
+  // a pending change, it is a refusal the banner already explains.
+
   const save = useMutation({
     mutationFn: () => {
       // Every field is always sent: `update()` keeps the stored value when a
@@ -126,6 +132,17 @@ export function QuestionEditPage() {
       });
       if (spaceId !== null && questionId !== null) {
         navigate(`/spaces/${spaceId}/questions/${questionId}`);
+      }
+    },
+    onError: (error) => {
+      // The server said the question is no longer a DRAFT — its state moved
+      // somewhere this page cannot see. Re-read it: the banner and the save
+      // button then reflect the truth instead of a form still offering a save
+      // that can only be refused again.
+      if (apiProblemCode(error) === QUESTION_NOT_EDITABLE_CODE) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.question(spaceId, questionId),
+        });
       }
     },
   });
@@ -161,9 +178,10 @@ export function QuestionEditPage() {
   const editable = isQuestionEditable(q.status);
   const errors = validateQuestionEdit(draft);
   const dirty =
-    draft.stem !== loaded.stem ||
-    draft.explanation !== loaded.explanation ||
-    draft.difficulty !== loaded.difficulty;
+    editable &&
+    (draft.stem !== loaded.stem ||
+      draft.explanation !== loaded.explanation ||
+      draft.difficulty !== loaded.difficulty);
   const visibleErrors = showErrors ? errors : [];
   const busy = save.isPending;
 

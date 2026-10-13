@@ -41,6 +41,9 @@ function attemptRow(overrides: Record<string, unknown> = {}) {
     id: 5,
     examId: 21,
     status: 'IN_PROGRESS',
+    // The row's grading statement (contract enum GRADED / PARTIALLY_GRADED /
+    // UNGRADED); `null` is what the server sends while nothing has been graded.
+    gradingStatus: null,
     startedAt: '2026-10-13T09:00:00',
     submittedAt: null,
     score: null,
@@ -191,6 +194,7 @@ describe('ExamDetailPage', () => {
         attemptRow({
           id: 6,
           status: 'SUBMITTED',
+          gradingStatus: 'GRADED',
           submittedAt: '2026-10-12T11:00:00',
           score: 18,
           maxScore: 20,
@@ -271,7 +275,7 @@ describe('ExamDetailPage', () => {
             // The server's own row for a submitted attempt whose result does
             // not exist yet: score/maxScore are null, NOT 0.
             attemptRow({ id: 7, status: 'SUBMITTED', score: null, maxScore: null }),
-            attemptRow({ id: 8, status: 'SUBMITTED', score: 0, maxScore: 20 }),
+            attemptRow({ id: 8, status: 'SUBMITTED', gradingStatus: 'GRADED', score: 0, maxScore: 20 }),
           ])
         ),
       }
@@ -293,13 +297,40 @@ describe('ExamDetailPage', () => {
     expect(within(graded).getByTestId('attempt-score-8')).toHaveTextContent('0 / 20');
   });
 
+  // The distinction `gradingStatus` was requested for: a partial score must not
+  // read as a final one, and both must stay different from "nothing graded yet".
+  it('labels a partially graded attempt as partial and shows its score', async () => {
+    renderExam(
+      { ...EXAM, status: 'PUBLISHED' },
+      {
+        listExamAttempts: vi.fn(async () =>
+          okPage([
+            attemptRow({
+              id: 11,
+              status: 'SUBMITTED',
+              gradingStatus: 'PARTIALLY_GRADED',
+              score: 6,
+              maxScore: 20,
+            }),
+          ])
+        ),
+      }
+    );
+
+    const section = await screen.findByRole('region', { name: '作答历史' });
+    const row = within(section).getByRole('row', { name: /#11/ });
+    expect(within(row).getByText('客观题已判分，主观题仍待人工评分')).toBeInTheDocument();
+    expect(within(row).getByTestId('attempt-score-11')).toHaveTextContent('6 / 20');
+    expect(within(row).getByRole('link', { name: '查看成绩 #11' })).toBeInTheDocument();
+  });
+
   it('carries the server score of a graded attempt and nothing of an open one', async () => {
     renderExam(
       { ...EXAM, status: 'PUBLISHED' },
       {
         listExamAttempts: vi.fn(async () =>
           okPage([
-            attemptRow({ id: 9, status: 'SUBMITTED', score: 12, maxScore: 20 }),
+            attemptRow({ id: 9, status: 'SUBMITTED', gradingStatus: 'GRADED', score: 12, maxScore: 20 }),
             attemptRow({ id: 10, status: 'IN_PROGRESS', score: 7, maxScore: 20 }),
           ])
         ),
@@ -322,7 +353,7 @@ describe('ExamDetailPage', () => {
           okPage([
             attemptRow({ id: 5, status: 'NOT_STARTED' }),
             attemptRow({ id: 6, status: 'IN_PROGRESS' }),
-            attemptRow({ id: 7, status: 'SUBMITTED', score: 12, maxScore: 20 }),
+            attemptRow({ id: 7, status: 'SUBMITTED', gradingStatus: 'GRADED', score: 12, maxScore: 20 }),
           ])
         ),
       }
