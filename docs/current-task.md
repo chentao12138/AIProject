@@ -184,8 +184,6 @@ Work was built in parallel lanes (search / source lifecycle / asset-folder-RAW /
   (`FlywayMigrationIntegrationTest`, `SpikeRecordMapperIntegrationTest`). Stop the listener first, then restart it.
 
 ### Not done yet
-- F-07: automatic outline suggestion — AI structuring still updates block type/structured JSON only, no proposed
-  `SourceOutlineNode` tree marked `NEEDS_REVIEW`.
 - F-30 tail: 8 classes still answer 409 with the generic `code:"CONFLICT"`, pinned as a shrink-only baseline in
   `ErrorCodeRatchetTest` (admin/internal paths: `ai.explain`, `ai.service.AiConversationService`, `config.service`,
   `exam.service.ExamDiagnosisService`, `knowledge.point...RelationService`, `mastery...CalibrationConfigService`,
@@ -219,6 +217,26 @@ Full suite on real MySQL: **1046 tests, 0 failures, 0 errors, 2 skipped**. Backe
 
 
 
+
+## Round 2026-10-14 (third) — C11 grading verdict, F-07, and the grading chain that never worked
+Full suite on real MySQL again: **1056 tests / 0 failures / 0 errors / 2 skipped**; `:8080` restarted on this code and
+`packages/api-client` regenerated (`gradingStatus` on `AttemptSummaryView` as `"GRADED" | "PARTIALLY_GRADED" | "UNGRADED"`).
+- **C11 follow-up the frontend asked for**: they had asked whether an ungraded attempt's `score` is null or 0 (it is
+  null), and proposed putting the attempt's own `gradingStatus` on the list row instead of inferring from "a number
+  arrived". Done — score semantics unchanged, the row now labels itself.
+- Getting that field asserted end-to-end (简述题 → submit → PARTIALLY_GRADED/score 0 → ADMIN grade → GRADED/score 4)
+  exposed three broken paths in manual grading, all fixed: submit only wrote `grading_status` for PARTIALLY_GRADED and
+  inside `catch (Exception ignore)`; `gradeAnswer` passed `(slotId, spaceId)` to a mapper declared
+  `(spaceId, slotId)` so **every** grade answered 404; and re-diagnosing after a regrade always inserted into
+  `exam_diagnosis`, whose unique key per attempt turned the second run into a 500, so an attempt could never leave
+  PARTIALLY_GRADED. `ExamDiagnosisService.generate` is now idempotent (update summary, rebuild items so a stale WRONG
+  row cannot survive). Re-grade artifacts are attributed to the examinee, not the acting ADMIN subject.
+- **F-07**: AI structuring now proposes the outline tree. `SourceOutlineNodeService.replaceProposedTree` derives
+  CHAPTER/SECTION/SUBSECTION from heading levels (clamped 1..3), chains parents to the nearest shallower heading,
+  parses leading number labels, caps one tree at 300 nodes, stamps the extraction revision, and deletes only
+  `status='NEEDS_REVIEW'` rows of that revision — so re-running a suggestion is safe and a human-confirmed node
+  survives. The proposal comes from the document's headings, never from knowledge categories. Covered by
+  `SourceOutlineProposalIntegrationTest` (6) and three new cases in `AiContentStructureIsolationTest`.
 
 ## Git
 User owns all git writes.
