@@ -9,10 +9,6 @@ import com.aistudy.server.ingestion.job.mapper.IngestionJobMapper;
 import com.aistudy.server.ingestion.pdf.PdfContentExtractionService;
 import com.aistudy.server.ingestion.revision.entity.ExtractionRevision;
 import com.aistudy.server.ingestion.revision.service.ExtractionRevisionService;
-import com.aistudy.server.ingestion.zip.ZipArchiveInspector;
-import com.aistudy.server.ingestion.zip.ZipInspectionResult;
-import com.aistudy.server.ingestion.zip.ZipSafetyException;
-import com.aistudy.server.ingestion.zip.ZipSafetyLimits;
 import com.aistudy.server.source.asset.entity.SourceAsset;
 import com.aistudy.server.source.asset.mapper.SourceAssetMapper;
 import com.aistudy.server.source.asset.service.SourceAssetService;
@@ -20,8 +16,6 @@ import com.aistudy.server.source.entity.Source;
 import com.aistudy.server.source.mapper.SourceMapper;
 import com.aistudy.server.source.service.SourceService;
 import com.aistudy.server.space.service.LearningSpaceService;
-import com.aistudy.server.storage.StorageMetadata;
-import com.aistudy.server.storage.StorageResult;
 import com.aistudy.server.storage.StorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,14 +33,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 @Service
 public class IngestionJobService {
@@ -73,6 +63,7 @@ public class IngestionJobService {
     private final ExtractionRevisionService extractionRevisionService;
     private final StorageService storageService;
     private final com.aistudy.server.ingestion.issue.service.IngestionIssueService ingestionIssueService;
+    private final ZipEntryAssetExtractor zipEntryAssetExtractor;
 
     public IngestionJobService(IngestionJobMapper ingestionJobMapper,
                                SourceAssetMapper sourceAssetMapper,
@@ -90,7 +81,8 @@ public class IngestionJobService {
                                DocxContentParser docxContentParser,
                                ExtractionRevisionService extractionRevisionService,
                                StorageService storageService,
-                               com.aistudy.server.ingestion.issue.service.IngestionIssueService ingestionIssueService) {
+                               com.aistudy.server.ingestion.issue.service.IngestionIssueService ingestionIssueService,
+                               ZipEntryAssetExtractor zipEntryAssetExtractor) {
         this.ingestionJobMapper = ingestionJobMapper;
         this.sourceAssetMapper = sourceAssetMapper;
         this.sourceMapper = sourceMapper;
@@ -107,6 +99,7 @@ public class IngestionJobService {
         this.extractionRevisionService = extractionRevisionService;
         this.storageService = storageService;
         this.ingestionIssueService = ingestionIssueService;
+        this.zipEntryAssetExtractor = zipEntryAssetExtractor;
     }
 
     @Transactional
@@ -427,7 +420,10 @@ public class IngestionJobService {
 
         for (SourceAsset zipAsset : zipAssets) {
             try {
-                List<SourceAsset> entries = extractZipEntries(zipAsset);
+                // F-12: idempotency lives in ZipEntryAssetExtractor — a
+                // retry reuses existing (path, sha256) rows instead of
+                // duplicating source_asset rows and RAW bytes.
+                List<SourceAsset> entries = zipEntryAssetExtractor.extractEntries(zipAsset);
                 toProcess.addAll(entries);
             } catch (Exception e) {
                 // A typed pipeline failure already carries the code and the
@@ -442,63 +438,6 @@ public class IngestionJobService {
         }
 
         return toProcess;
-    }
-
-    private List<SourceAsset> extractZipEntries(SourceAsset zipAsset) throws IOException {
-        try (InputStream in = storageService.load(zipAsset.getStorageKey())) {
-            java.nio.file.Path temp = Files.createTempFile("aistudy-zip-extract-", ".zip");
-            Files.copy(in, temp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-
-            ZipInspectionResult inspection = ZipArchiveInspector.inspectFile(
-                    temp, ZipSafetyLimits.defaults());
-            if (!inspection.valid()) {
-                throw new ZipSafetyException(inspection.violations());
-            }
-
-            try (ZipFile zip = new ZipFile(temp.toFile())) {
-                Enumeration<? extends ZipEntry> zipEntries = zip.entries();
-                List<SourceAsset> entries = new ArrayList<>();
-                while (zipEntries.hasMoreElements()) {
-                    ZipEntry entry = zipEntries.nextElement();
-                    if (entry.isDirectory()) {
-                        continue;
-                    }
-                    String name = entry.getName();
-                    if (name == null || name.isBlank()) {
-                        continue;
-                    }
-                    if (name.charAt(0) == '/' || name.charAt(0) == '\\'
-                            || name.contains("..")) {
-                        continue;
-                    }
-
-                    String ext = SourceAssetService.extractExtension(name);
-                    if (ext == null || !SourceAssetService.isAllowedExtension(ext)) {
-                        continue;
-                    }
-
-                    try (InputStream entryIn = zip.getInputStream(entry)) {
-                        StorageResult stored = storageService.store(entryIn, new StorageMetadata());
-                        SourceAsset entryAsset = new SourceAsset();
-                        entryAsset.setSpaceId(zipAsset.getSpaceId());
-                        entryAsset.setSourceId(zipAsset.getSourceId());
-                        entryAsset.setAssetRole(SourceAssetService.roleForExtension(ext));
-                        entryAsset.setOriginalName(name);
-                        entryAsset.setOriginalRelativePath(name);
-                        entryAsset.setStorageKey(stored.storageKey());
-                        entryAsset.setMimeType(SourceAssetService.mimeForExtension(ext));
-                        entryAsset.setSizeBytes(stored.sizeBytes());
-                        entryAsset.setSha256(stored.sha256());
-                        entryAsset.setCreatedAt(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS));
-                        sourceAssetMapper.insert(entryAsset);
-                        entries.add(entryAsset);
-                    }
-                }
-                return entries;
-            } finally {
-                Files.deleteIfExists(temp);
-            }
-        }
     }
 
     /** @return true when extraction reported low OCR/text confidence */

@@ -40,6 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -673,6 +675,247 @@ class SourceAssetUploadIntegrationTest {
                         .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-1")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].storageKey").doesNotExist());
+    }
+
+    // ==================== F-15: Range / 206 on RAW download ====================
+
+    /** (23) no Range → 200 with exact Content-Length + Accept-Ranges: bytes. */
+    @Test
+    void plainDownloadAdvertisesRangeSupport() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "笔记");
+        byte[] content = "0123456789".getBytes(StandardCharsets.UTF_8);
+
+        String body = mockMvc.perform(multipart(HttpMethod.POST,
+                        "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets", spaceId, sourceId)
+                        .file(filePart("note.txt", "text/plain", content))
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-1")))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long assetId = extractJsonLong(body, "id");
+
+        mockMvc.perform(get("/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/{assetId}/content",
+                        spaceId, sourceId, assetId)
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-1")))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Accept-Ranges", "bytes"))
+                .andExpect(header().longValue("Content-Length", 10))
+                .andExpect(content().string("0123456789"));
+    }
+
+    /** (24) valid single range → 206 + Content-Range + exact window body. */
+    @Test
+    void singleRangeReturns206WithContentRange() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "笔记");
+        byte[] content = "0123456789".getBytes(StandardCharsets.UTF_8);
+
+        String body = mockMvc.perform(multipart(HttpMethod.POST,
+                        "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets", spaceId, sourceId)
+                        .file(filePart("note.txt", "text/plain", content))
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-1")))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long assetId = extractJsonLong(body, "id");
+
+        mockMvc.perform(get("/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/{assetId}/content",
+                        spaceId, sourceId, assetId)
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-1"))
+                        .header("Range", "bytes=2-4"))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().string("Content-Range", "bytes 2-4/10"))
+                .andExpect(header().string("Accept-Ranges", "bytes"))
+                .andExpect(header().longValue("Content-Length", 3))
+                .andExpect(content().string("234"));
+    }
+
+    /** (25) unsatisfiable start → 416 with bytes * /total. */
+    @Test
+    void rangePastEofReturns416() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "笔记");
+        byte[] content = "0123456789".getBytes(StandardCharsets.UTF_8);
+
+        String body = mockMvc.perform(multipart(HttpMethod.POST,
+                        "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets", spaceId, sourceId)
+                        .file(filePart("note.txt", "text/plain", content))
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-1")))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long assetId = extractJsonLong(body, "id");
+
+        mockMvc.perform(get("/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/{assetId}/content",
+                        spaceId, sourceId, assetId)
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-1"))
+                        .header("Range", "bytes=50-60"))
+                .andExpect(status().isRequestedRangeNotSatisfiable())
+                .andExpect(header().string("Content-Range", "bytes */10"));
+    }
+
+    /** (26) multi-range / foreign unit → 416 (documented V1 single-range rule). */
+    @Test
+    void multiRangeReturns416() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "笔记");
+        byte[] content = "0123456789".getBytes(StandardCharsets.UTF_8);
+
+        String body = mockMvc.perform(multipart(HttpMethod.POST,
+                        "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets", spaceId, sourceId)
+                        .file(filePart("note.txt", "text/plain", content))
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-1")))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long assetId = extractJsonLong(body, "id");
+
+        mockMvc.perform(get("/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/{assetId}/content",
+                        spaceId, sourceId, assetId)
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-1"))
+                        .header("Range", "bytes=0-1,4-5"))
+                .andExpect(status().isRequestedRangeNotSatisfiable());
+
+        mockMvc.perform(get("/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/{assetId}/content",
+                        spaceId, sourceId, assetId)
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-1"))
+                        .header("Range", "items=0-1"))
+                .andExpect(status().isRequestedRangeNotSatisfiable());
+    }
+
+    // ==================== F-13: duplicate policy ====================
+
+    /** (27) skip: same bytes a second time reuses the asset, zero new rows. */
+    @Test
+    void skipPolicyReusesExistingAssetWithoutNewRow() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "笔记");
+        byte[] content = "dedupe me".getBytes(StandardCharsets.UTF_8);
+        String token = tokenFor("biz-e2e-user-1");
+
+        String first = mockMvc.perform(multipart(HttpMethod.POST,
+                        "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets", spaceId, sourceId)
+                        .file(filePart("a.txt", "text/plain", content))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long firstId = extractJsonLong(first, "id");
+
+        mockMvc.perform(multipart(HttpMethod.POST,
+                        "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets", spaceId, sourceId)
+                        .file(filePart("b.txt", "text/plain", content))
+                        .param("duplicatePolicy", "skip")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(firstId))
+                .andExpect(jsonPath("$.isDuplicate").value(true))
+                .andExpect(jsonPath("$.uploadDecision").value("REUSED_EXISTING"))
+                .andExpect(jsonPath("$.duplicateOfId").value(firstId));
+
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM source_asset WHERE source_id = ?", Long.class, sourceId);
+        assertEquals(1L, count, "skip must not insert a second row");
+    }
+
+    /** (28) importAgain: explicit re-import creates a flagged second row. */
+    @Test
+    void importAgainPolicyCreatesSecondFlaggedRow() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "笔记");
+        byte[] content = "re-import me".getBytes(StandardCharsets.UTF_8);
+        String token = tokenFor("biz-e2e-user-1");
+
+        String first = mockMvc.perform(multipart(HttpMethod.POST,
+                        "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets", spaceId, sourceId)
+                        .file(filePart("a.txt", "text/plain", content))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long firstId = extractJsonLong(first, "id");
+
+        String second = mockMvc.perform(multipart(HttpMethod.POST,
+                        "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets", spaceId, sourceId)
+                        .file(filePart("a-copy.txt", "text/plain", content))
+                        .param("duplicatePolicy", "importAgain")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.isDuplicate").value(true))
+                .andExpect(jsonPath("$.uploadDecision").value("IMPORTED_AGAIN"))
+                .andExpect(jsonPath("$.duplicateOfId").value(firstId))
+                .andReturn().getResponse().getContentAsString();
+        Long secondId = extractJsonLong(second, "id");
+        assertTrue(!firstId.equals(secondId), "importAgain owns a distinct row");
+
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM source_asset WHERE source_id = ?", Long.class, sourceId);
+        assertEquals(2L, count);
+    }
+
+    /** (29) unknown duplicatePolicy value → 400, no row. */
+    @Test
+    void unknownDuplicatePolicyRejected400() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "笔记");
+
+        mockMvc.perform(multipart(HttpMethod.POST,
+                        "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets", spaceId, sourceId)
+                        .file(filePart("a.txt", "text/plain", "x".getBytes(StandardCharsets.UTF_8)))
+                        .param("duplicatePolicy", "yolo")
+                        .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-1")))
+                .andExpect(status().isBadRequest());
+
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM source_asset WHERE source_id = ?", Long.class, sourceId);
+        assertEquals(0L, count);
+    }
+
+    /** (30) precheck returns the four scenarios deterministically. */
+    @Test
+    void duplicatePrecheckCoversTheThreeHashNameScenarios() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "笔记");
+        byte[] content = "precheck me".getBytes(StandardCharsets.UTF_8);
+        String token = tokenFor("biz-e2e-user-1");
+        String sha = sha256Hex(content);
+
+        mockMvc.perform(get("/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/duplicate-check",
+                        spaceId, sourceId)
+                        .param("sha256", sha).param("name", "note.txt")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scenario").value("NONE"))
+                .andExpect(jsonPath("$.duplicate").value(false));
+
+        String first = mockMvc.perform(multipart(HttpMethod.POST,
+                        "/api/v1/spaces/{spaceId}/sources/{sourceId}/assets", spaceId, sourceId)
+                        .file(filePart("note.txt", "text/plain", content))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long firstId = extractJsonLong(first, "id");
+
+        mockMvc.perform(get("/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/duplicate-check",
+                        spaceId, sourceId)
+                        .param("sha256", sha).param("name", "note.txt")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scenario").value("SAME_HASH_SAME_NAME"))
+                .andExpect(jsonPath("$.duplicate").value(true))
+                .andExpect(jsonPath("$.matchedAssetId").value(firstId));
+
+        mockMvc.perform(get("/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/duplicate-check",
+                        spaceId, sourceId)
+                        .param("sha256", sha).param("name", "other.txt")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scenario").value("SAME_HASH_DIFFERENT_NAME"));
+
+        mockMvc.perform(get("/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/duplicate-check",
+                        spaceId, sourceId)
+                        .param("sha256", sha256Hex("different bytes".getBytes(StandardCharsets.UTF_8)))
+                        .param("name", "note.txt")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scenario").value("SAME_NAME_DIFFERENT_HASH"))
+                .andExpect(jsonPath("$.duplicate").value(false))
+                .andExpect(jsonPath("$.nameConflictId").value(firstId));
     }
 
     /** Minimal JSON long extractor for the create response. */

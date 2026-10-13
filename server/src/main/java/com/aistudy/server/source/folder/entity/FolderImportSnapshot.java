@@ -17,7 +17,9 @@ public class FolderImportSnapshot {
     private Integer totalFiles;
     private Integer unchangedFiles;
     private Integer addedFiles;
+    private Integer changedFiles;
     private Integer removedFiles;
+    private Integer pendingFiles;
     private String status;
     private LocalDateTime createdAt;
 
@@ -33,8 +35,12 @@ public class FolderImportSnapshot {
     public void setUnchangedFiles(Integer unchangedFiles) { this.unchangedFiles = unchangedFiles; }
     public Integer getAddedFiles() { return addedFiles; }
     public void setAddedFiles(Integer addedFiles) { this.addedFiles = addedFiles; }
+    public Integer getChangedFiles() { return changedFiles; }
+    public void setChangedFiles(Integer changedFiles) { this.changedFiles = changedFiles; }
     public Integer getRemovedFiles() { return removedFiles; }
     public void setRemovedFiles(Integer removedFiles) { this.removedFiles = removedFiles; }
+    public Integer getPendingFiles() { return pendingFiles; }
+    public void setPendingFiles(Integer pendingFiles) { this.pendingFiles = pendingFiles; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public LocalDateTime getCreatedAt() { return createdAt; }

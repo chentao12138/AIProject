@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -26,4 +27,26 @@ public interface FolderImportEntryMapper extends BaseMapper<FolderImportEntry> {
     /** Delete all entries of one snapshot (called after ownership check). */
     @Delete("DELETE FROM folder_import_entry WHERE snapshot_id = #{snapshotId}")
     int deleteBySnapshotId(@Param("snapshotId") Long snapshotId);
+
+    /**
+     * F-14 — all entries of one snapshot WITHOUT the owner JOIN: every
+     * caller must have proven snapshot ownership first (same pattern
+     * as {@code deleteBySnapshotId}). Used for the previous-manifest
+     * diff and the pending computation.
+     */
+    @Select("SELECT * FROM folder_import_entry WHERE snapshot_id = #{snapshotId} "
+            + "ORDER BY relative_path ASC, id ASC")
+    java.util.List<FolderImportEntry> selectBySnapshotId(@Param("snapshotId") Long snapshotId);
+
+    /**
+     * F-14 — bind uploaded bytes to a pending entry. The status
+     * predicate in the WHERE clause makes the transition atomic and
+     * idempotent: a double bind (0 rows updated) is detected by the
+     * service instead of silently overwriting an existing binding.
+     */
+    @Update("UPDATE folder_import_entry SET status = #{status}, source_asset_id = #{assetId} "
+            + "WHERE id = #{entryId} AND status IN ('ADDED', 'CHANGED')")
+    int bindPendingEntry(@Param("entryId") Long entryId,
+                         @Param("status") String status,
+                         @Param("assetId") Long assetId);
 }

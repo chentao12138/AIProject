@@ -715,4 +715,84 @@ class IngestionJobIntegrationTest {
                         .header("Authorization", "Bearer " + tokenFor("biz-e2e-user-2")))
                 .andExpect(status().isNotFound());
     }
+
+    // ==================== F-12: ZIP entry idempotency ====================
+
+    /**
+     * (22) F-12 — a SECOND ingestion run over the same ZIP asset must
+     * not duplicate source_asset rows or RAW bytes: extraction reuses
+     * the (path, sha256) rows created by the first run.
+     */
+    @Test
+    void zipReExtractionProducesNoDuplicateAssetRows() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "教程包");
+        String token = tokenFor("biz-e2e-user-1");
+        Long assetId = uploadAsset(token, spaceId, sourceId,
+                "book.zip", "application/zip", validZip());
+
+        createJob(token, spaceId, sourceId, assetId); // run 1 extracts entries
+
+        List<Map<String, Object>> firstRun = jdbcTemplate.queryForList(
+                "SELECT id, storage_key, sha256, asset_version FROM source_asset "
+                        + "WHERE source_id = ? AND original_relative_path IS NOT NULL "
+                        + "ORDER BY original_relative_path, asset_version", sourceId);
+        assertEquals(2, firstRun.size(), "validZip has two allowed entries");
+        for (Map<String, Object> row : firstRun) {
+            assertEquals(1, ((Number) row.get("asset_version")).intValue(),
+                    "first run must record version 1");
+        }
+
+        createJob(token, spaceId, sourceId, assetId); // run 2 re-extracts the SAME package
+
+        List<Map<String, Object>> secondRun = jdbcTemplate.queryForList(
+                "SELECT id, storage_key, sha256, asset_version FROM source_asset "
+                        + "WHERE source_id = ? AND original_relative_path IS NOT NULL "
+                        + "ORDER BY original_relative_path, asset_version", sourceId);
+        assertEquals(firstRun.size(), secondRun.size(),
+                "re-extraction must add ZERO source_asset rows (F-12 idempotency)");
+        for (int i = 0; i < firstRun.size(); i++) {
+            assertEquals(firstRun.get(i).get("id"), secondRun.get(i).get("id"),
+                    "the same rows are reused");
+            assertEquals(firstRun.get(i).get("storage_key"), secondRun.get(i).get("storage_key"),
+                    "the RAW bytes are reused, not re-stored");
+        }
+    }
+
+    /**
+     * (23) F-12 — same entry path with DIFFERENT bytes is an explicit
+     * version 2 (supersede-and-retain), not a silent duplicate: the v1
+     * row survives with its bytes, the v2 row carries the new hash.
+     */
+    @Test
+    void sameZipPathDifferentBytesCreatesNewVersion() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "教程包");
+        String token = tokenFor("biz-e2e-user-1");
+
+        Map<String, byte[]> v1 = new java.util.LinkedHashMap<>();
+        v1.put("chapter1/1.txt", "hello".getBytes(StandardCharsets.UTF_8));
+        Long zipOne = uploadAsset(token, spaceId, sourceId,
+                "book.zip", "application/zip", zipBytes(v1));
+        createJob(token, spaceId, sourceId, zipOne);
+
+        Map<String, byte[]> v2 = new java.util.LinkedHashMap<>();
+        v2.put("chapter1/1.txt", "changed content".getBytes(StandardCharsets.UTF_8));
+        Long zipTwo = uploadAsset(token, spaceId, sourceId,
+                "book-v2.zip", "application/zip", zipBytes(v2));
+        createJob(token, spaceId, sourceId, zipTwo);
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT id, asset_version, superseded_at, sha256 FROM source_asset "
+                        + "WHERE source_id = ? AND original_relative_path = ? "
+                        + "ORDER BY asset_version",
+                sourceId, "chapter1/1.txt");
+        assertEquals(2, rows.size(), "path kept both versions (supersede-and-retain)");
+        assertEquals(1, ((Number) rows.get(0).get("asset_version")).intValue());
+        assertEquals(2, ((Number) rows.get(1).get("asset_version")).intValue());
+        assertNotNull(rows.get(0).get("superseded_at"), "v1 head must be stamped superseded");
+        assertNull(rows.get(1).get("superseded_at"), "v2 is the active head");
+        assertTrue(!rows.get(0).get("sha256").equals(rows.get(1).get("sha256")),
+                "versions carry their distinct hashes");
+    }
 }

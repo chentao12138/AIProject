@@ -58,6 +58,38 @@ public class FolderImportController {
                 authentication.getName(), spaceId, sourceId, snapshotId, entries);
     }
 
+    /**
+     * F-14 — bind uploaded bytes to pending ADDED/CHANGED entries of an
+     * AWAITING_UPLOAD snapshot. One item per uploaded file: the
+     * manifest {@code relativePath} + the {@code assetId} returned by
+     * the asset upload call. Server re-checks ownership (asset must sit
+     * in this exact space/source) and integrity (asset sha256 ==
+     * entry sha256) — the client path alone is never trusted.
+     */
+    @PostMapping("/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/bindings")
+    public FolderImportSnapshot bindEntries(@PathVariable Long spaceId,
+                                            @PathVariable Long sourceId,
+                                            @PathVariable Long snapshotId,
+                                            @RequestBody List<FolderImportService.FolderEntryBinding> bindings,
+                                            Authentication authentication) {
+        return folderImportService.bindEntries(
+                authentication.getName(), spaceId, sourceId, snapshotId, bindings);
+    }
+
+    /**
+     * F-14 — explicit sync-completion probe. Flips the snapshot to
+     * COMPLETED when nothing is pending; otherwise returns the exact
+     * to-upload list ({@code completed=false}), never a fake success.
+     */
+    @PostMapping("/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/complete")
+    public FolderImportService.FolderSyncCompletion completeSync(@PathVariable Long spaceId,
+                                                                  @PathVariable Long sourceId,
+                                                                  @PathVariable Long snapshotId,
+                                                                  Authentication authentication) {
+        return folderImportService.completeSync(
+                authentication.getName(), spaceId, sourceId, snapshotId);
+    }
+
     @GetMapping("/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot")
     public List<FolderImportSnapshot> listSnapshots(@PathVariable Long spaceId,
                                                     @PathVariable Long sourceId,
