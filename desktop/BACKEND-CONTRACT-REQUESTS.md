@@ -81,11 +81,33 @@ invented:
   `status`, `questionType`, `knowledgePointId` and returns a plain `List`.
   No `page`/`size`, so the question list cannot paginate honestly.
 
-**(c) Not yet checkable from the sources I could find** — C03 AI context,
-C04 citation ids, C10 saved exam answer content, C11 attempt list, C12 conflict
-codes, C-Search `NOTE`, C14 per-asset page filtering, C15 job visibility at
-queue time. These get answered by a regeneration plus one focused look, not by
-guessing.
+**(c) Confirmed missing in the server sources too**
+
+- **C03 AI context.** `ai/dto/AiDto.SendMessageRequest` is `(String content)` —
+  no context ids of any kind.
+- **C04 citation ids.** `AiDto.ContextReference` is `(type, id, title, snippet,
+  locator)` with `locator` still free text and a convenience constructor passing
+  `null`.
+- **C10 saved exam answers and C11 attempt list.** `ExamAttemptController`
+  exposes only `GET /exam-attempts/{attemptId}` and `.../result`: no answers
+  sub-resource, no attempt list. Neither reload recovery nor "reopen a previous
+  attempt" can be built today.
+
+**(d) Resolved by the sources — frontend work only, no backend ask**
+
+- **C-Search `NOTE`.** `search/type/SearchEntityType` already declares `NOTE`
+  ("User-owned learning notes (archived notes excluded by search)"), and
+  `SearchResult` carries `type,id,title,snippet,sourceId,sourceAssetId,
+  sourcePageId,knowledgePointId,questionId`. There is no `noteId`, so a note hit
+  is identified by `id` exactly as a content-block hit is: once Notes exists the
+  search page maps `NOTE` to the note route off `hit.id`. The only remaining
+  request is documentation — confirm in the OpenAPI description that `id` is the
+  note id for `NOTE` rows, same open question as C13 for `CONTENT_BLOCK`.
+
+**Still unverified** — C14 (per-asset page filtering) and C15 (job visible at
+queue time): the page-listing endpoint was not found in `SourceController`, so
+these stay questions rather than claims. C12 (discriminable conflict codes) needs
+a look at the exception/advice layer, which the regeneration will show anyway.
 
 
 **Coordination:** asks go to the backend session one at a time, waiting for each
