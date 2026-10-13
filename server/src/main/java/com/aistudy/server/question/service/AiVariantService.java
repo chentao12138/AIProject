@@ -1,5 +1,6 @@
 package com.aistudy.server.question.service;
 
+import com.aistudy.server.ai.service.AiUsageRecordService;
 import com.aistudy.server.ai.provider.AiChatMessage;
 import com.aistudy.server.ai.provider.AiChatRequest;
 import com.aistudy.server.ai.provider.AiChatResponse;
@@ -71,6 +72,7 @@ public class AiVariantService {
     private final QuestionKnowledgePointMapper questionKnowledgePointMapper;
     private final KnowledgePointMapper knowledgePointMapper;
     private final LearningSpaceService learningSpaceService;
+    private final com.aistudy.server.ai.service.AiUsageRecordService aiUsageRecordService;
     private final ObjectMapper objectMapper;
 
     public AiVariantService(AiProvider aiProvider,
@@ -79,6 +81,7 @@ public class AiVariantService {
                             QuestionKnowledgePointMapper questionKnowledgePointMapper,
                             KnowledgePointMapper knowledgePointMapper,
                             LearningSpaceService learningSpaceService,
+                            com.aistudy.server.ai.service.AiUsageRecordService aiUsageRecordService,
                             ObjectMapper objectMapper) {
         this.aiProvider = aiProvider;
         this.questionMapper = questionMapper;
@@ -86,6 +89,7 @@ public class AiVariantService {
         this.questionKnowledgePointMapper = questionKnowledgePointMapper;
         this.knowledgePointMapper = knowledgePointMapper;
         this.learningSpaceService = learningSpaceService;
+        this.aiUsageRecordService = aiUsageRecordService;
         this.objectMapper = objectMapper;
     }
 
@@ -124,12 +128,19 @@ public class AiVariantService {
         messages.add(AiChatMessage.user(userPrompt));
 
         AiChatResponse response;
+        long startedNanos = System.nanoTime();
         try {
             response = aiProvider.chat(new AiChatRequest(messages, 0.7, 1024), ownerSubject);
         } catch (AiProviderException e) {
+            aiUsageRecordService.recordProviderCall(ownerSubject, spaceId,
+                    AiUsageRecordService.PURPOSE_VARIANT, null,
+                    AiUsageRecordService.elapsedMs(startedNanos), "AI_PROVIDER_CALL_FAILED");
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "AI variant generation failed: " + e.getMessage());
         }
+        aiUsageRecordService.recordProviderCall(ownerSubject, spaceId,
+                AiUsageRecordService.PURPOSE_VARIANT, response,
+                AiUsageRecordService.elapsedMs(startedNanos), null);
 
         String content = response.content() == null ? "" : response.content().trim();
         // Strip markdown fences if the model wraps JSON
