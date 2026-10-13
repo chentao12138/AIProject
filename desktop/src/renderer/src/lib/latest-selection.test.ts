@@ -8,6 +8,7 @@ import {
   CONTENT_STATE_LABELS,
   deriveContentState,
   filterPagesForAsset,
+  resolveJobForAsset,
   selectLatestAsset,
   selectLatestJob,
   selectLatestJobForAsset,
@@ -90,6 +91,132 @@ describe('selectLatestJobForAsset', () => {
     expect(
       selectLatestJobForAsset([{ id: 1, assetId: 10 }], undefined)
     ).toBeNull();
+  });
+});
+
+/**
+ * W14: which job is allowed to describe an asset.
+ *
+ * The old workbench wrote `selectLatestJobForAsset(...) ?? selectLatestJob(jobs)`,
+ * i.e. when the newest asset had no job it borrowed the newest job of the
+ * whole Source — asset A's SUCCEEDED/FAILED shown as asset B's state.
+ */
+describe('resolveJobForAsset', () => {
+  const assetAPublished = {
+    id: 55,
+    assetId: 90,
+    status: 'PUBLISHED',
+    createdAt: '2026-09-01T10:00:01Z',
+  };
+  const assetBQueued = {
+    id: 56,
+    assetId: 91,
+    status: 'QUEUED',
+    createdAt: '2026-09-02T10:00:01Z',
+  };
+
+  it('reports the asset\'s own latest job', () => {
+    const result = resolveJobForAsset({
+      jobs: [assetAPublished, assetBQueued],
+      assetId: 91,
+      assetCount: 2,
+    });
+    expect(result.source).toBe('asset');
+    expect(result.job?.id).toBe(56);
+  });
+
+  it('does not borrow a sibling\'s SUCCEEDED when the newest asset has no job', () => {
+    const result = resolveJobForAsset({
+      jobs: [assetAPublished],
+      assetId: 91,
+      assetCount: 2,
+    });
+    expect(result).toEqual({ source: 'none', job: null });
+  });
+
+  it('does not borrow a sibling\'s FAILED either', () => {
+    const result = resolveJobForAsset({
+      jobs: [
+        { id: 54, assetId: 89, status: 'FAILED', createdAt: '2026-09-01T09:00:00Z' },
+      ],
+      assetId: 90,
+      assetCount: 2,
+    });
+    expect(result).toEqual({ source: 'none', job: null });
+  });
+
+  it('reports none when there is no asset at all', () => {
+    expect(
+      resolveJobForAsset({ jobs: [assetAPublished], assetId: undefined, assetCount: 0 })
+    ).toEqual({ source: 'none', job: null });
+  });
+
+  it('reports none for an empty job list', () => {
+    expect(
+      resolveJobForAsset({ jobs: [], assetId: 90, assetCount: 1 })
+    ).toEqual({ source: 'none', job: null });
+  });
+
+  // The backend used to answer `assetId: null` on every job; a one-asset
+  // Source is the only case where such a job has a provable owner.
+  it('attributes an unlinked job when the Source has exactly one asset', () => {
+    const orphan = {
+      id: 193,
+      assetId: null,
+      status: 'PARTIAL_FAILED',
+      createdAt: '2026-09-03T10:00:00Z',
+    };
+    const result = resolveJobForAsset({
+      jobs: [orphan],
+      assetId: 90,
+      assetCount: 1,
+    });
+    expect(result.source).toBe('legacy-unlinked');
+    expect(result.job?.status).toBe('PARTIAL_FAILED');
+  });
+
+  it('never attributes an unlinked job once the Source has two assets', () => {
+    const orphan = {
+      id: 193,
+      assetId: null,
+      status: 'PUBLISHED',
+      createdAt: '2026-09-03T10:00:00Z',
+    };
+    expect(
+      resolveJobForAsset({ jobs: [orphan], assetId: 91, assetCount: 2 })
+    ).toEqual({ source: 'none', job: null });
+  });
+
+  it('prefers the asset\'s own job over an unlinked one', () => {
+    const result = resolveJobForAsset({
+      jobs: [
+        { id: 1, assetId: null, status: 'FAILED', createdAt: '2026-09-05T10:00:00Z' },
+        assetAPublished,
+      ],
+      assetId: 90,
+      assetCount: 1,
+    });
+    expect(result.source).toBe('asset');
+    expect(result.job?.status).toBe('PUBLISHED');
+  });
+
+  it('ignores a job linked to an asset that is not in the list', () => {
+    expect(
+      resolveJobForAsset({
+        jobs: [{ id: 1, assetId: 99, status: 'PUBLISHED', createdAt: '2026-09-01T10:00:00Z' }],
+        assetId: 90,
+        assetCount: 1,
+      })
+    ).toEqual({ source: 'none', job: null });
+  });
+
+  it('treats a job whose assetId key is missing as unlinked', () => {
+    const result = resolveJobForAsset({
+      jobs: [{ id: 7, status: 'IMPORTING', createdAt: '2026-09-01T10:00:00Z' }],
+      assetId: 90,
+      assetCount: 1,
+    });
+    expect(result.source).toBe('legacy-unlinked');
   });
 });
 
@@ -209,5 +336,10 @@ describe('CONTENT_STATE_LABELS', () => {
     for (const s of states) {
       expect(CONTENT_STATE_LABELS[s]).toBeTruthy();
     }
+  });
+
+  // W14: an asset without its own job must never be described as done.
+  it('says parsing has not started for an asset with no job', () => {
+    expect(CONTENT_STATE_LABELS.ASSET_UPLOADED).toContain('尚未开始解析');
   });
 });

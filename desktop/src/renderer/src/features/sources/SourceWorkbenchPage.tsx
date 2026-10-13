@@ -14,8 +14,14 @@
  *     presented as belonging to the new asset.
  *   - Ingestion history: full job list with asset link, status, stage,
  *     timestamps, retry only for FAILED.
+ *   - Asset/job pairing is strict (W14): only the LATEST asset's own job
+ *     describes it. An asset without a job shows "尚未开始解析"; a sibling
+ *     asset's SUCCEEDED/FAILED is never borrowed.
  *   - Upload-another: same flow, appends to history, updates latest.
  *   - PDF reader: Page X of N, Prev/Next, aria-current, stable selection.
+ *     The reader selection is read from `?page=` (W15), and the URL is
+ *     normalized whenever it points at a page of a different asset, so
+ *     state, highlight and history can never disagree with the screen.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -50,9 +56,9 @@ import {
   CONTENT_STATE_LABELS,
   deriveContentState,
   filterPagesForAsset,
+  resolveJobForAsset,
   selectLatestAsset,
-  selectLatestJob,
-  selectLatestJobForAsset,
+  type AssetJobResolution,
 } from '../../lib/latest-selection';
 import { useFormError } from '../../lib/use-form-error';
 import { Button } from '../../components/Button';
@@ -69,7 +75,6 @@ export function SourceWorkbenchPage() {
   const navigate = useNavigate();
   const spaceId = useSpaceId();
   const { sourceId: sourceIdParam } = useParams();
-  const [searchParams] = useSearchParams();
 
   const sourceId = parsePositiveIdParam(sourceIdParam);
 
@@ -109,10 +114,6 @@ export function SourceWorkbenchPage() {
     )
   );
 
-  // Deep-link: ?page=<id>&block=<id> from provenance or refresh.
-  const deepLinkPageId = parsePositiveIdParam(searchParams.get('page') ?? undefined);
-  const deepLinkBlockId = parsePositiveIdParam(searchParams.get('block') ?? undefined);
-
   if (spaceId === null || sourceId === null) {
     return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
@@ -136,8 +137,16 @@ export function SourceWorkbenchPage() {
   const allPages = pagesQuery.data ?? [];
 
   const latestAsset = selectLatestAsset(assets);
-  const latestJob =
-    selectLatestJobForAsset(jobs, latestAsset?.id) ?? selectLatestJob(jobs);
+  // W14: the LATEST asset's own job is the only thing that can describe it.
+  // The old `?? selectLatestJob(jobs)` fallback answered "asset B has no job"
+  // with asset A's SUCCEEDED/FAILED, so a failed upload looked fine and a
+  // finished one looked broken. No job for this asset now means "尚未开始解析".
+  const assetJob = resolveJobForAsset({
+    jobs,
+    assetId: latestAsset?.id,
+    assetCount: assets.length,
+  });
+  const latestJob = assetJob.job;
   const latestPages = filterPagesForAsset(allPages, latestAsset?.id);
 
   return (
@@ -155,6 +164,7 @@ export function SourceWorkbenchPage() {
         source={source}
         latestAsset={latestAsset}
         latestJob={latestJob}
+        jobScope={assetJob.source}
         latestPages={latestPages}
         assetsQueryPending={assetsQuery.isPending}
         jobsQueryPending={jobsQuery.isPending}
@@ -176,9 +186,8 @@ export function SourceWorkbenchPage() {
         sourceId={sourceId}
         latestAssetId={latestAsset?.id}
         latestJobStatus={latestJob?.status}
+        jobScope={assetJob.source}
         latestPages={latestPages}
-        deepLinkPageId={deepLinkPageId}
-        deepLinkBlockId={deepLinkBlockId}
       />
     </div>
   );
@@ -190,6 +199,7 @@ function BusinessSummary({
   source,
   latestAsset,
   latestJob,
+  jobScope,
   latestPages,
   assetsQueryPending,
   jobsQueryPending,
@@ -198,6 +208,7 @@ function BusinessSummary({
   source?: { sourceType?: string; status?: string; createdAt?: string };
   latestAsset: { id?: number; originalName?: string; mimeType?: string; sizeBytes?: number; createdAt?: string } | null;
   latestJob: { id?: number; status?: string; stage?: string; createdAt?: string } | null;
+  jobScope: AssetJobResolution['source'];
   latestPages: { id?: number; pageType?: string; extractedText?: string | null }[];
   assetsQueryPending: boolean;
   jobsQueryPending: boolean;
@@ -239,6 +250,10 @@ function BusinessSummary({
       parts.push(formatIngestionStage(latestJob?.stage, jobStatus));
     } else if (kind === 'failure-terminal') {
       parts.push('处理失败');
+    } else if (latestJob === null) {
+      // W14: this asset has no job of its own. Nothing from a sibling asset
+      // is borrowed to describe it.
+      parts.push('尚未开始解析');
     } else {
       parts.push('等待处理');
     }
@@ -273,11 +288,25 @@ function BusinessSummary({
             </dd>
           </div>
         )}
+        {jobScope === 'none' && latestAsset && (
+          <div>
+            <dt>最近解析</dt>
+            <dd data-testid="no-job-for-asset">尚未开始解析</dd>
+          </div>
+        )}
         {latestJob && (
           <div>
             <dt>最近解析</dt>
             <dd>
               <StatusBadge status={latestJob.status} />
+              {jobScope === 'legacy-unlinked' && (
+                // Backend rows created before `assetId` was filled: the job is
+                // attributed because this source has exactly one asset.
+                <span className="muted" data-testid="legacy-job-attribution">
+                  {' '}
+                  · 历史任务（未关联资产）
+                </span>
+              )}
             </dd>
           </div>
         )}
@@ -717,25 +746,22 @@ function ContentSection({
   sourceId,
   latestAssetId,
   latestJobStatus,
+  jobScope,
   latestPages,
-  deepLinkPageId,
-  deepLinkBlockId,
 }: {
   spaceId: number;
   sourceId: number;
   latestAssetId?: number;
   latestJobStatus?: string | null;
+  jobScope: AssetJobResolution['source'];
   latestPages: {
     id?: number;
     pageType?: string;
     extractedText?: string | null;
     pageOrder?: number;
   }[];
-  deepLinkPageId: number | null;
-  deepLinkBlockId: number | null;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedPageId, setSelectedPageId] = useState<number | null>(null);
 
   const pages = useMemo(() => {
     return [...latestPages].sort(
@@ -743,19 +769,40 @@ function ContentSection({
     );
   }, [latestPages]);
 
-  // Auto-select: deep-link first, then first valid page.
+  // W15: `?page=` is the single source of truth for the selected page, so
+  // back/forward/refresh can never disagree with what is rendered. A page id
+  // that is not part of the CURRENT asset's pages is a stale deep link — it
+  // selects nothing, and the URL is normalized below instead of staying
+  // pointed at another asset's page while pages[0] shows.
+  const urlPageId = parsePositiveIdParam(searchParams.get('page') ?? undefined);
+  const urlBlockId = parsePositiveIdParam(searchParams.get('block') ?? undefined);
+  const pageBelongsToAsset =
+    urlPageId !== null && pages.some((page) => page.id === urlPageId);
+  const selectedPageId = pageBelongsToAsset
+    ? urlPageId
+    : (pages.find((page) => isPositiveId(page.id))?.id ?? null);
+  // A `?block=` highlight only means something for the page the URL names;
+  // after a stale page the block belongs to another asset.
+  const highlightBlockId = pageBelongsToAsset ? urlBlockId : null;
+
   useEffect(() => {
-    if (deepLinkPageId !== null && pages.some((p) => p.id === deepLinkPageId)) {
-      setSelectedPageId(deepLinkPageId);
+    if (selectedPageId === null) {
       return;
     }
-    if (selectedPageId === null && pages.length > 0) {
-      const first = pages[0].id;
-      if (isPositiveId(first)) {
-        setSelectedPageId(first);
-      }
+    const pageIsCurrent = searchParams.get('page') === String(selectedPageId);
+    const blockIsConsistent =
+      highlightBlockId !== null || !searchParams.has('block');
+    if (pageIsCurrent && blockIsConsistent) {
+      return;
     }
-  }, [pages, deepLinkPageId, selectedPageId]);
+    const next = new URLSearchParams(searchParams);
+    next.set('page', String(selectedPageId));
+    if (highlightBlockId === null) {
+      next.delete('block');
+    }
+    // replace: normalizing state is not a navigation the user can go back to.
+    setSearchParams(next, { replace: true });
+  }, [selectedPageId, highlightBlockId, searchParams, setSearchParams]);
 
   const status = (latestJobStatus ?? '').trim().toUpperCase();
   const isImagePages = pages.length > 0 && pages.every(
@@ -773,6 +820,19 @@ function ContentSection({
           title="尚未上传文件"
           description="上传 TXT、Markdown、PDF 或图片文件即可开始。"
         />
+      </section>
+    );
+  }
+
+  // W14: this asset has no job of its own — no sibling asset's
+  // SUCCEEDED/FAILED may be shown here.
+  if (jobScope === 'none') {
+    return (
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
+        <p className="muted" role="status" data-testid="not-started-note">
+          尚未开始解析。
+        </p>
       </section>
     );
   }
@@ -803,7 +863,9 @@ function ContentSection({
     return (
       <section className="workbench-section" aria-label="内容">
         <h2 className="section-title">内容</h2>
-        <p className="muted">等待开始处理。</p>
+        <p className="muted" role="status" data-testid="unknown-status-note">
+          等待开始处理。
+        </p>
       </section>
     );
   }
@@ -825,12 +887,13 @@ function ContentSection({
   function goToPage(index: number) {
     const page = pages[index];
     if (page && isPositiveId(page.id)) {
-      setSelectedPageId(page.id);
-      // Sync URL for deep-link / refresh.
+      // The URL alone selects the page (W15); pushing keeps browser
+      // back/forward truthful, and a page change never carries a `?block=`
+      // highlight over from the page it belongs to.
       const next = new URLSearchParams(searchParams);
       next.set('page', String(page.id));
       next.delete('block');
-      setSearchParams(next, { replace: true });
+      setSearchParams(next);
     }
   }
 
@@ -902,7 +965,7 @@ function ContentSection({
           pageId={selectedPage.id}
           pageType={selectedPage.pageType}
           extractedText={selectedPage.extractedText}
-          highlightBlockId={deepLinkBlockId}
+          highlightBlockId={highlightBlockId}
         />
       )}
     </section>
