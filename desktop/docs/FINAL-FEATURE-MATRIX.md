@@ -105,6 +105,8 @@ the source:
 | `eval(` | 0 in the bundle. |
 | `dangerouslySetInnerHTML` | 0 in our source; the bundle count is React DOM's own prop name (`react-dom.production.min.js` contains it 8×). |
 | Node / Electron from renderer | Rejected by the convention scan (`from 'node:` / `require(` / `window.require` / `process.` across `src/renderer/src`), and the guard test bites. |
+| Secrets in tracked files | `git grep` over `desktop` + `packages` for `sk-…`, private-key blocks, plaintext passwords and long bearer literals: the only hit is the generated `LoginRequest.password` **field name**. `.env`, `.env.local`, `.env.production` are ignored; `.env.example` carries only a sample URL. |
+| Code signing (A11.2) | **Not signed, and the build log misleads**: electron-builder prints `• signing with signtool.exe …` although no certificate is configured (`build.win.certificateFile`/`cscLink` absent), so the shipped binaries are unsigned and SmartScreen warns. README now says so and documents injecting `CSC_LINK`/`CSC_KEY_PASSWORD` from outside the repository instead of storing credentials in it. |
 
 Still not covered here, and open: verifying these headers and the network graph
 in a running packaged app (DevTools / real requests) needs the backend up, which

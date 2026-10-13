@@ -189,8 +189,24 @@ npm run dist:linux     # AppImage
 - 打包只收 `out/` 与 `package.json`（renderer bundle 已自包含 React/openapi-fetch/
   共享 client，故显式排除 `node_modules`，app.asar 约 0.6 MB；Electron 运行时另计）。
 - 产物在 `dist/`（gitignore）；`win-unpacked/AIStudy.exe` 为免安装可执行文件，
-  `*.exe` NSIS 安装包为分发给用户的成品。未做代码签名，Windows SmartScreen
-  首次运行会有未识别发布者提示（后续接签名证书）。
+  `*.exe` NSIS 安装包为分发给用户的成品。
+- **签名状态要说清楚（A11.2）**：构建日志里会出现
+  `• signing with signtool.exe path=dist\win-unpacked\AIStudy.exe` 这类行，
+  **但这并不代表产物已签名** —— 仓库里没有配置任何证书（`build.win.certificateFile`
+  / `cscLink` 均未设置），electron-builder 只是在走它自己的签名阶段，实际输出仍是
+  未签名二进制，Windows SmartScreen 首次运行会提示「未知发布者」。看日志判断
+  「已签名」是错的。
+- 真正签名时**不要把证书或口令放进仓库**：用 electron-builder 的环境变量注入
+  ```powershell
+  $env:CSC_LINK="file:///<pfx 路径或 https 地址>"   # 证书（PFX）本身放在仓外
+  $env:CSC_KEY_PASSWORD="<口令>"                    # 由 CI secret store 提供
+  npm run dist:win
+  ```
+  仓库侧只保留这条说明与 `package.json` 里的 `build` 配置；`.env` / `.env.local` /
+  `.env.production` 等已在 `.gitignore` 中，`.env.example` 只含示例 URL、无密钥。
+  发布前的静态检查（本轮实测）：`git grep` 全仓 tracked 文件未发现
+  `sk-…` / 私钥块 / 明文口令类内容（唯一命中是生成契约里 `LoginRequest.password`
+  这个字段名本身）。
 
 ## Troubleshooting
 
