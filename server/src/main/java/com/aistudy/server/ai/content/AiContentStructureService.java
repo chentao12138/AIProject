@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -58,24 +59,32 @@ public class AiContentStructureService {
             Classify each text block into exactly one type: HEADING, PARAGRAPH, LIST, TABLE, CODE.
             Return a JSON array of objects with fields: type, text.
             Keep the original text verbatim. Do NOT invent content.
-            Example: [{"type":"HEADING","text":"Chapter 1"},{"type":"PARAGRAPH","text":"..."}]
+            Example: [{"type":"HEADING","text":"Chapter 1","level":1},
+                       {"type":"PARAGRAPH","text":"..."}]
+            For HEADING only, "level" is the nesting depth: 1 = chapter, 2 = section,
+            3 = subsection. Omit it when the document gives no clue.
             """;
 
     private final AiProvider aiProvider;
     private final ContentBlockMapper contentBlockMapper;
     private final SourceService sourceService;
     private final AiUsageRecordService aiUsageRecordService;
+    private final com.aistudy.server.source.outline.service.SourceOutlineNodeService
+            sourceOutlineNodeService;
     private final ObjectMapper objectMapper;
 
     public AiContentStructureService(AiProvider aiProvider,
                                     ContentBlockMapper contentBlockMapper,
                                     SourceService sourceService,
                                     AiUsageRecordService aiUsageRecordService,
+                                    com.aistudy.server.source.outline.service.SourceOutlineNodeService
+                                            sourceOutlineNodeService,
                                     ObjectMapper objectMapper) {
         this.aiProvider = aiProvider;
         this.contentBlockMapper = contentBlockMapper;
         this.sourceService = sourceService;
         this.aiUsageRecordService = aiUsageRecordService;
+        this.sourceOutlineNodeService = sourceOutlineNodeService;
         this.objectMapper = objectMapper;
     }
 
@@ -177,7 +186,8 @@ public class AiContentStructureService {
                         "AI content structuring altered block text; classification only");
             }
             validated.add(block);
-            updates.add(new String[]{type, node.toString()});
+            updates.add(new String[]{type, node.toString(),
+                    String.valueOf(node.path("level").asInt(1))});
         }
         if (validated.isEmpty()) {
             throw new IllegalStateException(
@@ -191,9 +201,56 @@ public class AiContentStructureService {
             contentBlockMapper.updateById(block);
         }
 
+        proposeOutline(userSubject, spaceId, sourceId, validated, updates);
+
         log.info("AI structured {} blocks of source {} (revision {})",
                 validated.size(), sourceId, source.getCurrentExtractionRevisionId());
         return validated.size();
+    }
+
+    /**
+     * Turns the classified headings into a proposed outline tree (audit F-07).
+     *
+     * <p>The structuring step used to stop at block types, so the "machine
+     * proposes the table of contents, a human reviews it" flow had no producer:
+     * an operator had to build the whole tree by hand. The proposal is derived
+     * from the document's own headings, per extraction revision, and the owning
+     * service writes it as NEEDS_REVIEW so a confirmed node is never overwritten.
+     */
+    private void proposeOutline(String userSubject, Long spaceId, Long sourceId,
+                                List<ContentBlock> validated, List<String[]> updates) {
+        Map<Long, List<com.aistudy.server.source.outline.service.SourceOutlineNodeService.ProposedHeading>>
+                byRevision = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < validated.size(); i++) {
+            if (!"HEADING".equals(updates.get(i)[0])) {
+                continue;
+            }
+            ContentBlock block = validated.get(i);
+            Long revisionId = block.getExtractionRevisionId();
+            if (revisionId == null) {
+                // Without a revision the node could not be attributed to one
+                // extraction, and the review flow is per-revision by design.
+                continue;
+            }
+            String title = block.getNormalizedText();
+            if (title == null || title.isBlank()) {
+                continue;
+            }
+            int level;
+            try {
+                level = Integer.parseInt(updates.get(i)[2]);
+            } catch (NumberFormatException e) {
+                level = 1;
+            }
+            byRevision.computeIfAbsent(revisionId, key -> new ArrayList<>())
+                    .add(new com.aistudy.server.source.outline.service.SourceOutlineNodeService
+                            .ProposedHeading(title, level));
+        }
+        for (Map.Entry<Long, List<com.aistudy.server.source.outline.service.SourceOutlineNodeService
+                .ProposedHeading>> entry : byRevision.entrySet()) {
+            sourceOutlineNodeService.replaceProposedTree(
+                    userSubject, spaceId, sourceId, entry.getKey(), entry.getValue());
+        }
     }
 
     private static String stripFences(String json) {

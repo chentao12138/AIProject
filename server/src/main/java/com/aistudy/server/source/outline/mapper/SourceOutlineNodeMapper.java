@@ -2,6 +2,7 @@ package com.aistudy.server.source.outline.mapper;
 
 import com.aistudy.server.source.outline.entity.SourceOutlineNode;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -35,6 +36,19 @@ public interface SourceOutlineNodeMapper extends BaseMapper<SourceOutlineNode> {
     int countLowConfidenceByRevision(@Param("spaceId") Long spaceId,
                                      @Param("revisionId") Long revisionId,
                                      @Param("threshold") double threshold);
+
+    /**
+     * Drops the machine-proposed part of one revision's tree (audit F-07).
+     *
+     * <p>Scoped to {@code status = 'NEEDS_REVIEW'} on purpose: re-running the
+     * suggestion must never destroy a node a human already confirmed or edited,
+     * which is the whole point of the propose → review flow.
+     */
+    @Delete("DELETE FROM source_outline_node "
+            + "WHERE extraction_revision_id = #{revisionId} AND space_id = #{spaceId} "
+            + "  AND status = 'NEEDS_REVIEW'")
+    int deleteProposedByRevision(@Param("revisionId") Long revisionId,
+                                 @Param("spaceId") Long spaceId);
 
     /** Direct children count used to refuse delete-with-children (409). */
     @Select("SELECT COUNT(*) FROM source_outline_node WHERE parent_id = #{nodeId}")

@@ -59,6 +59,8 @@ class AiContentStructureIsolationTest {
     private final ContentBlockMapper contentBlockMapper = mock(ContentBlockMapper.class);
     private final SourceService sourceService = mock(SourceService.class);
     private final AiUsageRecordService usageRecordService = mock(AiUsageRecordService.class);
+    private final com.aistudy.server.source.outline.service.SourceOutlineNodeService outlineService =
+            mock(com.aistudy.server.source.outline.service.SourceOutlineNodeService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private AiContentStructureService service;
@@ -66,7 +68,8 @@ class AiContentStructureIsolationTest {
     @BeforeEach
     void setUp() {
         service = new AiContentStructureService(
-                provider, contentBlockMapper, sourceService, usageRecordService, objectMapper);
+                provider, contentBlockMapper, sourceService, usageRecordService,
+                outlineService, objectMapper);
         when(sourceService.getMine(SUBJECT, SPACE_ID, SOURCE_ID)).thenReturn(new Source());
         when(contentBlockMapper.selectBySpaceSourceOwner(SPACE_ID, SOURCE_ID, SUBJECT))
                 .thenReturn(List.of(draftBlock("Chapter 1"), draftBlock("Body text")));
@@ -112,6 +115,51 @@ class AiContentStructureIsolationTest {
         // No provider call was made at all: refusing live content is decided
         // before spending tokens.
         verify(provider, never()).chat(any(AiChatRequest.class), anyString());
+    }
+
+    /**
+     * F-07: structuring also proposes the outline tree, through the owning
+     * service (the AI module may not write source_outline_node itself) and only
+     * for blocks that belong to an extraction revision.
+     */
+    @Test
+    void proposesOutlineTreeFromHeadings() {
+        List<ContentBlock> stamped = List.of(
+                withRevision(draftBlock("Chapter 1")), withRevision(draftBlock("Body text")));
+        when(contentBlockMapper.selectBySpaceSourceOwner(SPACE_ID, SOURCE_ID, SUBJECT))
+                .thenReturn(stamped);
+        answerWith("[{\"type\":\"HEADING\",\"text\":\"Chapter 1\",\"level\":1},"
+                + "{\"type\":\"PARAGRAPH\",\"text\":\"Body text\"}]");
+
+        assertEquals(2, service.structureBlocks(SUBJECT, SPACE_ID, SOURCE_ID));
+
+        verify(outlineService).replaceProposedTree(eq(SUBJECT), eq(SPACE_ID), eq(SOURCE_ID),
+                eq(REVISION_ID), eq(java.util.List.of(
+                        new com.aistudy.server.source.outline.service.SourceOutlineNodeService
+                                .ProposedHeading("Chapter 1", 1))));
+    }
+
+    /** Blocks with no revision cannot be attributed to a proposal, so none is made. */
+    @Test
+    void noOutlineProposalWithoutARevision() {
+        answerWith("[{\"type\":\"HEADING\",\"text\":\"Chapter 1\"},"
+                + "{\"type\":\"PARAGRAPH\",\"text\":\"Body text\"}]");
+
+        service.structureBlocks(SUBJECT, SPACE_ID, SOURCE_ID);
+
+        verify(outlineService, never()).replaceProposedTree(any(), any(), any(), any(), any());
+    }
+
+    /** The published refusal happens before any write, proposal included. */
+    @Test
+    void publishedRefusalMakesNoProposal() {
+        when(sourceService.getMine(SUBJECT, SPACE_ID, SOURCE_ID)).thenReturn(publishedSource());
+        when(contentBlockMapper.selectBySpaceSourceOwner(SPACE_ID, SOURCE_ID, SUBJECT))
+                .thenReturn(List.of(withRevision(draftBlock("Chapter 1"))));
+
+        assertThrows(IllegalStateException.class,
+                () -> service.structureBlocks(SUBJECT, SPACE_ID, SOURCE_ID));
+        verify(outlineService, never()).replaceProposedTree(any(), any(), any(), any(), any());
     }
 
     /** The draft revision the ingestion pipeline leaves behind is structurable. */
