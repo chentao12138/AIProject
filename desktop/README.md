@@ -148,7 +148,14 @@ FE-001.5 PRE-COMMIT FIX-01：API base/CSP 单一配置契约（src/shared/api-co
 nav `end` 单 active、engines.node >=22.12.0、ESLint 直接依赖、ID 解析分离
 （parseOptionalPositiveId）、Space unavailable 语义、StatusBadge 精确匹配。
 
-**本轮最终开发范围**：Question/Practice/Exam/Search/Notes（Notes 后端 contract 见 BACKEND-CONTRACT-REQUESTS.md）、Playwright E2E。SourceAsset 文件上传与 AI Chat 已实现。
+**本轮最终开发范围**：Question/Practice/Exam/Search/Notes。SourceAsset 文件上传与
+AI Chat 已实现。Notes 与若干收尾项被后端合同卡住（逐字段核对结果见
+`BACKEND-CONTRACT-REQUESTS.md` 与 `docs/FINAL-FEATURE-MATRIX.md` 的 Blocked 表）：
+Notes 端点、Question 更新动词、考试已保存答案回读、练习历史成绩、七类题型的
+排序/配对答案结构、题库分页、搜索 NOTE 结果类型。
+端到端验证目前是 `docs/SMOKE-INSTRUCTIONS.md` 的手工步骤 + 每个模块的
+Vitest/Testing-Library 行为测试；本仓库**没有** Playwright 依赖，不要把
+"自动化 E2E" 当作已有能力。
 
 已落地：正式登录与 refresh-token（ADR-026，见上节）、Admin Web
 （独立工程，见 `../admin-web/`，ADR-028）、electron-builder 打包分发（见下节）。
@@ -177,5 +184,11 @@ npm run dist:linux     # AppImage
   重写为 `electron.exe` 字节（无换行）。
 - npm audit 在 npmmirror registry 下不可用（404 NOT_IMPLEMENTED）；
   用 `--registry=https://registry.npmjs.org` 一次性查询。
+- `npm run api:check` 报 "api.d.ts is not what openapi.json generates"，但内容其实没变：
+  `core.autocrlf=true` 会把 `../packages/api-client/src/generated/api.d.ts` 检出成
+  CRLF，而生成器输出 LF，`check-api.mjs` 直接比对原始字节哈希。先按
+  `tr -d '\r'` 归一化后对比两边 sha256 确认是否真的漂移；确认为行尾问题时，
+  根治在 api-client 仓（`.gitattributes` 固定生成物为 LF 并 `git add --renormalize`，
+  或让校验本身归一化行尾），**不要**用 `--record` 掩盖。
 - Electron 44 需要 Windows Node >= 22.12.0（`npm run dev` 前先 `node -v`；
   与 `package.json` `engines.node` 一致）。
