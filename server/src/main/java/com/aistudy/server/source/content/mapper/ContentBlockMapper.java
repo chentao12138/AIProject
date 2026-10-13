@@ -49,8 +49,14 @@ public interface ContentBlockMapper extends BaseMapper<ContentBlock> {
                                        @Param("spaceId") Long spaceId,
                                        @Param("ownerSubject") String ownerSubject);
 
-    @Update("DELETE FROM content_block WHERE space_id = #{spaceId} AND source_id = #{sourceId} AND source_asset_id = #{sourceAssetId} "
-            + "AND (extraction_revision_id IS NULL OR extraction_revision_id IN ("
+    /**
+     * content_block has no source_asset_id column: a block's asset is the asset
+     * of the page it belongs to, so the delete joins through source_page.
+     */
+    @Update("DELETE cb FROM content_block cb "
+            + "JOIN source_page sp ON sp.id = cb.source_page_id "
+            + "WHERE cb.space_id = #{spaceId} AND cb.source_id = #{sourceId} AND sp.source_asset_id = #{sourceAssetId} "
+            + "AND (cb.extraction_revision_id IS NULL OR cb.extraction_revision_id IN ("
             + "  SELECT id FROM (SELECT id FROM extraction_revision WHERE source_id = #{sourceId} AND status IN ('DRAFT','REJECTED')) t))")
     int deleteBySpaceSourceAsset(@Param("spaceId") Long spaceId,
                                   @Param("sourceId") Long sourceId,

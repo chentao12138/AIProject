@@ -185,7 +185,7 @@ class ExamOpenApiContractTest {
                         .value("#/components/schemas/ExamQuestionInput"))
                 .andExpect(jsonPath("$.components.schemas.ExamQuestionInput.properties.score.type")
                         .value("integer"))
-                .andExpect(jsonPath("$.components.schemas.CreateExamRequest.properties.durationMinutes.type")
+                .andExpect(jsonPath("$.components.schemas.CreateExamRequest.properties.timeLimitMinutes.type")
                         .value("integer"));
     }
 

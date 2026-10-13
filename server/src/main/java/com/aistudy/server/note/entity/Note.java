@@ -26,6 +26,11 @@ public class Note {
     private String title;
     private String content;
     private String contentFormat;
+    private Long sourceId;
+    private Long sourcePageId;
+    private Long contentBlockId;
+    private Long knowledgePointId;
+    private Long questionId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime archivedAt;
@@ -42,6 +47,16 @@ public class Note {
     public void setContent(String content) { this.content = content; }
     public String getContentFormat() { return contentFormat; }
     public void setContentFormat(String contentFormat) { this.contentFormat = contentFormat; }
+    public Long getSourceId() { return sourceId; }
+    public void setSourceId(Long sourceId) { this.sourceId = sourceId; }
+    public Long getSourcePageId() { return sourcePageId; }
+    public void setSourcePageId(Long sourcePageId) { this.sourcePageId = sourcePageId; }
+    public Long getContentBlockId() { return contentBlockId; }
+    public void setContentBlockId(Long contentBlockId) { this.contentBlockId = contentBlockId; }
+    public Long getKnowledgePointId() { return knowledgePointId; }
+    public void setKnowledgePointId(Long knowledgePointId) { this.knowledgePointId = knowledgePointId; }
+    public Long getQuestionId() { return questionId; }
+    public void setQuestionId(Long questionId) { this.questionId = questionId; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

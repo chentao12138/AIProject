@@ -1,6 +1,7 @@
 package com.aistudy.server.ingestion.pdf;
 
 import com.aistudy.server.ingestion.job.service.IngestionErrorCode;
+import com.aistudy.server.ingestion.job.service.IngestionFailure;
 
 /**
  * BUSINESS-020 — thrown when PDF extraction fails in a controlled way.
@@ -9,7 +10,7 @@ import com.aistudy.server.ingestion.job.service.IngestionErrorCode;
  * may be persisted in the ingestion job error fields without leaking
  * parser internals, filesystem paths, or document text.
  */
-public class PdfExtractionException extends RuntimeException {
+public class PdfExtractionException extends RuntimeException implements IngestionFailure {
 
     private final IngestionErrorCode errorCode;
 

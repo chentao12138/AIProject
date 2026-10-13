@@ -158,7 +158,7 @@ class ExamVerticalSliceIntegrationTest {
         Long q2 = createPublishedQuestion(token, spaceId, "q2");
 
         String body = createExam(token, spaceId,
-                "{\"title\":\"第1章测试\",\"description\":\"d\",\"durationMinutes\":30,"
+                "{\"title\":\"第1章测试\",\"description\":\"d\",\"timeLimitMinutes\":30,"
                         + "\"questions\":[{\"questionId\":" + q1 + ",\"score\":2},"
                         + "{\"questionId\":" + q2 + ",\"score\":3}]}");
 
@@ -314,7 +314,7 @@ class ExamVerticalSliceIntegrationTest {
     private Long createExamAndPublish(String token, Long spaceId, Long q1, int score)
             throws Exception {
         String body = createExam(token, spaceId,
-                "{\"title\":\"exam\",\"durationMinutes\":60,"
+                "{\"title\":\"exam\",\"timeLimitMinutes\":60,"
                         + "\"questions\":[{\"questionId\":" + q1 + ",\"score\":" + score + "}]}");
         Long examId = extractJsonLong(body, "id");
         mockMvc.perform(post(EXAMS + "/{examId}/publish", spaceId, examId)
@@ -480,7 +480,7 @@ class ExamVerticalSliceIntegrationTest {
                 .andExpect(status().isOk());
         Long attemptId = startAttempt(token, spaceId, examId);
 
-        // Untimed exam (no durationMinutes): start succeeds and deadlineAt is
+        // Untimed exam (no timeLimitMinutes): start succeeds and deadlineAt is
         // null — production deliberately does NOT invent a deadline for an
         // untimed paper.
         mockMvc.perform(get(ATTEMPTS + "/{attemptId}", spaceId, attemptId)

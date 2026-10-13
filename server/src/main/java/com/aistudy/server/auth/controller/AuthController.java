@@ -8,7 +8,6 @@ import com.aistudy.server.auth.dto.RefreshTokenRequest;
 import com.aistudy.server.auth.dto.TokenPairResponse;
 import com.aistudy.server.auth.service.AuthenticationService;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
@@ -42,8 +41,10 @@ public class AuthController {
     public ResponseEntity<TokenPairResponse> login(@Valid @RequestBody LoginRequest request) {
         TokenPairResponse response = authenticationService.login(request.username(), request.password());
         if (response == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new TokenPairResponse(null, "Bearer", 0, null, 0));
+            // Same route /me already takes: the advice renders §12 ProblemDetail.
+            // Hand-building a 401 body here invented an "empty TokenPair" shape that
+            // clients could not tell apart from a successful response.
+            throw new BadCredentialsException("INVALID_CREDENTIALS");
         }
         return ResponseEntity.ok(response);
     }
@@ -52,8 +53,7 @@ public class AuthController {
     public ResponseEntity<TokenPairResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         TokenPairResponse response = authenticationService.refresh(request.refreshToken());
         if (response == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new TokenPairResponse(null, "Bearer", 0, null, 0));
+            throw new BadCredentialsException("INVALID_REFRESH_TOKEN");
         }
         return ResponseEntity.ok(response);
     }

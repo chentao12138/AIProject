@@ -1,16 +1,16 @@
 package com.aistudy.server.ingestion.extract;
 
+import com.aistudy.server.ingestion.job.service.IngestionErrorCode;
 import com.aistudy.server.source.content.entity.ContentBlock;
 import com.aistudy.server.source.content.mapper.ContentBlockMapper;
 import com.aistudy.server.source.page.entity.SourcePage;
 import com.aistudy.server.source.page.mapper.SourcePageMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.util.unit.DataSize;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -21,42 +21,42 @@ public class TextMarkdownContentParser implements ContentExtractionService {
 
     private final ContentBlockMapper contentBlockMapper;
     private final SourcePageMapper sourcePageMapper;
+    private final long maxDocumentBytes;
 
     public TextMarkdownContentParser(ContentBlockMapper contentBlockMapper,
-                                     SourcePageMapper sourcePageMapper) {
+                                     SourcePageMapper sourcePageMapper,
+                                     @Value("${aistudy.ingestion.text.max-document-bytes:64MB}")
+                                     DataSize maxDocumentBytes) {
         this.contentBlockMapper = contentBlockMapper;
         this.sourcePageMapper = sourcePageMapper;
+        this.maxDocumentBytes = maxDocumentBytes.toBytes();
     }
 
     @Override
     public List<SourcePage> extract(MultipartFile file, Long spaceId, Long sourceId, Long sourceAssetId) {
-        String text;
+        byte[] raw;
         try {
-            String contentType = file.getContentType();
-            if (contentType != null && contentType.startsWith("text/markdown")) {
-                text = new String(file.getBytes(), StandardCharsets.UTF_8);
-            } else {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-                    StringBuilder sb = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        sb.append(line).append('\n');
-                    }
-                    text = sb.toString();
-                }
-            }
+            raw = file.getBytes();
         } catch (IOException e) {
-            throw new IllegalStateException(e);
+            throw new IllegalStateException("failed to read uploaded text asset", e);
+        }
+        if (raw.length > maxDocumentBytes) {
+            throw new IngestionParseException(IngestionErrorCode.DOCUMENT_TOO_LARGE,
+                    "document is " + raw.length + " bytes; the ingestion limit is "
+                            + maxDocumentBytes + " bytes");
         }
 
+        // Hand the stored bytes to the parser untouched: decoding them here first
+        // replaced malformed sequences with U+FFFD, so the parser's strict UTF-8
+        // check never saw the real input and ENCODING_ERROR could not fire.
         boolean markdown = isMarkdown(file.getOriginalFilename(), file.getContentType());
         TxtMarkdownContentParser.ParsedDocument parsed = markdown
-                ? TxtMarkdownContentParser.parseMarkdown(text.getBytes(StandardCharsets.UTF_8))
-                : TxtMarkdownContentParser.parseTxt(text.getBytes(StandardCharsets.UTF_8));
+                ? TxtMarkdownContentParser.parseMarkdown(raw)
+                : TxtMarkdownContentParser.parseTxt(raw);
 
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
-        // Re-running an ingestion job must replace this asset's unpublishd
-        // rows instead of appending a second copy of the document.
+        // Re-running a job replaces this asset's unpublished rows rather than
+        // appending a second copy of the document.
         contentBlockMapper.deleteBySpaceSourceAsset(spaceId, sourceId, sourceAssetId);
         sourcePageMapper.deleteBySpaceSourceAsset(spaceId, sourceId, sourceAssetId);
 
@@ -64,7 +64,7 @@ public class TextMarkdownContentParser implements ContentExtractionService {
         page.setSpaceId(spaceId);
         page.setSourceId(sourceId);
         page.setSourceAssetId(sourceAssetId);
-        page.setSourcePageNumber(1);
+        page.setSourcePageNumber(null);   // PDF-internal page number; null for text (SourcePageResponse)
         page.setPageOrder(1);
         page.setPrintedPageNumber(null);
         page.setPageType("BODY");

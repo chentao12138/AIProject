@@ -1,6 +1,7 @@
 package com.aistudy.server.ingestion.extract;
 
 import com.aistudy.server.ingestion.job.service.IngestionErrorCode;
+import com.aistudy.server.ingestion.job.service.IngestionFailure;
 
 /**
  * BUSINESS-006 — typed content-ingestion failure carrying a stable
@@ -13,7 +14,7 @@ import com.aistudy.server.ingestion.job.service.IngestionErrorCode;
  * failures (storage IO) are NOT this exception — they propagate as
  * {@link IllegalStateException} and fail the request instead.
  */
-public class IngestionParseException extends RuntimeException {
+public class IngestionParseException extends RuntimeException implements IngestionFailure {
 
     private final IngestionErrorCode errorCode;
     private final String safeMessage;

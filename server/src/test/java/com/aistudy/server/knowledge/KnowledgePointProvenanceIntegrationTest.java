@@ -1,6 +1,7 @@
 package com.aistudy.server.knowledge;
 
 import com.aistudy.server.auth.service.JwtAccessTokenService;
+import com.aistudy.server.testsupport.AsyncIngestionJobs;
 import com.aistudy.server.testsupport.OwnedSpaceReset;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -201,12 +202,10 @@ class KnowledgePointProvenanceIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
         Long assetId = extractJsonLong(upload.getResponse().getContentAsString(), "id");
-        mockMvc.perform(post(JOBS, spaceId, sourceId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"assetId\":" + assetId + "}")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("SUCCEEDED"));
+        // A created job is only QUEUED; the worker runs off-request, so wait for
+        // the terminal state before reading the blocks it should have produced.
+        AsyncIngestionJobs.createAndAwait(mockMvc, token, spaceId, sourceId, assetId,
+                "NEEDS_REVIEW");
         return jdbcTemplate.queryForList(
                 "SELECT id FROM content_block WHERE space_id = ? AND source_id = ? ORDER BY sort_order",
                 Long.class, spaceId, sourceId);

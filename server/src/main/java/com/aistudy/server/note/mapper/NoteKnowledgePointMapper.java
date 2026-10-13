@@ -34,4 +34,8 @@ public interface NoteKnowledgePointMapper extends BaseMapper<NoteKnowledgePoint>
     @Delete("DELETE FROM note_knowledge_point WHERE note_id = #{noteId} AND knowledge_point_id = #{kpId}")
     int deleteByNoteIdAndKpId(@Param("noteId") Long noteId,
                               @Param("kpId") Long kpId);
+
+    /** Clears every extra link before a note row is hard-deleted. */
+    @Delete("DELETE FROM note_knowledge_point WHERE note_id = #{noteId}")
+    int deleteAllByNoteId(@Param("noteId") Long noteId);
 }

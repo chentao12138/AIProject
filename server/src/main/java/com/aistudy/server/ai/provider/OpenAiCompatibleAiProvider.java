@@ -83,17 +83,36 @@ public class OpenAiCompatibleAiProvider implements AiProvider {
         }
 
         int status = response.statusCode();
+        if (status >= 400) {
+            // An upstream 4xx was previously logged as a bare status code, so an
+            // invalid BYOK key, a rejected sampling parameter and a quota reply all
+            // looked identical from the server. The provider's own message is what
+            // distinguishes them; it stays in the log and never reaches the client.
+            log.warn("AI provider call failed status={} host={} model={} body={}",
+                    status, URI.create(endpoint).getHost(), config.model(),
+                    safeExcerpt(response.body(), config.apiKey()));
+        }
         if (status == 401 || status == 403 || status == 429 || (status >= 400 && status < 500)) {
-            log.warn("AI provider rejected request status={}", status);
             throw new AiProviderException(AiErrorCode.AI_PROVIDER_REJECTED,
                     "AI provider rejected the request");
         }
         if (status < 200 || status >= 300) {
-            log.warn("AI provider unavailable status={}", status);
             throw new AiProviderException(AiErrorCode.AI_PROVIDER_UNAVAILABLE,
                     "AI provider is unavailable");
         }
         return parseResponse(response.body(), config);
+    }
+
+    /** Bounded single-line view of an upstream error body, with the key redacted. Log-only. */
+    private static String safeExcerpt(String body, String secret) {
+        if (body == null || body.isBlank()) {
+            return "<empty>";
+        }
+        String redacted = secret == null || secret.isBlank()
+                ? body
+                : body.replace(secret, "***");
+        String flat = redacted.replaceAll("\\s+", " ").trim();
+        return flat.length() > 300 ? flat.substring(0, 300) : flat;
     }
 
     private String buildBody(AiChatRequest request, ResolvedConfig config) {
