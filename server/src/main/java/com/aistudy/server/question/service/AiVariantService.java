@@ -27,9 +27,11 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * §5.8 — AI variant question generation.
@@ -169,11 +171,58 @@ public class AiVariantService {
 
         String explanation = root.path("explanation").asText(null);
 
-        // Preserve the original answer data so grading stays deterministic.
+        // The variant inherits the ORIGINAL answer data so grading stays
+        // deterministic — which is only honest while that answer still points
+        // at options that exist. The model is free to re-label options, so an
+        // unchecked variant can ship a question whose correct answer is no
+        // longer selectable.
+        requireAnswerStillAddressable(question, optionViews);
+
         return new AiVariantDto.VariantResponse(
                 null, variantType, stem, optionViews,
                 question.getAnswerDataJson(), explanation
         );
+    }
+
+    /**
+     * Rejects a generated option set that the inherited answer cannot address.
+     *
+     * @param question the original question whose {@code answerDataJson} the
+     *                 variant inherits
+     * @param options  the options the model returned
+     * @throws ResponseStatusException 502 when a recorded correct option key is
+     *         missing from {@code options}, or when an ORDERING answer needs
+     *         more positions than the model returned
+     */
+    private void requireAnswerStillAddressable(Question question,
+                                               List<AiVariantDto.OptionView> options) {
+        AnswerDataCodec.AnswerData answer = AnswerDataCodec.parse(question.getAnswerDataJson());
+        if (answer == null || !answer.hasCorrectAnswer()) {
+            return;
+        }
+        Set<String> returnedKeys = new HashSet<>();
+        for (AiVariantDto.OptionView option : options) {
+            if (option.optionKey() != null) {
+                returnedKeys.add(option.optionKey());
+            }
+        }
+        if (answer.correctOptionKey() != null
+                && !returnedKeys.contains(answer.correctOptionKey())) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "AI variant dropped the correct option " + answer.correctOptionKey());
+        }
+        if (answer.correctOptionKeys() != null) {
+            for (String key : answer.correctOptionKeys()) {
+                if (!returnedKeys.contains(key)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                            "AI variant dropped a correct option " + key);
+                }
+            }
+        }
+        if (answer.correctOrder() != null && answer.correctOrder().size() > options.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "AI variant returned fewer options than the inherited ordering needs");
+        }
     }
 
     /**

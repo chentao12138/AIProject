@@ -15,6 +15,7 @@ import com.aistudy.server.space.service.LearningSpaceService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -93,12 +94,16 @@ public class VariantController {
             VariantResponse variant = aiVariantService.generateVariant(
                     ownerSubject, session.getSpaceId(), questionId, request);
             if (save) {
-                SavedVariantResponse saved = aiVariantService.saveVariant(
+                AiVariantDto.SavedVariantResponse saved = aiVariantService.saveVariant(
                         ownerSubject, session.getSpaceId(), questionId, variant,
                         request.knowledgePointIds());
-                throw new ResponseStatusException(HttpStatus.CREATED, saved.toString());
+                // Returning the body is not optional: raising 201 as a
+                // ResponseStatusException pushed the new questionId and its
+                // DRAFT status into the error channel, where the client could
+                // not read them as a typed response.
+                return ResponseEntity.status(HttpStatus.CREATED).body(saved);
             }
-            return variant;
+            return ResponseEntity.ok(variant);
         } catch (AiProviderException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "AI variant generation failed: " + e.getMessage());
