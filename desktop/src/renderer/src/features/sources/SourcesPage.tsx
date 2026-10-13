@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react';
+import { SOURCE_FORM_LIMITS } from '../../lib/format';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
@@ -181,6 +182,7 @@ function CreateSourceDialog({
         <Input
           label="标题"
           required
+          maxLength={SOURCE_FORM_LIMITS.titleMaxLength}
           value={title}
           onChange={(event) => {
             setTitle(event.target.value);

@@ -244,6 +244,29 @@ export const EXAM_FORM_LIMITS = {
   questionScoreMin: 1,
 } as const;
 
+/**
+ * Field ceilings for the space / knowledge / source creation forms, copied from
+ * the generated contract's `maxLength` values. The contract guard compares each
+ * entry against openapi.json; the forms pass them as `maxLength` so an
+ * over-long name is stopped while typing instead of coming back as a 400.
+ */
+export const SPACE_FORM_LIMITS = {
+  nameMaxLength: 128,
+  descriptionMaxLength: 512,
+} as const;
+
+export const KNOWLEDGE_FORM_LIMITS = {
+  categoryNameMaxLength: 128,
+  categoryDescriptionMaxLength: 512,
+  pointTitleMaxLength: 255,
+  pointSummaryMaxLength: 1000,
+  pointDifficultyMaxLength: 32,
+} as const;
+
+export const SOURCE_FORM_LIMITS = {
+  titleMaxLength: 255,
+} as const;
+
 /** Backend question types -> display copy. Unknown values show as-is. */
 const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   SINGLE_CHOICE: '单选',

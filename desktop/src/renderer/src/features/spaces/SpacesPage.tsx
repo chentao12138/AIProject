@@ -9,6 +9,7 @@
  */
 
 import { useState } from 'react';
+import { SPACE_FORM_LIMITS } from '../../lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApiClient } from '../../lib/api-context';
@@ -164,6 +165,7 @@ function CreateSpaceDialog({
         <Input
           label="名称"
           required
+          maxLength={SPACE_FORM_LIMITS.nameMaxLength}
           value={name}
           onChange={(event) => {
             setName(event.target.value);
@@ -173,6 +175,7 @@ function CreateSpaceDialog({
         />
         <Input
           label="说明（可选）"
+          maxLength={SPACE_FORM_LIMITS.descriptionMaxLength}
           value={description}
           onChange={(event) => {
             setDescription(event.target.value);

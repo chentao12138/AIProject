@@ -32,6 +32,9 @@ import {
   QUESTION_TYPE_SUPPORT,
   PRACTICE_COUNT_LIMITS,
   EXAM_FORM_LIMITS,
+  SPACE_FORM_LIMITS,
+  KNOWLEDGE_FORM_LIMITS,
+  SOURCE_FORM_LIMITS,
   isAuthorableQuestionType,
   isPublishableQuestionType,
 } from './format';
@@ -115,6 +118,38 @@ describe.skipIf(!hasContract)('exam form limits follow the contract', () => {
     expect(EXAM_FORM_LIMITS.durationMinMinutes).toBe(exam.durationMinutes?.minimum);
     expect(EXAM_FORM_LIMITS.maxQuestions).toBe(exam.questions?.maxItems);
     expect(EXAM_FORM_LIMITS.questionScoreMin).toBe(input.score?.minimum);
+  });
+});
+
+/**
+ * The remaining creation forms carry contract `maxLength` ceilings too; the
+ * inputs now take them from these constants, so a widened server limit has to
+ * be widened here deliberately rather than by accident.
+ */
+describe.skipIf(!hasContract)('space / knowledge / source form limits follow the contract', () => {
+  it('matches CreateLearningSpaceRequest', () => {
+    const p = schema('CreateLearningSpaceRequest').properties ?? {};
+    expect(SPACE_FORM_LIMITS.nameMaxLength).toBe(p.name?.maxLength);
+    expect(SPACE_FORM_LIMITS.descriptionMaxLength).toBe(p.description?.maxLength);
+  });
+
+  it('matches CreateKnowledgeCategoryRequest and CreateKnowledgePointRequest', () => {
+    const category = schema('CreateKnowledgeCategoryRequest').properties ?? {};
+    const point = schema('CreateKnowledgePointRequest').properties ?? {};
+    expect(KNOWLEDGE_FORM_LIMITS.categoryNameMaxLength).toBe(category.name?.maxLength);
+    expect(KNOWLEDGE_FORM_LIMITS.categoryDescriptionMaxLength).toBe(
+      category.description?.maxLength
+    );
+    expect(KNOWLEDGE_FORM_LIMITS.pointTitleMaxLength).toBe(point.title?.maxLength);
+    expect(KNOWLEDGE_FORM_LIMITS.pointSummaryMaxLength).toBe(point.summary?.maxLength);
+    expect(KNOWLEDGE_FORM_LIMITS.pointDifficultyMaxLength).toBe(
+      point.difficulty?.maxLength
+    );
+  });
+
+  it('matches CreateSourceRequest', () => {
+    const p = schema('CreateSourceRequest').properties ?? {};
+    expect(SOURCE_FORM_LIMITS.titleMaxLength).toBe(p.title?.maxLength);
   });
 });
 

@@ -8,6 +8,7 @@
  */
 
 import { useState } from 'react';
+import { KNOWLEDGE_FORM_LIMITS } from '../../lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useApiClient } from '../../lib/api-context';
@@ -343,6 +344,7 @@ function CreateCategoryDialog({
         <Input
           label="名称"
           required
+          maxLength={KNOWLEDGE_FORM_LIMITS.categoryNameMaxLength}
           value={name}
           onChange={(event) => {
             setName(event.target.value);
@@ -351,6 +353,7 @@ function CreateCategoryDialog({
         />
         <Input
           label="说明（可选）"
+          maxLength={KNOWLEDGE_FORM_LIMITS.categoryDescriptionMaxLength}
           value={description}
           onChange={(event) => {
             setDescription(event.target.value);
@@ -446,6 +449,7 @@ function CreatePointDialog({
         <Input
           label="标题"
           required
+          maxLength={KNOWLEDGE_FORM_LIMITS.pointTitleMaxLength}
           value={title}
           onChange={(event) => {
             setTitle(event.target.value);
@@ -454,6 +458,7 @@ function CreatePointDialog({
         />
         <Input
           label="摘要（可选）"
+          maxLength={KNOWLEDGE_FORM_LIMITS.pointSummaryMaxLength}
           value={summary}
           onChange={(event) => {
             setSummary(event.target.value);
@@ -489,6 +494,7 @@ function CreatePointDialog({
         </Select>
         <Input
           label="难度（可选，自由填写）"
+          maxLength={KNOWLEDGE_FORM_LIMITS.pointDifficultyMaxLength}
           value={difficulty}
           onChange={(event) => {
             setDifficulty(event.target.value);
