@@ -75,17 +75,20 @@ Real command output at this commit, not a historical claim:
 | Lint | `npm run lint` | 0 errors, 0 warnings |
 | Typecheck | `npx tsc --noEmit -p tsconfig.node.json` / `-p tsconfig.web.json` | 0 errors |
 | Contract gate | `npm run api:check` | `openapi.json and api.d.ts are in sync` |
-| **Live contract gate** | `OPENAPI_URL=http://localhost:8081/v3/api-docs npm run api:live` | `committed snapshot equals http://localhost:8081/v3/api-docs`. Negative proofs: a fixture with `timeLimitMinutes` renamed to `durationMinutes` (no path change) → exit 1; a fixture with `/api/v1/spaces` removed → refused as a non-AIStudy document |
-| Unit | `npm run test:run` | 70 files / 975 tests passed |
-| Coverage | `npm run test:coverage` | statements 91.39% (9770/10690), branches 86.34%, functions 82.95% |
-| Build | `npm run build` | main + preload 1.65 kB, renderer **889.64 kB** (+ CSS 30.31 kB) |
-| Package | `npm run dist:win` (with the two mirror variables) | `dist/AIStudy Setup 0.1.0.exe`, 111,468,074 bytes, built 2026-10-14 01:55 at this commit — installed silently (exit 0) and the installed exe launches with a window titled `AIStudy`, `productVersion 0.1.0.0`. The build log's `signing with signtool.exe` lines do **not** mean it is signed (see the signing note below). |
+| **Live contract gate** | `OPENAPI_URL=http://localhost:8080/v3/api-docs npm run api:live` | `committed snapshot equals http://localhost:8080/v3/api-docs`. Negative proofs: a fixture with `timeLimitMinutes` renamed to `durationMinutes` (no path change) → exit 1; a fixture with `/api/v1/spaces` removed → refused as a non-AIStudy document |
+| Unit | `npm run test:run` | 72 files / 1054 tests passed |
+| Coverage | `npm run test:coverage` | statements 92.15%, branches 87.25%, functions 83.99% |
+| Build | `npm run build` | main 13.95 kB + preload 1.65 kB, renderer **923.63 kB** (+ CSS 30.31 kB) |
+| Package | `npm run dist:win` (with the two mirror variables) | `dist/AIStudy Setup 0.1.0.exe`, **111,472,382 bytes, built 2026-10-14 02:53 at this commit**. NOT yet installed: R02 (silent install → launch → shortcuts → uninstall) was run against the 01:55 artifact (111,468,074 bytes), whose renderer differs from this one by the three lanes committed since. The build log's `signing with signtool.exe` lines do **not** mean it is signed (see the signing note below). |
 | Package | `npm run dist:win` | see "what this does not prove" — the artifact is produced, and installing it is a separate gate |
 
 The previous table (2026-10-13: 65 files / 777 tests, renderer 775.91 kB) is kept
-here as the delta, because the audit is written against those numbers: +4 files,
-+174 tests, +114 kB of renderer. The growth is the Notes module, the ordering /
-matching widgets and the contract-derived limits — none of it a new dependency.
+here as the delta, because the audit is written against those numbers: +7 files,
++277 tests, +147 kB of renderer. Since the first 2026-10-14 measurements
+(70 files / 975 tests, renderer 889.64 kB) the growth is +79 tests and +34 kB, and
+it is all wiring of fields and endpoints the regenerated contract already carried —
+attempt history and resume, the practice result read, provenance and citation
+navigation, server-driven question paging. No new dependency, no new route family.
 
 Packaging inputs and workspace hygiene (audit A1.3 / risk 15) were checked in the
 real checkout rather than in the shared ZIP the audit was written from:
@@ -117,10 +120,21 @@ What this does **not** prove, and remains open A-class work:
   so neither could be observed without credentials — and the packaged build has
   DevTools disabled (ADR-037), so there is no console to read. That is what R03
   still needs: a desktop test account.
+- **One limit on the source-read guards:** `backend-vocabulary-contract.test.ts`
+  and the ingestion guards read `../server/**.java`, and this workspace's copy of
+  that tree is **behind the running instance** — its migrations stop at
+  `V057__add_note_context_links.sql` while the server has been migrated to V066,
+  and `SendMessageRequest` there is still the single-`content` record the contract
+  no longer shows. Those guards therefore prove the frontend is not guessing at
+  vocabulary the older code declares; they do **not** prove anything about a field
+  or code the newer server added. Where a fact exists only in the backend's prose
+  (the two practice-result 409 codes, whether `score` is null or 0 for an ungraded
+  attempt) it is recorded as such in `BACKEND-CONTRACT-REQUESTS.md` instead of
+  being dressed up as a checked constant.
 - R03 installed-app auth (login → restart → restore → logout → anonymous
   restart) and the R04/R05 end-to-end journeys are gated on that same account;
   the contract-gated rows in the Blocked table above are gated on backend fields.
-- 951 passing tests cover renderer behaviour against mocked client responses.
+- 1054 passing tests cover renderer behaviour against mocked client responses.
   They cannot detect a contract that does not exist, so no E2E PASS is claimed
   from this table (see `docs/SMOKE-INSTRUCTIONS.md`).
 

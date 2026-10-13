@@ -9,10 +9,12 @@ declaring `FRONTEND V1 FUNCTIONALLY COMPLETE`.
 
 - Windows x64 machine
 - Backend reachable and **verified to be AIStudy**: `GET <base>/v3/api-docs` must
-  list `/api/v1/spaces` and `/api/v1/auth/login`. As of 2026-10-14 the backend
-  session runs it on `http://localhost:8081`; `:8080` belongs to another project
-  on this machine, and pointing the app there produced a "login works, everything
-  else 404" session once.
+  list `/api/v1/spaces` and `/api/v1/auth/login`. **Never decide by port** — the
+  same instance has been seen on `:8081` and on `:8080` within one day
+  (`api:live` was green against `http://localhost:8080/v3/api-docs` at 02:33 on
+  2026-10-14, after the backend session restarted it there). Pointing the app at
+  an unverified origin once produced a "login works, everything else 404" session
+  because that port belonged to a different project.
 - Valid test username/password (requested from the backend session; the server
   ships no seed account, so this cannot be self-served)
 - `OPENAPI_URL=<base>/v3/api-docs npm run api:live` green — the app must be built
@@ -29,6 +31,14 @@ declaring `FRONTEND V1 FUNCTIONALLY COMPLETE`.
    npm run dist:win
    ```
    Confirm `dist/AIStudy Setup 0.1.0.exe` has **today's timestamp** before installing.
+   **Status at this commit:** the artifact on disk is 111,472,382 bytes, built
+   2026-10-14 02:53, and it has **not** been installed. The recorded R02 pass
+   (silent install → window titled `AIStudy` → uninstall keeps `%APPDATA%\AIStudy`)
+   belongs to the 01:55 build (111,468,074 bytes), which is three lanes behind this
+   one. Steps 2–11 must be re-run on the current file before R02 is claimed here,
+   and steps 3 onward still need the test account that `:8080` currently refuses
+   (`POST /api/v1/auth/login` with `dev` → `401 UNAUTHORIZED`, probed again this
+   round after the backend's V066 Flyway run).
 2. Install `dist/AIStudy Setup 0.1.0.exe` (double-click, accept defaults).
 3. Point the installed app at the running backend. The build default is
    `http://localhost:8080`; precedence is

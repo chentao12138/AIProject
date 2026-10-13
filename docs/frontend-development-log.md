@@ -792,3 +792,39 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
 - 门禁（本轮实跑）：`api:check` 与 `api:live` 双绿；lint 0（本轮改动文件）；
   typecheck 0；practice + lib + questions 三条 lane 共 **88 + 400** 测试绿。
   全量门禁等仍在写的 exams / ai 两条 lane 收口后重跑并在此更新数字。
+
+## 2026-10-14（第四轮）：三条 lane 落地，"等后端"这一类里大半本来就不是后端的活
+
+- **exam / practice / ai·knowledge·sources 三条并行 lane 全部收口并分别提交**
+  （`4cb52ae` 考试续作答+attempt 历史、`5f4cd8a` 练习分数只读 result、
+  `79d9867` AI 附带 id + 引用按 id 导航）。三条 lane 的产出都是**接线**，不是新端点、
+  不是新依赖：把 A2.1/A3.2/A3.3/A6.1/A6.2/A5.3/C-Paging 从"Blocked (pending backend)"
+  挪进"Wired"，并且每条都写明契约证据。
+- 考试侧的判分三态保持诚实：`AttemptSummaryView` **没有** `gradingStatus`，
+  所以"已交卷未评分"只能靠服务端有没有给数字来区分——`—` + 等待评分，不是 `0 / 0`。
+  我此前在 `BACKEND-CONTRACT-REQUESTS.md` 里写过"必须从 `status` 判、不许用 null 分数"，
+  **那句话按现有契约是做不到的**（`ExamAttemptService.java:42-44` 只有三个状态），
+  已改成明确的后端待办：把 attempt 已有的 `gradingStatus`（`:46-48`、`:416`）搬到列表行上。
+  历史行也**没有** `deadlineAt`，所以列表里不能声称某次进行中作答"已超时"——
+  过期判定留在作答页读服务端 `deadlineAt`。
+- 练习侧补上后端这轮才给的两条 409 码：`apiProblemCode()`（`lib/api-error.ts`）+
+  `practiceResultErrorNotice()`，"还没交卷"与"结束时后端还没有分数字段"分开说，
+  未知码保持原文案；测试直接断言英文 `detail` 不出现在屏幕上。
+- AI 侧一条规则值得留在文档里：**引用导航只用结构化 id，永不解析 `locator`**，
+  且 `ON DELETE SET NULL`（`V065__ai_reference_structured_locators.sql:24-27`）意味着
+  指针可以为空而 `id` 指向死行——所以没有服务端 id 就渲染成文本而不是猜链接。
+  新增待办：`ContextReference` 没有 `questionId`，`WRONG_QUESTION` 因此无处可跳。
+- **同仓 `server/` 副本原来一直是旧的**：后端权威 checkout 是 `D:\AIProject\server`，
+  本工作区这份迁移只到 **V057**、`AiDto.SendMessageRequest` 还是单 `content` 的 record。
+  这直接影响守卫的可信范围：`backend-vocabulary-contract.test.ts` 那批"读 Java 常量"
+  的测试证明的是"前端没瞎猜旧代码声明的词表"，**证明不了新实例的行为**。
+  已把这条限制写进 `docs/FINAL-FEATURE-MATRIX.md` 的证据表，而不是留成隐含前提。
+- 门禁（本轮实跑）：lint 0、`tsc` node+web 0、**72 files / 1054 tests 全绿**、
+  coverage statements 92.15% / branches 87.25% / functions 83.99%、
+  `api:check` 与 `api:live`（对 `:8080`）均绿、`npm run build` renderer **923.63 kB**。
+- 制品：`npm run dist:win` 重跑，`AIStudy Setup 0.1.0.exe` **111,472,382 字节**
+  （02:53，sha256 前缀 `cb6cc9ecf291a9c9`），**这个包还没装过**——R02 的安装/启动/卸载
+  证据仍属 01:55 那个包，矩阵里已按"A/B 事实"写清，不拿旧证据冒充新制品。
+- 账号仍未恢复：本轮实测 `POST :8080/api/v1/auth/login`（dev/devpassword123）→
+  `401 UNAUTHORIZED`。所以 A5.3 分数读回、`deadlineAt` 这两条此前记为"未跑"的 live
+  断言，以及 R03–R05，**继续挂在后端承诺的重灌窗口上**（已一次一条索取）。
