@@ -1,6 +1,10 @@
 # AIStudy Desktop
 
-Electron + React + TypeScript + Vite 桌面客户端（FE-001 基础 + FE-001.5 产品硬化）。
+Electron + React + TypeScript + Vite 桌面客户端。
+早期阶段名 FE-001 / FE-001.5 只覆盖 Spaces/Sources/Knowledge 骨架与产品硬化；
+当前范围已含 Questions（七类题型，排序/配对等后端契约）、Practice、Exams、Search、
+AI 辅导与登录会话恢复。各表面的真实状态以 `docs/FINAL-FEATURE-MATRIX.md`
+（已实现 / 被契约阻塞 / B 类排除）为准，本文件不再维护第二份完成度清单。
 
 ## Prerequisites
 

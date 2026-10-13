@@ -50,7 +50,6 @@ to every route for no observed gain, so the checklist item is closed as
 measurement that shows a regression.
 
 ## Verification evidence, 2026-10-13 (branch `feat/fe-001`, after merging `main`)
-
 Real command output, not a historical claim:
 
 | Gate | Command | Result |
@@ -62,6 +61,15 @@ Real command output, not a historical claim:
 | Coverage | `npm run test:coverage` | statements 90% (7275/8083), branches 84.4%, functions 81.34% |
 | Build | `npm run build` | main 13.93 kB, preload 1.65 kB, renderer 775.91 kB |
 | Package | `npm run dist:win` (with the two mirror variables in README) | `dist/AIStudy Setup 0.1.0.exe`, 111 MB, timestamp matches the built commit |
+
+Packaging inputs and workspace hygiene (audit A1.3 / risk 15) were checked in the
+real checkout rather than in the shared ZIP the audit was written from:
+`build/icon.ico` and `build/icon.png` **are tracked** (`git ls-files build/`,
+and `git check-ignore` reports neither as ignored), so a clean clone can run
+`dist:win` without generating icons first. `dev.log`, `dev-smoke*.log` and
+`*.tsbuildinfo` exist on disk but are ignored and untracked, and
+`git status --short` is empty at every commit in this pass — nothing stray is
+being carried into version control.
 
 What this does **not** prove, and remains open A-class work:
 
