@@ -120,6 +120,21 @@ export const queryKeys = {
    */
   practiceAnswers: (spaceId: number | null, sessionId: number | null) =>
     ['practice-answers', part(spaceId), part(sessionId)] as const,
+  /**
+   * The score summary of a session, read apart from its question snapshot: a
+   * finished session is re-opened for its result, not for its questions.
+   */
+  practiceResult: (spaceId: number | null, sessionId: number | null) =>
+    ['practice-result', part(spaceId), part(sessionId)] as const,
+  /**
+   * Attempt history is per exam (W07), so the exam id belongs in the key.
+   */
+  examAttempts: (
+    spaceId: number | null,
+    examId: number | null,
+    filters: { status?: string; page?: number; size?: number } = {}
+  ) =>
+    ['exam-attempts', part(spaceId), part(examId), ...labelled(filters)] as const,
   // G01 — Notes. The list is paged, so the page belongs in the key.
   notes: (
     spaceId: number | null,

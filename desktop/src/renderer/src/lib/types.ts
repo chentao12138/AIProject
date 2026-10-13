@@ -145,19 +145,18 @@ export type AiConversationPage = ResultData<ApiClient['listConversations']>;
 export type AiMessagePage = ResultData<ApiClient['listMessages']>;
 
 /**
- * Provenance link fields that are NOT in the contract yet: the backend does
- * not return `sourceId` / `sourcePageId` on KnowledgePointSourceResponse
- * (BACKEND-CONTRACT-REQUESTS.md A2.1), so the deep link can only be built
- * when they appear. This is the one sanctioned place to look for them —
- * pages must not scatter `as unknown as` over contract fields.
+ * Score summary of a practice session, read at any later time. `finish` returns
+ * the same shape for the session it just closed; this endpoint is what makes a
+ * session reopened from history able to show its result at all.
  */
-export interface ProvenanceLinkExtras {
-  sourceId?: number;
-  sourcePageId?: number;
-}
+export type PracticeResult = ResultData<ApiClient['getPracticeResult']>;
 
-export function provenanceExtras(
-  link: KnowledgePointSourceLink
-): ProvenanceLinkExtras {
-  return link as unknown as ProvenanceLinkExtras;
-}
+/** Page envelope of attempt history (W07/C11). */
+export type ExamAttemptPage = ResultData<ApiClient['listExamAttempts']>;
+
+/**
+ * One row of attempt history. `status` is the server's own vocabulary, which is
+ * how the UI tells an unfinished attempt from a graded one instead of inferring
+ * it from a null score.
+ */
+export type ExamAttemptSummary = NonNullable<ExamAttemptPage['items']>[number];

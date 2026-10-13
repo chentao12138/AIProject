@@ -726,6 +726,35 @@ export function createApiClient(
     },
 
     /**
+     * GET .../practice-sessions/{sessionId}/result — the score summary of a
+     * session at any later time. `PracticeSessionDetail` carries no score, so
+     * this is the only way a finished session can show its result on reopen.
+     */
+    async getPracticeResult(spaceId: number, sessionId: number) {
+      return client.GET(
+        '/api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/result',
+        {
+          params: { path: { spaceId, sessionId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * GET .../exam-attempts — the learner's own attempts, filterable by exam and
+     * status and paged. This is what makes attempt history reachable from a paper.
+     */
+    async listExamAttempts(
+      spaceId: number,
+      query?: { examId?: number; status?: string; page?: number; size?: number }
+    ) {
+      return client.GET('/api/v1/spaces/{spaceId}/exam-attempts', {
+        params: { path: { spaceId }, query },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
      * GET .../exams — list exams in MY space.
      */
     async listExams(spaceId: number) {
