@@ -543,7 +543,13 @@ export function createApiClient(
      */
     async listQuestions(
       spaceId: number,
-      query?: { status?: string; questionType?: string; knowledgePointId?: number }
+      query?: {
+        status?: string;
+        questionType?: string;
+        knowledgePointId?: number;
+        page?: number;
+        size?: number;
+      }
     ) {
       return client.GET('/api/v1/spaces/{spaceId}/questions', {
         params: { path: { spaceId }, query },

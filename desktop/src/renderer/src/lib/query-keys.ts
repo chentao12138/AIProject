@@ -97,6 +97,8 @@ export const queryKeys = {
       status?: string;
       questionType?: string;
       knowledgePointId?: number;
+      page?: number;
+      size?: number;
     } = {}
   ) => ['questions', part(spaceId), ...labelled(filters)] as const,
   question: (spaceId: number | null, questionId: number | null) =>
