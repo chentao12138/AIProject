@@ -14,16 +14,17 @@ for what that proved. Rows are the frontend's own audit items, not the C-numbers
 
 | Item | Status | Note |
 |------|--------|------|
-| A2.1 provenance nav | **Still blocked (C02)** | `KnowledgePointSourceResponse` is still `{id, spaceId, knowledgePointId, contentBlockId, relationType, relevanceScore, createdAt}` — no `sourceId`/`sourcePageId`. |
-| A3.2 AI context | **Still blocked (C03)** | `SendMessageRequest` is still `{content}` only. |
+| A2.1 provenance nav | **Delivered, wiring now** | `KnowledgePointSourceResponse` gained `sourceId` + `sourcePageId`; the reader already accepts `?page=&block=`, so the provenance row becomes a real deep link instead of plain text. |
+| A3.2 AI context | **Delivered, wiring now** | `SendMessageRequest` = `content, sourceId, sourcePageId, contentBlockId, knowledgePointId`. What the backend *validates* about those ids still has to be confirmed against its code before the UI promises anything. |
+| A3.3 citation deep link | **Delivered, wiring now** | `ContextReference` gained structured `sourceId`/`sourcePageId`/`contentBlockId`; `locator` stays but is display-only, so the client stops parsing it (it never could reliably). |
 | A8 Notes | **Built this round (unit-verified)** | CRUD + archive + paged list + keyword + context links + unsaved-changes guard are implemented and tested; runtime/E2E still needs a login. Four follow-ups are listed under "Notes module follow-ups". |
-| A4.5 Question update | **Unblocked, with a limit** | `PUT /questions/{questionId}` exists but `UpdateQuestionRequest` is only `stem`/`explanation`/`difficulty`; options and the correct answer cannot be edited. |
-| A5.3 Practice result | **Partly unblocked** | Per-question review works from `GET .../answers`. The score is still unreachable for a session that is already finished — it exists only in the `finish` response, so history cannot show 成绩 (C06 remains open for that half). |
-| A6.2 Exam answer resume | **Still blocked (C10)** | Only `POST .../exam-attempts/{attemptId}/answers`; `AttemptQuestionView` has no answer and `ExamAnswerView` still echoes no content. |
-| A4.3 ORDERING / MATCHING | **Unblocked on the write side (new gap C09b)** | `CreateQuestionRequest.correctOrder`/`matches` and `AnswerPayloadView.orderingAnswer`/`matchingAnswer` exist and the server grades both. `QuestionAnswerView` still has neither, so a stored standard order/pair set cannot be read back. |
-| A4.2 Question paging | **Still blocked (C-Paging)** | `GET /questions` still accepts only `spaceId`/`status`/`questionType`/`knowledgePointId`. |
-| A7.3 Search → Note | **Unblocked** | `SearchResult.type` enum is now `[SOURCE, CONTENT_BLOCK, KNOWLEDGE_POINT, QUESTION, WRONG_QUESTION, NOTE]` and the hit carries `noteId`. |
-| A6.1 Exam attempt history | **Still blocked (C11)** | `POST /exams/{examId}/sessions` creates an attempt; only `GET /admin/exams/{examId}/attempts` lists them. |
+| A4.5 Question update | **Built this round, with a limit** | `PUT /questions/{questionId}` exists but `UpdateQuestionRequest` is only `stem`/`explanation`/`difficulty`; options and the correct answer cannot be edited, and the edit page says so. |
+| A5.3 Practice result | **Delivered, wiring now** | `GET .../practice-sessions/{sessionId}/result` returns `PracticeResultView{sessionId,status,questionCount,answeredCount,correctCount,score,maxScore}`, so a session reopened from history can show its score. Per-question review comes from `GET .../answers` (whose `explanation` the backend confirmed is always null — a defect they will fix, not a design). |
+| A6.2 Exam answer resume | **Delivered, wiring now** | `AttemptQuestionView` now carries `answer` (an `AnswerPayloadView`) and `answered`, so a reload can rebuild saved state per question. `ExamAnswerView` echoes `answer` + `submitted` as well. |
+| A4.3 ORDERING / MATCHING | **Write side built; read side still missing (C09b)** | `CreateQuestionRequest.correctOrder`/`matches` + `AnswerPayloadView.orderingAnswer`/`matchingAnswer` exist and grade. `QuestionAnswerView` is still `{correctOptionKey, correctOptionKeys, correctBoolean, referenceAnswer}`: a stored standard order or pair set cannot be shown or pre-filled, and typed pairs (`C09` proper) plus real `questionType`/`status` enums are still open. |
+| A4.2 Question paging | **Delivered and built** | `GET /questions` takes `page`/`size` (defaults 0/20) and returns `{items,page,pageSize,totalItems,totalPages}`; the list page drives the server and the guard pins the page size to the contract default. |
+| A7.3 Search → Note | **Built** | `SearchResult.type` includes `NOTE` and the hit carries `noteId`; the type filter and the note deep link are implemented. |
+| A6.1 Exam attempt history | **Delivered, wiring now** | `GET /spaces/{spaceId}/exam-attempts?examId&status&page&size` → `{items:[AttemptSummaryView{id,examId,status,startedAt,submittedAt,score,maxScore}]}`. I asked for a nested `/exams/{examId}/attempts` path and got a query-param list instead; that is equivalent for the UI as long as it stays paged and exam-filtered. There is **no `graded` flag**, so "submitted but not yet graded" must come from `status`, never from a null score. |
 
 ---
 
