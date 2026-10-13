@@ -147,7 +147,7 @@ public class AiStudyCoachService {
         }
 
         List<ContextReference> refs = context.stream()
-                .map(item -> new ContextReference(item.type(), item.entityId(), item.title(), item.snippet()))
+                .map(ContextReference::from)
                 .toList();
 
         String summary = response.content() == null ? "" : response.content();

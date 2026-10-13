@@ -1,6 +1,7 @@
 package com.aistudy.server.knowledge.source.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -33,6 +34,10 @@ import java.time.LocalDateTime;
  * <p>{@code @TableName("knowledge_point_source")} + {@code @TableId(type =
  * IdType.AUTO)} follow the project convention; camelCase fields map
  * to snake_case columns via {@code map-underscore-to-camel-case}.
+ * {@code sourceId} / {@code sourcePageId} are read-only projection
+ * fields: the owner-scoped list query joins {@code content_block} and
+ * fills them, so provenance can be navigated to a page without a
+ * second query per link.
  * No business rules live here — they are in
  * {@link com.aistudy.server.knowledge.source.service.KnowledgePointSourceService}.
  */
@@ -47,6 +52,20 @@ public class KnowledgePointSource {
     private Long knowledgePointId;
 
     private Long contentBlockId;
+
+    /**
+     * Navigation targets copied from the cited {@code content_block} row by
+     * {@link com.aistudy.server.knowledge.source.mapper.KnowledgePointSourceMapper#selectBySpacePointOwner}
+     * in the same statement. They are NOT columns of
+     * {@code knowledge_point_source} ({@code exist = false} keeps them out of
+     * the SQL MyBatis-Plus generates from this entity) and they are NULL when
+     * the block row is gone.
+     */
+    @TableField(exist = false)
+    private Long sourceId;
+
+    @TableField(exist = false)
+    private Long sourcePageId;
 
     private String relationType;
 
@@ -86,6 +105,22 @@ public class KnowledgePointSource {
 
     public void setContentBlockId(Long contentBlockId) {
         this.contentBlockId = contentBlockId;
+    }
+
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    public void setSourceId(Long sourceId) {
+        this.sourceId = sourceId;
+    }
+
+    public Long getSourcePageId() {
+        return sourcePageId;
+    }
+
+    public void setSourcePageId(Long sourcePageId) {
+        this.sourcePageId = sourcePageId;
     }
 
     public String getRelationType() {

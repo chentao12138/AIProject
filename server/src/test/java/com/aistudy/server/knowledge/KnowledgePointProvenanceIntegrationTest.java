@@ -29,10 +29,15 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -59,7 +64,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * the same space); idempotent re-link; batch all-or-nothing (one bad
  * id → 404, zero rows); cross-space block/point → 404; non-owner
  * point/block → 404; soft-deleted point → 404; empty batch → 400;
- * list owner + 404 matrix; optional fields NULL; anonymous → 401.
+ * list owner + 404 matrix; optional fields NULL; the cited block's
+ * source / source page ids resolved by the same read (and NULL for a
+ * link whose block row is gone); anonymous → 401.
  *
  * <h3>Database safety</h3>
  *
@@ -70,8 +77,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *       knowledge_point → knowledge_category → content_block →
  *       source_page → ingestion_job → source_asset → source →
  *       learning_space (all scoped to biz-e2e users).</li>
- *   <li>No unqualified DELETE / TRUNCATE / DROP; no
- *       FOREIGN_KEY_CHECKS=0.</li>
+ *   <li>No unqualified DELETE / TRUNCATE / DROP. FOREIGN_KEY_CHECKS is
+ *       only toggled by {@link OwnedSpaceReset} and by the one
+ *       dangling-block fixture, which turns it off on its own
+ *       connection and restores it before releasing that
+ *       connection.</li>
  * </ul>
  */
 @SpringBootTest
@@ -273,6 +283,41 @@ class KnowledgePointProvenanceIntegrationTest {
                 "SELECT COUNT(*) FROM knowledge_point_source "
                         + "WHERE space_id = ? AND knowledge_point_id = ?",
                 Long.class, spaceId, kpId);
+    }
+
+    /** The block's own page id, read from the fixture rather than assumed. */
+    private Long pageIdOf(Long blockId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT source_page_id FROM content_block WHERE id = ?",
+                Long.class, blockId);
+    }
+
+    /**
+     * {@code content_block_id} is FK-RESTRICTED, so MySQL never lets a
+     * provenance row point at a missing block on its own. The dangling row
+     * this asserts against is therefore inserted with FK checks off — on a
+     * borrowed connection, for these two statements only, restored before
+     * the connection goes back to the pool.
+     */
+    private void insertLinkToMissingBlock(Long spaceId, Long knowledgePointId, long blockId)
+            throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            try (Statement toggle = connection.createStatement()) {
+                toggle.execute("SET FOREIGN_KEY_CHECKS = 0");
+                try (PreparedStatement insert = connection.prepareStatement(
+                        "INSERT INTO knowledge_point_source "
+                                + "(space_id, knowledge_point_id, content_block_id, "
+                                + "created_by_user_id, created_at) "
+                                + "VALUES (?, ?, ?, 'biz-e2e-user-1', CURRENT_TIMESTAMP(6))")) {
+                    insert.setLong(1, spaceId);
+                    insert.setLong(2, knowledgePointId);
+                    insert.setLong(3, blockId);
+                    insert.executeUpdate();
+                } finally {
+                    toggle.execute("SET FOREIGN_KEY_CHECKS = 1");
+                }
+            }
+        }
     }
 
     // ==================== same-space linking ====================
@@ -540,5 +585,61 @@ class KnowledgePointProvenanceIntegrationTest {
         mockMvc.perform(get(LINK_BASE, spaceA, kpInB)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound());
+    }
+
+    // ==================== provenance navigation ====================
+
+    /**
+     * (16) every link carries the cited block's source and page, resolved by
+     * the same owner-scoped read — that is what turns "Content block #N" into
+     * a jump to a location the client can open.
+     */
+    @Test
+    void listCarriesNavigationIdsOfTheCitedBlock() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "笔记");
+        String token = tokenFor("biz-e2e-user-1");
+        List<Long> blockIds = ingestTextSource(token, spaceId, sourceId, "note.txt", "one\n\ntwo");
+        assertEquals(2, blockIds.size(), "fixture must produce exactly 2 content blocks");
+        Long kpId = createPoint(token, spaceId, "知识点一");
+        linkBody(token, spaceId, kpId, blockIds);
+
+        Long firstPageId = pageIdOf(blockIds.get(0));
+        Long secondPageId = pageIdOf(blockIds.get(1));
+        assertNotNull(firstPageId, "text ingestion attaches every block to a source page");
+        assertNotNull(secondPageId, "text ingestion attaches every block to a source page");
+
+        mockMvc.perform(get(LINK_BASE, spaceId, kpId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].contentBlockId").value(blockIds.get(0)))
+                .andExpect(jsonPath("$[0].sourceId").value(sourceId))
+                .andExpect(jsonPath("$[0].sourcePageId").value(firstPageId))
+                .andExpect(jsonPath("$[1].contentBlockId").value(blockIds.get(1)))
+                .andExpect(jsonPath("$[1].sourceId").value(sourceId))
+                .andExpect(jsonPath("$[1].sourcePageId").value(secondPageId));
+    }
+
+    /**
+     * (17) a link whose block row is gone stays listed, with both navigation
+     * ids null — the citation must not vanish from the provenance list just
+     * because its target no longer resolves.
+     */
+    @Test
+    void linkWithMissingBlockIsListedWithNullNavigationIds() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        String token = tokenFor("biz-e2e-user-1");
+        Long kpId = createPoint(token, spaceId, "知识点一");
+        long missingBlockId = 9_000_999L;
+        insertLinkToMissingBlock(spaceId, kpId, missingBlockId);
+
+        mockMvc.perform(get(LINK_BASE, spaceId, kpId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].knowledgePointId").value(kpId))
+                .andExpect(jsonPath("$[0].contentBlockId").value(missingBlockId))
+                .andExpect(jsonPath("$[0].sourceId").value(nullValue()))
+                .andExpect(jsonPath("$[0].sourcePageId").value(nullValue()));
     }
 }

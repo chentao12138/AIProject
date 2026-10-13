@@ -1,5 +1,6 @@
 package com.aistudy.server.ai.dto;
 
+import com.aistudy.server.ai.context.AiContextItem;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -15,7 +16,22 @@ public final class AiDto {
     public record CreateConversationRequest(String title) {
     }
 
-    public record SendMessageRequest(String content) {
+    /**
+     * C03 — the context IDs are optional pointers into the LearningSpace that
+     * owns the conversation. The client sends IDs only, never body text: the
+     * server resolves the material and assembles the prompt.
+     */
+    public record SendMessageRequest(
+            String content,
+            Long sourceId,
+            Long sourcePageId,
+            Long contentBlockId,
+            Long knowledgePointId
+    ) {
+
+        public SendMessageRequest(String content) {
+            this(content, null, null, null, null);
+        }
     }
 
     public record StudyCoachRequest(String question) {
@@ -48,15 +64,32 @@ public final class AiDto {
     ) {
     }
 
+    /**
+     * C04 — a citation the client can route on. {@code locator} is only the
+     * human-readable label; the ID fields say which level the pointer lives at,
+     * so a CONTENT_BLOCK reference deep-links
+     * {@code /spaces/{spaceId}/sources/{sourceId}?page={sourcePageId}&block={contentBlockId}}.
+     * For a SOURCE / SOURCE_PAGE / CONTENT_BLOCK reference {@code id} is the
+     * entity of that type, and every owning ID above it is filled too.
+     */
     public record ContextReference(
             String type,
             Long id,
             String title,
             String snippet,
-            String locator
+            String locator,
+            Long sourceId,
+            Long sourcePageId,
+            Long contentBlockId
     ) {
-        public ContextReference(String type, Long id, String title, String snippet) {
-            this(type, id, title, snippet, null);
+
+        public static ContextReference from(AiContextItem item) {
+            if (item == null) {
+                return null;
+            }
+            return new ContextReference(
+                    item.type(), item.entityId(), item.title(), item.snippet(),
+                    item.locator(), item.sourceId(), item.sourcePageId(), item.contentBlockId());
         }
     }
 

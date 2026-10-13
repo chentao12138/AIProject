@@ -86,6 +86,92 @@ class AiOpenApiContractTest {
         org.junit.jupiter.api.Assertions.assertFalse(docs.contains("answer_data_json"));
     }
 
+    /**
+     * C03 — send-message accepts context IDs (never body text), so the client can
+     * open the tutor from a Source / page / block / knowledge point.
+     */
+    @Test
+    void sendMessageRequestCarriesOptionalContextIds() throws Exception {
+        for (String field : new String[]{"sourceId", "sourcePageId", "contentBlockId", "knowledgePointId"}) {
+            mockMvc.perform(get("/v3/api-docs"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath(
+                            "$.components.schemas.SendMessageRequest.properties." + field + ".type")
+                            .value("integer"));
+        }
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.components.schemas.SendMessageRequest.properties.content").exists())
+                // IDs only: no body-text field may be smuggled into the request
+                .andExpect(jsonPath(
+                        "$.components.schemas.SendMessageRequest.properties.sourceText").doesNotExist())
+                .andExpect(jsonPath(
+                        "$.components.schemas.SendMessageRequest.properties.blockText").doesNotExist());
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths["
+                        + "'/api/v1/spaces/{spaceId}/ai/conversations/{conversationId}/messages']"
+                        + ".post.requestBody.content['application/json'].schema.$ref")
+                        .value("#/components/schemas/SendMessageRequest"));
+    }
+
+    /** C04 — every citation carries the structured route, not only a label. */
+    @Test
+    void contextReferenceCarriesStructuredLocatorIds() throws Exception {
+        for (String field : new String[]{"type", "id", "title", "snippet", "locator",
+                "sourceId", "sourcePageId", "contentBlockId"}) {
+            mockMvc.perform(get("/v3/api-docs"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath(
+                            "$.components.schemas.ContextReference.properties." + field).exists());
+        }
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.components.schemas.ContextReference.properties.locator.type")
+                        .value("string"))
+                .andExpect(jsonPath("$.components.schemas.ContextReference.properties.contentBlockId.type")
+                        .value("integer"))
+                .andExpect(jsonPath("$.paths["
+                        + "'/api/v1/spaces/{spaceId}/ai/conversations/{conversationId}/messages']"
+                        + ".get.responses['200'].content['application/json'].schema.$ref")
+                        .value("#/components/schemas/MessagePageResponse"))
+                .andExpect(jsonPath("$.components.schemas.MessagePageResponse.properties.content"
+                        + ".items.$ref").value("#/components/schemas/MessageView"))
+                .andExpect(jsonPath("$.components.schemas.MessageView.properties.references"
+                        + ".items.$ref").value("#/components/schemas/ContextReference"));
+    }
+
+    /**
+     * W11 — both AI list endpoints are paginated through query parameters, so the
+     * generated client exposes page/size instead of fetching an unbounded list.
+     */
+    @Test
+    void aiListEndpointsDeclarePaginationParameters() throws Exception {
+        String conversations = "$.paths['/api/v1/spaces/{spaceId}/ai/conversations'].get.parameters";
+        String messages = "$.paths['/api/v1/spaces/{spaceId}/ai/conversations"
+                + "/{conversationId}/messages'].get.parameters";
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(conversations + "[?(@.name=='page')]").exists())
+                .andExpect(jsonPath(conversations + "[?(@.name=='size')]").exists())
+                .andExpect(jsonPath(conversations + "[?(@.name=='page')].in").value("query"))
+                .andExpect(jsonPath(conversations + "[?(@.name=='page')].schema.type").value("integer"))
+                .andExpect(jsonPath(messages + "[?(@.name=='page')]").exists())
+                .andExpect(jsonPath(messages + "[?(@.name=='size')]").exists())
+                .andExpect(jsonPath(messages + "[?(@.name=='size')].in").value("query"));
+    }
+
+    /** The list envelope stays the Spring-style one the desktop client reads today. */
+    @Test
+    void aiListResponsesKeepContentAndTotalElementsFields() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.schemas.ConversationPageResponse.properties.content")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.ConversationPageResponse.properties.totalElements")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.MessagePageResponse.properties.content").exists())
+                .andExpect(jsonPath("$.components.schemas.MessagePageResponse.properties.totalElements")
+                        .exists());
+    }
+
     @Test
     void aiSettingsPathsAreExposedWithoutApiKeyInGetSchema() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))

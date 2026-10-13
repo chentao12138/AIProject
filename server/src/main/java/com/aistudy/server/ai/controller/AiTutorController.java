@@ -106,7 +106,12 @@ public class AiTutorController {
                 authentication.getName(), spaceId, conversationId, page, size);
     }
 
-    @Operation(summary = "Send a user message and receive the AI tutor reply")
+    @Operation(summary = "Send a user message and receive the AI tutor reply",
+            description = "Optional sourceId / sourcePageId / contentBlockId / knowledgePointId pin "
+                    + "the material the question is about. Only IDs are accepted: the server resolves "
+                    + "them against this LearningSpace (unknown, foreign-space or soft-deleted IDs are a "
+                    + "400 VALIDATION_ERROR), retrieves the material itself, and lets the pinned material "
+                    + "take precedence over automatic retrieval.")
     @PostMapping(value = "/conversations/{conversationId}/messages",
             consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
@@ -116,7 +121,7 @@ public class AiTutorController {
             @Valid @RequestBody SendMessageRequest request,
             Authentication authentication) {
         return aiConversationService.sendMessage(
-                authentication.getName(), spaceId, conversationId, request.content());
+                authentication.getName(), spaceId, conversationId, request);
     }
 
     @Operation(summary = "Explain a submitted practice answer (post-submit only)")
