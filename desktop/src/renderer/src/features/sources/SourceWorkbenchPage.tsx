@@ -29,9 +29,12 @@
  *     deep link must survive the load.
  *   - Cross-module shortcuts (W16): source / page / content block each offer
  *     新建笔记 with the ids the contract really carries for that entity, and
- *     问 AI opens the AI workspace. `SendMessageRequest` is still `{content}`
- *     only (C03), so no context is claimed to be attached and no AI query
- *     param is invented — AiChatPage reads nothing but `:conversationId`.
+ *     问 AI opens the AI workspace WITH that entity as message context
+ *     (A3.2 / G07): each entry names the narrowest id of the entity on screen
+ *     via the AI page's `attachSourceId` / `attachSourcePageId` /
+ *     `attachContentBlockId` keys, which `AiChatPage` puts into
+ *     `SendMessageRequest` and lists above the composer. One pointer per entry,
+ *     because the backend derives the levels above it from the one it is given.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -193,14 +196,20 @@ export function SourceWorkbenchPage() {
             >
               新建笔记
             </Link>
-            {/* W16: an entry into the AI workspace, and only that. The
-                contract's SendMessageRequest carries `content` alone (C03), so
-                this link names no context param and the copy below never
-                claims the source travels with it. */}
+            {/* A3.2 / G07: an entry into the AI workspace that carries this
+                source as the message context. `attachSourceId` is the AI page's
+                own prefill key (NOT the Notes prefill key of the same purpose,
+                and not the reader's `page`/`block`), it is the only context id a
+                source itself owns, and AiChatPage puts it in the request body as
+                `SendMessageRequest.sourceId` — the copy below therefore says
+                plainly what travels. Page-level and block-level entries are in
+                the reader, where those ids are on screen. */}
             <Link
               className="nav-link"
               data-testid="source-ai-link"
-              to={`/spaces/${spaceId}/ai`}
+              to={`/spaces/${spaceId}/ai?${new URLSearchParams({
+                attachSourceId: String(sourceId),
+              }).toString()}`}
             >
               问 AI
             </Link>
@@ -208,7 +217,7 @@ export function SourceWorkbenchPage() {
         }
       />
       <p className="page__note" data-testid="ai-entry-note">
-        问 AI 打开 AI 辅导；这条来源的内容不会自动附带，请在提问里描述要讨论的部分。
+        问 AI 打开 AI 辅导，并把这条来源附带为上下文；发送前可在输入框上方看到或取消它。
       </p>
 
       <BusinessSummary
@@ -1040,7 +1049,11 @@ function ContentSection({
           {/* W16: the entity on screen here is the page, so the note starts
               with the two ids this screen really has — the source from the
               route and this page. Its block, when there is one, is linked
-              from the block itself and adds `contentBlockId`. */}
+              from the block itself and adds `contentBlockId`.
+              A3.2 / G07: the AI entry names only THIS page's id, because the
+              backend resolves the owning source from it
+              (AiLearningContextService.resolveSelectedContext) and an
+              inconsistent source/page pair is a 400 of its own. */}
           <p className="page__note">
             <Link
               className="nav-link"
@@ -1051,6 +1064,15 @@ function ContentSection({
               }).toString()}`}
             >
               本页新建笔记
+            </Link>
+            <Link
+              className="nav-link"
+              data-testid="page-ai-link"
+              to={`/spaces/${spaceId}/ai?${new URLSearchParams({
+                attachSourcePageId: String(selectedPage.id),
+              }).toString()}`}
+            >
+              问 AI（本页）
             </Link>
           </p>
           <PageContent
@@ -1186,6 +1208,19 @@ function PageContent({
                   }).toString()}`}
                 >
                   新建笔记
+                </Link>
+                {/* A3.2 / G07: the block alone is the AI context — the narrowest
+                    id here, whose page and source the server derives from the
+                    block row itself, so the request cannot contradict itself. */}
+                <Link
+                  className="nav-link"
+                  data-testid="block-ai-link"
+                  aria-label={`就片段 #${blockId} 问 AI`}
+                  to={`/spaces/${spaceId}/ai?${new URLSearchParams({
+                    attachContentBlockId: String(blockId),
+                  }).toString()}`}
+                >
+                  问 AI
                 </Link>
               </p>
             )}

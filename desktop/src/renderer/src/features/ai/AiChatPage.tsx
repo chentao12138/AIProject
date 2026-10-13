@@ -6,10 +6,20 @@
  *
  * All AI requests go through the shared @aistudy/api-client.
  * Never direct-fetch StepFun. Never log keys.
+ *
+ * A3.2 (G07): another module can open this route with the material the learner
+ * is looking at — `?attachSourceId=` / `?attachSourcePageId=` /
+ * `?attachContentBlockId=` / `?attachKnowledgePointId=` (see
+ * `aiContext.ts:AI_ATTACH_PARAM_KEYS` for why these are NOT the Notes prefill
+ * keys). What is attached is listed above the composer before a single word is
+ * sent, the list is exactly what `SendMessageRequest` carries, and an
+ * unusable id in the URL is named as refused rather than dropped quietly.
+ * A3.3 (G08): citations route on the structured `ContextReference` ids, never
+ * on `locator`.
  */
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
 import {
@@ -27,6 +37,17 @@ import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
 import type { AiMessagePage } from '../../lib/types';
+import {
+  AI_ATTACH_PARAM_KEYS,
+  attachmentSearch,
+  attachmentSummary,
+  citationHref,
+  citationLabel,
+  hasAttachedContext,
+  messageBodyWithAttachment,
+  readAiAttachment,
+  type AiAttachedContext,
+} from './aiContext';
 
 /** Message row as the contract reports it, derived from the paged response. */
 type MessageItem = NonNullable<NonNullable<AiMessagePage>['content']>[number];
@@ -94,6 +115,21 @@ export function AiChatPage() {
   const spaceId = useSpaceId();
   const { conversationId: convIdParam } = useParams();
   const conversationId = parsePositiveIdParam(convIdParam);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // A3.2: the material this page was opened with. Read from this route's own
+  // query string, so a reload states the attachment again instead of relying
+  // on memory, and cleared here rather than in the panel — the attachment
+  // belongs to the conversation the learner is in, not to one panel instance.
+  const attachment = readAiAttachment(searchParams);
+
+  const clearAttachment = () => {
+    const next = new URLSearchParams(searchParams);
+    for (const key of Object.values(AI_ATTACH_PARAM_KEYS)) {
+      next.delete(key);
+    }
+    setSearchParams(next, { replace: true });
+  };
 
   const settingsQuery = useQuery({
     queryKey: queryKeys.aiSettings,
@@ -158,13 +194,28 @@ export function AiChatPage() {
     <div className="page ai-workspace">
       <PageHeader title="AI 辅导" />
 
+      {attachment.rejected.length > 0 && (
+        // An unusable id in the URL is told back to the learner instead of
+        // being ignored: a link that looked like it carried material must not
+        // silently send none.
+        <p className="form__error" role="alert" data-testid="ai-attach-rejected">
+          链接里的 {attachment.rejected.join('、')} 不是可用的 ID，已忽略：这条提问不会带上它。
+        </p>
+      )}
+
       <div className="ai-layout">
-        <ConversationList spaceId={spaceId} activeId={conversationId} />
+        <ConversationList
+          spaceId={spaceId}
+          activeId={conversationId}
+          attachSearch={attachmentSearch(attachment.context)}
+        />
         {conversationId !== null ? (
           <ChatPanel
             key={conversationId}
             spaceId={spaceId}
             conversationId={conversationId}
+            attachment={attachment.context}
+            onClearAttachment={clearAttachment}
           />
         ) : (
           <div className="ai-chat-placeholder">
@@ -172,6 +223,14 @@ export function AiChatPage() {
               title="选择或创建对话"
               description="从左侧选择一个对话，或创建新对话开始学习。"
             />
+            {hasAttachedContext(attachment.context) && (
+              // The attachment survives the switch into a conversation (the
+              // list links keep the query), so say it is already pinned before
+              // one is opened rather than letting the learner think it was lost.
+              <p className="page__note" data-testid="ai-attach-summary">
+                将附带到下一条提问：{attachmentSummary(attachment.context).join('、')}。
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -184,9 +243,17 @@ export function AiChatPage() {
 function ConversationList({
   spaceId,
   activeId,
+  attachSearch,
 }: {
   spaceId: number;
   activeId: number | null;
+  /**
+   * The attachment query carried over into the conversation
+   * (`aiContext.attachmentSearch`), empty when nothing is pinned. A plain
+   * absolute link would drop it, and a pinned source that vanished on the way
+   * into the chat is exactly the silent no-op this prevents.
+   */
+  attachSearch: string;
 }) {
   const api = useApiClient();
   const queryClient = useQueryClient();
@@ -221,7 +288,7 @@ function ConversationList({
         queryKey: queryKeys.aiConversations(spaceId),
       });
       if (isPositiveId(conv?.id)) {
-        navigate(`/spaces/${spaceId}/ai/${conv.id}`);
+        navigate(`/spaces/${spaceId}/ai/${conv.id}${attachSearch}`);
       }
     },
   });
@@ -234,7 +301,7 @@ function ConversationList({
         queryKey: queryKeys.aiConversations(spaceId),
       });
       if (activeId === archivedId) {
-        navigate(`/spaces/${spaceId}/ai`);
+        navigate(`/spaces/${spaceId}/ai${attachSearch}`);
       }
     },
   });
@@ -274,7 +341,7 @@ function ConversationList({
           return (
             <li key={convId} className="ai-conversation-item">
               <Link
-                to={`/spaces/${spaceId}/ai/${convId}`}
+                to={`/spaces/${spaceId}/ai/${convId}${attachSearch}`}
                 className={
                   active
                     ? 'nav-link nav-link--active'
@@ -320,9 +387,14 @@ function ConversationList({
 function ChatPanel({
   spaceId,
   conversationId,
+  attachment,
+  onClearAttachment,
 }: {
   spaceId: number;
   conversationId: number;
+  /** Context ids the learner pinned; the request body carries exactly these. */
+  attachment: AiAttachedContext;
+  onClearAttachment: () => void;
 }) {
   const api = useApiClient();
   const queryClient = useQueryClient();
@@ -353,7 +425,13 @@ function ChatPanel({
 
   const send = useMutation({
     mutationFn: (content: string) =>
-      api.sendMessage(spaceId, conversationId, { content }).then(unwrap),
+      api
+        .sendMessage(
+          spaceId,
+          conversationId,
+          messageBodyWithAttachment(content, attachment)
+        )
+        .then(unwrap),
     onMutate: async (content: string) => {
       setSendError(null);
       const previous =
@@ -430,6 +508,7 @@ function ChatPanel({
   }, [messages.length, send.isPending]);
 
   const busy = send.isPending;
+  const attachedLabels = attachmentSummary(attachment);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -492,33 +571,39 @@ function ChatPanel({
                 <p className="muted">引用：</p>
                 <ul>
                   {msg.references.map((ref, ri) => {
-                    const refId = ref.id;
-                    let href: string | undefined;
-                    if (ref.type === 'SOURCE' && isPositiveId(refId)) {
-                      href = `/spaces/${spaceId}/sources/${refId}`;
-                    } else if (
-                      ref.type === 'KNOWLEDGE_POINT' &&
-                      isPositiveId(refId)
-                    ) {
-                      href = `/spaces/${spaceId}/knowledge/${refId}`;
-                    } else if (
-                      ref.type === 'QUESTION' &&
-                      isPositiveId(refId)
-                    ) {
-                      href = `/spaces/${spaceId}/questions/${refId}`;
-                    }
+                    // A3.3 / G08: the destination comes from the structured ids
+                    // of this citation's type (`aiContext.citationHref`), never
+                    // from `locator`, which is a printed label ("P12") whose
+                    // number is a document page number rather than the page-row
+                    // id the reader selects on.
+                    const href = citationHref(spaceId, ref);
+                    const typeLabel = citationLabel(ref.type);
+                    const title = (ref.title ?? '').trim();
+                    const label =
+                      title !== '' ? title : `${typeLabel} #${ref.id ?? '?'}`;
                     return (
-                      <li key={ri}>
+                      <li key={ref.id ?? `ref-${ri}`} data-testid="ai-ref-row">
                         {href ? (
                           <Link to={href} className="nav-link">
-                            {ref.title ?? `#${refId}`}
+                            {label}
                           </Link>
                         ) : (
-                          <>
-                            {ref.title ?? `#${refId ?? '?'}`}
-                          </>
+                          // No structured id for this type → no destination. Text,
+                          // not a link that would open something else.
+                          <span className="muted">{label}</span>
                         )}
-                        {ref.snippet ? ` — ${ref.snippet.slice(0, 80)}` : ''}
+                        <span className="muted">
+                          {' '}
+                          · {typeLabel}
+                          {/* Display only: the server's own human label. */}
+                          {ref.locator ? ` · ${ref.locator}` : ''}
+                        </span>
+                        {ref.snippet ? (
+                          <span className="muted">
+                            {' '}
+                            — {ref.snippet.slice(0, 80)}
+                          </span>
+                        ) : null}
                       </li>
                     );
                   })}
@@ -552,6 +637,22 @@ function ChatPanel({
         {sendError && (
           <p className="form__error" role="alert">
             {sendError}
+          </p>
+        )}
+        {/* A3.2 / G07: what travels with this message is listed before it is
+            sent, in the same words as the ids in the body — and the empty case
+            is stated too, so the learner is never left guessing whether the
+            source they came from is still attached. */}
+        {attachedLabels.length > 0 ? (
+          <p className="page__note" data-testid="ai-attach-summary">
+            本条提问附带：{attachedLabels.join('、')}。
+            <Button type="button" variant="secondary" onClick={onClearAttachment}>
+              不附带
+            </Button>
+          </p>
+        ) : (
+          <p className="page__note" data-testid="ai-attach-none">
+            本条提问不附带任何材料。
           </p>
         )}
         <textarea

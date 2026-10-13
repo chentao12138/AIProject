@@ -14,9 +14,13 @@
  * W16 cross-module shortcuts (相关学习): question list, practice start,
  * Notes prefill (`?knowledgePointId=`) and an AI-workspace entry are all
  * reachable from the point itself, with the ids this entity really has.
- * The AI entry is a plain route — the contract's SendMessageRequest still
- * takes only `content` (C03), so nothing here claims attached context and
- * no query param is invented for a page that ignores it.
+ * A3.2 (G07): `SendMessageRequest` now takes the four optional context ids, so
+ * the AI entry carries `?attachKnowledgePointId=` — the one context id this
+ * entity owns — and `AiChatPage` sends it in the body and lists it above the
+ * composer. The `attach` prefix is that page's own key vocabulary, not the
+ * Notes prefill keys.
+ * A2.1 (G06): every provenance row that names a source deep-links into the
+ * reader with the source/page/block ids `KnowledgePointSourceResponse` sends.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -258,23 +262,25 @@ export function KnowledgePointDetailPage() {
             </Link>
           </li>
           <li>
-            {/* W16: an entry into the AI workspace only. `SendMessageRequest`
-                is still `{content}` alone (C03 in
-                BACKEND-CONTRACT-REQUESTS.md), and AiChatPage receives nothing
-                but its `:conversationId` route param — so this link carries no
-                context param and the line below states plainly that the
-                knowledge point is not attached. */}
+            {/* A3.2 / G07: this is the id the request body can really carry for
+                this entity, so the AI page attaches it (`SendMessageRequest.
+                knowledgePointId`) and shows it above the composer. The source /
+                page / block trio belongs to the 来源追溯 rows below, where the
+                server supplies those ids per row — naming one here would be a
+                guess about which block the learner means. */}
             <Link
               className="nav-link"
               data-testid="point-ai-link"
-              to={`/spaces/${spaceId}/ai`}
+              to={`/spaces/${spaceId}/ai?${new URLSearchParams({
+                attachKnowledgePointId: String(knowledgePointId),
+              }).toString()}`}
             >
               就此知识点问 AI
             </Link>
           </li>
         </ul>
         <p className="page__note" data-testid="ai-entry-note">
-          问 AI 打开 AI 辅导；这个知识点不会自动附带为上下文，请在提问里描述它。
+          问 AI 打开 AI 辅导，并把这个知识点附带为上下文；发送前可在输入框上方看到或取消它。
         </p>
       </section>
 
@@ -293,41 +299,53 @@ export function KnowledgePointDetailPage() {
           <ul className="point-list">
             {provenanceLinks.map((link, index) => {
               const blockId = link.contentBlockId;
-              // A2.1: the contract now carries sourceId / sourcePageId on
-              // KnowledgePointSourceResponse, so this reads plain fields — there
-              // is no escape hatch to route them through any more.
+              // A2.1 / G06: sourceId and sourcePageId are contract fields of
+              // KnowledgePointSourceResponse now, so this reads plain fields —
+              // there is no escape hatch to route them through any more.
               const { sourceId, sourcePageId } = link;
-              const hasSourceNav =
-                isPositiveId(sourceId) && isPositiveId(blockId);
-              // Built as a real query string: `?page=` is optional, so the
-              // old `&block=` concatenation produced `/sources/5&block=9`
-              // whenever a link had no sourcePageId — an unreadable source
-              // id that landed on not-found.
-              const deepLink = new URLSearchParams();
+              // The reader route is `/spaces/{spaceId}/sources/{sourceId}`, so a
+              // row without a usable source id has no destination at all and
+              // renders as text. Linking it anyway produced a source that 404s.
+              const canOpen = isPositiveId(sourceId);
+              // `?page=` is the source PAGE ROW id the reader selects on
+              // (SourceWorkbenchPage reads `page` off the URL), never a document
+              // page number. A block with no page to look in cannot be located,
+              // so `block` is only ever emitted together with `page`. Built as a
+              // real query string: the old `&block=` concatenation produced
+              // `/sources/5&block=9` whenever a link had no sourcePageId.
+              const params = new URLSearchParams();
               if (isPositiveId(sourcePageId)) {
-                deepLink.set('page', String(sourcePageId));
+                params.set('page', String(sourcePageId));
+                if (isPositiveId(blockId)) {
+                  params.set('block', String(blockId));
+                }
               }
-              if (isPositiveId(blockId)) {
-                deepLink.set('block', String(blockId));
-              }
-              const suffix = deepLink.size > 0 ? `?${deepLink.toString()}` : '';
+              const query = params.toString();
+              // A row may name its block, its source, or neither — the label
+              // says which of the three this is, using only ids that exist.
+              const label = isPositiveId(blockId)
+                ? `正文片段 #${blockId}`
+                : canOpen
+                  ? `学习来源 #${sourceId}`
+                  : '来源内容';
               return (
-                <li key={link.id ?? `prov-${index}`}>
-                  {hasSourceNav ? (
+                <li key={link.id ?? `prov-${index}`} data-testid="provenance-row">
+                  {canOpen ? (
                     <Link
-                      to={`/spaces/${spaceId}/sources/${sourceId}${suffix}`}
+                      to={`/spaces/${spaceId}/sources/${sourceId}${
+                        query ? `?${query}` : ''
+                      }`}
                       className="nav-link"
+                      data-testid="provenance-link"
                     >
-                      Content block #{blockId}
+                      {label}
                     </Link>
                   ) : (
                     /* Provenance without a resolvable source cannot be
-                       navigated: the reader needs both ids. Linking to the
-                       plain source list (as before) was a dead end dressed
-                       up as a deep link. */
-                    <span className="muted">
-                      Content block #{blockId ?? '—'}
-                    </span>
+                       navigated: the reader needs the source id to exist at
+                       all. Linking to the plain source list (as before) was a
+                       dead end dressed up as a deep link. */
+                    <span className="muted">{label}</span>
                   )}
                   {link.relationType ? ` · ${link.relationType}` : ''}
                 </li>

@@ -31,11 +31,11 @@ FE-001 + FE-001.5 + FE-002A + FE-002B + FE-AI-001 + FE-QUESTION/PRACTICE/EXAM/SE
 |---------|-------------------------------------------------------------------------------|-----------------|
 | Practice history score (A5.3) | `GET .../practice-sessions/{sessionId}/result` → `PracticeResultView` | Wired — score comes only from that read; the two 409 codes (`PRACTICE_SESSION_NOT_SUBMITTED`, `PRACTICE_RESULT_NOT_RECORDED`) each get their own copy |
 | Question list paging (A4.2) | `QuestionPageResponse` + `page`/`size` on `GET /questions` | Wired — page from `?page=` |
-| Exam answer resume (A6.2) | `AttemptQuestionView{answer,answered}` on the attempt read | Wiring this round |
-| Exam attempt history (A6.1/W07) | `GET /spaces/{spaceId}/exam-attempts?examId=&status=&page=&size=` | Wiring this round |
-| Full provenance nav (A2.1) | `KnowledgePointSourceResponse.sourceId` / `.sourcePageId` | Wiring this round |
-| AI context chips (A3.2) | `SendMessageRequest{sourceId,sourcePageId,contentBlockId,knowledgePointId}` | Wiring this round |
-| AI reference deep-links (A3.3) | `ContextReference{sourceId,sourcePageId,contentBlockId}` beside `locator` | Wiring this round |
+| Exam answer resume (A6.2) | `AttemptQuestionView{answer,answered}` on the attempt read | Wired — every type's saved answer is rebuilt from the server on entry; `answered:false` stays unanswered |
+| Exam attempt history (A6.1/W07) | `GET /spaces/{spaceId}/exam-attempts?examId=&status=&page=&size=` | Wired — server-paged rows linking back into each attempt; ungraded `SUBMITTED` shows `—`, not `0 / 0` |
+| Full provenance nav (A2.1) | `KnowledgePointSourceResponse.sourceId` / `.sourcePageId` | Wired — links only on the ids the server sent, text otherwise |
+| AI context chips (A3.2) | `SendMessageRequest{sourceId,sourcePageId,contentBlockId,knowledgePointId}` | Wired — narrowest pointer per entry, stated in the composer, 400 on a foreign id leaves no half-written turn |
+| AI reference deep-links (A3.3) | `ContextReference{sourceId,sourcePageId,contentBlockId}` beside `locator` | Wired — one `citationHref` over the registered routes; `locator` printed, never parsed; `WRONG_QUESTION` still text (no `questionId` in the contract) |
 
 ## Still blocked on the contract
 

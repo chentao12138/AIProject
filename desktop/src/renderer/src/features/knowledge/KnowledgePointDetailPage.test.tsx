@@ -4,14 +4,58 @@
  * - DRAFT detail shows a Publish action
  * - PUBLISHED detail shows NO active publish CTA
  * - publish mutation calls publishKnowledgePoint(spaceId, pointId)
+ * - A2.1 (G06): provenance rows deep-link into the reader with the ids the
+ *   server sends, and degrade to text when the ids they need are absent.
+ * - A3.2 (G07): the AI entry carries this point's id as message context.
  */
 
 import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { RouteObject } from 'react-router-dom';
+import { posix } from 'node:path';
 import { KnowledgePointDetailPage } from './KnowledgePointDetailPage';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
 import { NetworkUnavailableError } from '../../lib/api-error';
+import { router } from '../../app/router';
+
+/**
+ * Does a produced href name a route the app actually registers? Re-implements
+ * the check `app/route-contract.test.ts` runs on literal targets, because a
+ * deep link built at runtime (id + optional query) is invisible to that scan.
+ */
+function collectRoutes(routes: readonly RouteObject[], parent = ''): string[] {
+  const out: string[] = [];
+  for (const route of routes) {
+    const raw = (route.path ?? '').replace(/\\/g, '/');
+    if (raw.startsWith('*')) {
+      continue;
+    }
+    const full = posix.join('/', parent, raw);
+    out.push(full);
+    out.push(...collectRoutes(route.children ?? [], full));
+  }
+  return out;
+}
+
+const REGISTERED_ROUTES = collectRoutes(router.routes);
+
+function provenanceRouteResolves(target: string): boolean {
+  const path = target.split('?')[0];
+  const segments = path.split('/').filter(Boolean);
+  return REGISTERED_ROUTES.some((pattern) => {
+    const parts = pattern.split('/').filter(Boolean);
+    return (
+      parts.length === segments.length &&
+      parts.every(
+        (segment, i) =>
+          segment.startsWith(':') ||
+          segments[i].startsWith(':') ||
+          segment === segments[i]
+      )
+    );
+  });
+}
 
 describe('KnowledgePointDetailPage', () => {
   it('shows Publish for a DRAFT point (K1.9)', async () => {
@@ -132,20 +176,22 @@ describe('KnowledgePointDetailPage', () => {
       'href',
       '/spaces/3/notes?knowledgePointId=5'
     );
-    // C03: the contract's SendMessageRequest is `{content}` alone and AiChatPage
-    // reads nothing but `:conversationId`, so this is a bare route — no context
-    // id, and no query key the AI page would silently ignore.
+    // A3.2 / G07: the point's own id now travels into the AI request body (the
+    // contract's SendMessageRequest carries it), so the link names it and the
+    // copy says it is attached instead of denying it.
     expect(screen.getByTestId('point-ai-link')).toHaveAttribute(
       'href',
-      '/spaces/3/ai'
+      '/spaces/3/ai?attachKnowledgePointId=5'
     );
-    // The copy says plainly that nothing is attached.
-    expect(screen.getByTestId('ai-entry-note')).toHaveTextContent('不会自动附带');
+    expect(screen.getByTestId('ai-entry-note')).toHaveTextContent(
+      '把这个知识点附带为上下文'
+    );
 
-    // The provenance row keeps deep-linking into the reader with the ids the
-    // server sends — that reader is where the block-level note link lives.
+    // A2.1 / G06: the provenance row deep-links into the reader with the ids
+    // the server sends on this row — `page` is the source PAGE ROW id (20),
+    // not a document page number, and `block` rides along only with a page.
     expect(
-      screen.getByRole('link', { name: 'Content block #31' })
+      screen.getByRole('link', { name: '正文片段 #31' })
     ).toHaveAttribute('href', '/spaces/3/sources/3?page=20&block=31');
   });
 
@@ -682,8 +728,143 @@ describe('KnowledgePointDetailPage — provenance (FE-002A PHASE 19)', () => {
       routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
     });
 
-    expect(await screen.findByText(/Content block #44/)).toBeInTheDocument();
+    expect(await screen.findByText(/正文片段 #44/)).toBeInTheDocument();
     expect(screen.getByText(/PRIMARY/)).toBeInTheDocument();
+    // A2.1 / G06: this row names a block but no source, so the reader has no
+    // route to open — text, not a link to `/sources/undefined`.
+    expect(
+      screen.queryByRole('link', { name: '正文片段 #44' })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('provenance-link')).not.toBeInTheDocument();
+  });
+
+  it('links a provenance row that names only its source, with no query at all', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: { id: 5, title: 'Point', content: 'body', status: 'DRAFT' },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        data: [{ id: 92, sourceId: 3, relationType: 'PRIMARY' }],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    // A source-level provenance row is still a working deep link: the reader
+    // opens that source. Nothing is invented, so there is no page/block param.
+    expect(await screen.findByRole('link', { name: '学习来源 #3' })).toHaveAttribute(
+      'href',
+      '/spaces/3/sources/3'
+    );
+  });
+
+  it('never emits block without a page, even when the block id is real', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: { id: 5, title: 'Point', content: 'body', status: 'DRAFT' },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        // The block has no page row in the response: `?block=` alone would be a
+        // highlight the reader has no page to apply it on.
+        data: [{ id: 93, sourceId: 3, contentBlockId: 44 }],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    expect(await screen.findByRole('link', { name: '正文片段 #44' })).toHaveAttribute(
+      'href',
+      '/spaces/3/sources/3'
+    );
+  });
+
+  it('refuses to link a provenance row whose source id is not a positive id', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: { id: 5, title: 'Point', content: 'body', status: 'DRAFT' },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        data: [
+          { id: 94, sourceId: 0, sourcePageId: 20, contentBlockId: 44 },
+          { id: 95, sourceId: -7, contentBlockId: 45 },
+        ],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    const rows = await screen.findAllByTestId('provenance-row');
+    // Both rows render, and neither is a link: `/sources/0` would be a 404
+    // dressed up as a deep link.
+    expect(rows).toHaveLength(2);
+    expect(screen.queryAllByTestId('provenance-link')).toEqual([]);
+  });
+
+  it('builds every provenance deep link onto a route the app registers', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: { id: 5, title: 'Point', content: 'body', status: 'DRAFT' },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        data: [
+          { id: 96, sourceId: 3, sourcePageId: 20, contentBlockId: 31 },
+          { id: 97, sourceId: 3 },
+        ],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    const links = await screen.findAllByTestId('provenance-link');
+    expect(links).toHaveLength(2);
+    // The same check `app/route-contract.test.ts` runs, applied to the hrefs
+    // this page can produce: a reader route that does not exist is a broken
+    // audit item, not a page.
+    for (const link of links) {
+      expect(
+        provenanceRouteResolves(link.getAttribute('href') ?? '')
+      ).toBe(true);
+    }
   });
 
   it('shows empty provenance note when no links exist', async () => {

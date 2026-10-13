@@ -318,6 +318,10 @@ NoteView {
 
 ## A2.1 KnowledgePoint → Source provenance navigation
 
+**Status (2026-10-14): delivered and built.** `KnowledgePointSourceResponse` now
+carries `sourceId` and `sourcePageId`, and the knowledge detail page links to the
+exact page with the block in the query. The gap text below is the 2026-10-13 reading.
+
 **Checklist:** A2.1  
 **Current gap:** `KnowledgePointSourceResponse` (returned by `GET /knowledge-points/{id}/sources`) only contains `contentBlockId`. The frontend can deep-link to Source with `?block=` but cannot navigate to the exact Source page or confirm ownership.
 
@@ -349,6 +353,17 @@ KnowledgePointSourceResponse {
 
 ## A3.2 Source / Knowledge → Ask AI context
 
+**Status (2026-10-14): delivered and built.** `SendMessageRequest{content,sourceId,
+sourcePageId,contentBlockId,knowledgePointId}`. The backend's own context resolver
+(fresh checkout `D:\AIProject\server`, `ai/context/AiLearningContextService.java:142-193`)
+checks each id for ownership AND space scope and answers 400 `VALIDATION_ERROR` on a
+foreign one (`:344-347`), 400 on a `sourceId`/`sourcePageId` mismatch (`:349-352`), and
+resolves the ids *before* persisting the user message (`AiConversationService.java:253-260`)
+— so a refused attachment leaves no half-completed turn. Because a block already fixes its
+page and source server-side, the client sends the narrowest single pointer, never a trio.
+**New ask from this work:** `SendMessageRequest` has no `questionId`, so a question /
+practice / exam entry cannot attach anything and must keep saying so.
+
 **Checklist:** A3.2  
 **Current gap:** `SendMessageRequest` only contains `content?: string`. The AI tutor cannot receive context identifiers, so it cannot answer questions scoped to a specific Source page, ContentBlock, or KnowledgePoint.
 
@@ -375,6 +390,19 @@ SendMessageRequest {
 ---
 
 ## A3.3 AI reference/citation stable IDs
+
+**Status (2026-10-14): delivered and built, with one leftover.** `ContextReference`
+now carries `sourceId`, `sourcePageId` and `contentBlockId` alongside `locator`, and
+navigation reads those ids — `locator` is a printed label only (the citation table's
+`CHECK` list is `SOURCE, SOURCE_PAGE, CONTENT_BLOCK, KNOWLEDGE_POINT, QUESTION,
+WRONG_QUESTION, NOTE` per `V065__ai_reference_structured_locators.sql:32-35`), and a
+test asserts a `P12`-style locator can never leak into a route. Because those pointer
+columns are `ON DELETE SET NULL` (`:24-27`), a citation can legitimately arrive with
+them absent while `id` names a dead row, so nothing links off `id` for source-tree
+types — that case renders as text.
+**New ask:** `WRONG_QUESTION` has no navigable target — `ContextReference` carries no
+`questionId`, and the desktop has no wrong-question route. Add `questionId` (or reuse
+`knowledgePointId`-style structured pointers) and that citation becomes linkable.
 
 **Checklist:** A3.3  
 **Current gap:** AI response references (`references[]` on assistant messages) use `type` + `id` + `title` + `snippet`. The frontend can navigate to Source / KnowledgePoint / Question when `id` is present. However, for Source references the backend should also provide `sourcePageId` so the deep-link can jump to the exact page.

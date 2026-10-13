@@ -1093,15 +1093,16 @@ describe('SourceWorkbenchPage — note / ask-AI entry points (W16)', () => {
       'href',
       '/spaces/7/notes?sourceId=3'
     );
-    // C03: the AI page accepts nothing but its conversation param, so this is
-    // a bare route — no context id, no invented query key.
+    // A3.2 / G07: the AI entry carries that same id, and it is the AI page's
+    // own `attach…` key rather than a Notes prefill key, because AiChatPage
+    // puts it in the request body as SendMessageRequest.sourceId.
     expect(screen.getByTestId('source-ai-link')).toHaveAttribute(
       'href',
-      '/spaces/7/ai'
+      '/spaces/7/ai?attachSourceId=3'
     );
-    // …and the copy says so instead of implying an attachment.
+    // …and the copy now states what actually travels with the message.
     expect(screen.getByTestId('ai-entry-note')).toHaveTextContent(
-      '不会自动附带'
+      '把这条来源附带为上下文'
     );
   });
 
@@ -1126,6 +1127,52 @@ describe('SourceWorkbenchPage — note / ask-AI entry points (W16)', () => {
       'href',
       '/spaces/7/notes?sourceId=3&sourcePageId=21'
     );
+  });
+
+  it('attaches the page on screen to the AI question and follows page changes', async () => {
+    const user = userEvent.setup();
+    await renderReader();
+
+    // A3.2 / G07: only this page's id is named. The backend derives the owning
+    // source from it (AiLearningContextService.resolveSelectedContext), and a
+    // source/page pair that disagrees is its own 400 — so the entry carries the
+    // narrowest pointer the screen really has.
+    expect(screen.getByTestId('page-ai-link')).toHaveAttribute(
+      'href',
+      '/spaces/7/ai?attachSourcePageId=20'
+    );
+
+    await user.click(screen.getByRole('button', { name: '下一页' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('page-indicator')).toHaveTextContent(
+        'Page 2 of 2'
+      );
+    });
+    expect(screen.getByTestId('page-ai-link')).toHaveAttribute(
+      'href',
+      '/spaces/7/ai?attachSourcePageId=21'
+    );
+  });
+
+  it('attaches a content block to the AI question, and skips a block without an id', async () => {
+    await renderReader();
+
+    // A3.2 / G07: the block is the narrowest pointer on this screen.
+    const links = screen.getAllByTestId('block-ai-link');
+    expect(links).toHaveLength(2);
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/spaces/7/ai?attachContentBlockId=31',
+      '/spaces/7/ai?attachContentBlockId=32',
+    ]);
+    // The id-less row the fixtures include gets no entry at all — an
+    // `attachContentBlockId=undefined` link would send a message the server
+    // rejects, so it is not offered.
+    expect(screen.getByText('idless block')).toBeInTheDocument();
+    expect(
+      document.querySelector<HTMLAnchorElement>(
+        'a[href*="attachContentBlockId=undefined"], a[href*="attachContentBlockId=0"]'
+      )
+    ).toBeNull();
   });
 
   it('prefills a note with the content block, its page and its source', async () => {
