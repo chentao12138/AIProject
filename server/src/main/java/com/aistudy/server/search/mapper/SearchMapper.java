@@ -34,8 +34,12 @@ public interface SearchMapper {
      * @param containsPattern {@code %}-wrapped LIKE pattern, escaped
      * @param matchQuery      FULLTEXT argument, never LIKE-escaped; ignored
      *                        when {@code useFulltext} is {@code false}
-     * @param useFulltext     whether the V054 ngram indexes can serve this
-     *                        query (see {@code SearchFulltextQuery})
+     * @param useFulltext     whether the V054 ngram indexes can tokenize this
+     *                        query at all (see {@code SearchFulltextQuery});
+     *                        when {@code false} no MATCH is evaluated
+     * @param fulltextSelects whether {@code MATCH(...) > 0} may also decide
+     *                        WHICH rows are returned; false keeps the escaped
+     *                        LIKE predicate as the sole row filter
      * @param limit           row cap; callers pass size + 1 to detect a next page
      * @param offset          zero-based row offset
      * @param types           requested entity types; empty means all branches
@@ -49,6 +53,7 @@ public interface SearchMapper {
                                             @Param("containsPattern") String containsPattern,
                                             @Param("matchQuery") String matchQuery,
                                             @Param("useFulltext") boolean useFulltext,
+                                            @Param("fulltextSelects") boolean fulltextSelects,
                                             @Param("limit") int limit,
                                             @Param("offset") int offset,
                                             @Param("types") List<String> types);
@@ -69,7 +74,8 @@ public interface SearchMapper {
      * @param prefixPattern   {@code %}-wrapped LIKE pattern, escaped
      * @param containsPattern {@code %}-wrapped LIKE pattern, escaped
      * @param matchQuery      FULLTEXT argument, never LIKE-escaped
-     * @param useFulltext     whether the V054 ngram indexes are consulted
+     * @param useFulltext     whether MATCH contributes to the score ladder
+     * @param fulltextSelects whether MATCH may also widen the row set
      * @param types           requested entity types; empty means all branches
      * @return count of ranked hits, never negative
      */
@@ -81,5 +87,6 @@ public interface SearchMapper {
                      @Param("containsPattern") String containsPattern,
                      @Param("matchQuery") String matchQuery,
                      @Param("useFulltext") boolean useFulltext,
+                     @Param("fulltextSelects") boolean fulltextSelects,
                      @Param("types") List<String> types);
 }

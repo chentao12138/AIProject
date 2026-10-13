@@ -267,6 +267,25 @@ class SearchMapperSqlTest {
     }
 
     /**
+     * A punctuation-bearing query may be RANKED by FULLTEXT but must never be
+     * ROW-SELECTED by it: ngram drops % and _ as delimiters, so allowing MATCH
+     * in the WHERE would return "100X完成" for the literal query "100%" and
+     * defeat the SearchLikeEscape wildcard behaviour.
+     */
+    @Test
+    void punctuatedQueryIsRankedButNeverSelectedByFulltext() {
+        String widening = sqlWith("searchProjection", ALL_TYPES, true, true, true);
+        String rankingOnly = sqlWith("searchProjection", ALL_TYPES, true, false, true);
+        assertEquals(ALL_TYPES.size() * 2, occurrences(widening, "natural language mode"), widening);
+        assertEquals(ALL_TYPES.size(), occurrences(rankingOnly, "natural language mode"),
+                "MATCH may only contribute the boost when the query carries punctuation");
+        assertEquals(ALL_TYPES.size(),
+                occurrences(rankingOnly, "end + least(9, round(match("), rankingOnly);
+        assertEquals(occurrences(widening, ESCAPE), occurrences(rankingOnly, ESCAPE),
+                "the escaped LIKE ladder must be identical in both modes");
+    }
+
+    /**
      * The boost is capped below the smallest tier gap (10) so relevance can
      * only ever refine ranking INSIDE a tier, and the LIKE ladder keeps its
      * escape handling in both modes.
@@ -388,6 +407,11 @@ class SearchMapperSqlTest {
     }
 
     private BoundSql bound(String statement, List<String> types, boolean useFulltext, boolean paged) {
+        return bound(statement, types, useFulltext, useFulltext, paged);
+    }
+
+    private BoundSql bound(String statement, List<String> types, boolean useFulltext,
+                           boolean fulltextSelects, boolean paged) {
         MappedStatement ms = configuration.getMappedStatement(NAMESPACE + "." + statement);
         Map<String, Object> params = new HashMap<>();
         params.put("spaceId", 1L);
@@ -398,12 +422,18 @@ class SearchMapperSqlTest {
         params.put("containsPattern", "%数据库%");
         params.put("matchQuery", "数据库");
         params.put("useFulltext", useFulltext);
+        params.put("fulltextSelects", fulltextSelects);
         params.put("types", types);
         if (paged) {
             params.put("limit", 21);
             params.put("offset", 0);
         }
         return ms.getBoundSql(params);
+    }
+
+    private String sqlWith(String statement, List<String> types, boolean useFulltext,
+                           boolean fulltextSelects, boolean paged) {
+        return normalize(bound(statement, types, useFulltext, fulltextSelects, paged).getSql());
     }
 
     /**

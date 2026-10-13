@@ -102,11 +102,16 @@ public class MySqlSearchService implements SearchService {
         // word characters, so single-character or punctuation-only queries must
         // stay on the LIKE path or they would return nothing at all.
         boolean useFulltext = SearchFulltextQuery.isFulltextUsable(normalized);
+        // A punctuation-bearing query may be RANKED by FULLTEXT but must not be
+        // ROW-SELECTED by it: ngram drops % and _ as delimiters, which would
+        // match "100X完成" for the literal query "100%" and defeat
+        // SearchLikeEscape's wildcard guarantees.
+        boolean fulltextSelects = SearchFulltextQuery.selectsRowsByFulltext(normalized);
         String matchQuery = SearchFulltextQuery.normalize(normalized);
 
         List<SearchProjection> projections = searchMapper.searchProjection(
                 spaceId, ownerSubject, userSubject, normalized,
-                prefixPattern, containsPattern, matchQuery, useFulltext,
+                prefixPattern, containsPattern, matchQuery, useFulltext, fulltextSelects,
                 safeSize + 1, offset,
                 normalizedTypes);
 
@@ -125,7 +130,7 @@ public class MySqlSearchService implements SearchService {
 
         long totalElements = searchMapper.searchCount(
                 spaceId, ownerSubject, userSubject, normalized,
-                prefixPattern, containsPattern, matchQuery, useFulltext,
+                prefixPattern, containsPattern, matchQuery, useFulltext, fulltextSelects,
                 normalizedTypes);
 
         int totalPages = (int) Math.max(1, Math.ceil((double) totalElements / safeSize));

@@ -59,6 +59,34 @@ public final class SearchFulltextQuery {
     }
 
     /**
+     * Whether the query consists only of word characters and whitespace, so
+     * the ngram tokenizer sees the same text the user typed.
+     *
+     * <p>WHY this matters separately from {@link #isFulltextUsable(String)}:
+     * ngram drops {@code %}, {@code _} and operators as delimiters, so
+     * {@code "100%"} becomes the tokens {@code 10}/{@code 00} and would match
+     * {@code "100X完成"} through FULLTEXT. Queries that carry punctuation must
+     * therefore keep LIKE as the SOLE row filter, otherwise the literal-wildcard
+     * guarantees of {@link SearchLikeEscape} would regress.
+     *
+     * @param query raw trimmed user query
+     * @return {@code true} when {@code MATCH ... AGAINST} may also decide WHICH
+     *         rows are returned, {@code false} when it may only rank them
+     */
+    public static boolean selectsRowsByFulltext(String query) {
+        if (!isFulltextUsable(query)) {
+            return false;
+        }
+        for (int i = 0; i < query.length(); i++) {
+            char ch = query.charAt(i);
+            if (!isWordChar(ch) && !Character.isWhitespace(ch)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Normalizes the query for the FULLTEXT argument.
      *
      * <p>The MATCH argument must NOT carry the LIKE escaping of

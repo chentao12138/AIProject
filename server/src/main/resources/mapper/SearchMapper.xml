@@ -36,19 +36,25 @@
        predicates never block an admin screen.
 
     3) Scoring (F-03 / F-04)
+       Two flags from the service drive the FULLTEXT path:
+         useFulltext     - the ngram parser can tokenize this query at all
+                           (>= ngram_token_size word characters). When false no
+                           MATCH is evaluated anywhere and the statement is pure
+                           LIKE.
+         fulltextSelects - useFulltext AND the query is word-only (no
+                           punctuation / operators). Only then does
+                           MATCH(...) > 0 participate in the WHERE as an
+                           alternative to the LIKE predicate.
        - Deterministic LIKE tiers (exact / prefix / contains) are unchanged and
          remain the ordering backbone; `score > 0` is the row filter, so a row
          scores 0 only when it matches nothing.
-       - When `useFulltext` is true the V054 ngram indexes are consulted twice:
-         MATCH ... AGAINST(...) > 0 widens the WHERE (so a row that only the
-         index finds is still returned) and contributes a relevance boost.
-       - The boost is capped at 9, strictly below the smallest tier gap (10,
-         in the CONTENT_BLOCK ladder), so relevance refines ranking INSIDE a
-         tier and can never reorder tiers.
-       - The LIKE fallback stays in the WHERE in both modes: queries shorter
-         than ngram_token_size and queries made only of non-word characters
-         have no index entry at all (see SearchFulltextQuery), and the LIKE
-         path keeps its SearchLikeEscape-protected patterns.
+       - The MATCH boost is capped at 9, strictly below the smallest tier gap
+         (10, in the CONTENT_BLOCK ladder), so relevance refines ranking INSIDE
+         a tier and can never reorder tiers.
+       - The escaped LIKE predicate stays in the WHERE in every mode: it is the
+         sole row filter for punctuation-bearing queries, because ngram ignores
+         % and _ as delimiters and would otherwise match "100X完成" for the
+         literal query "100%" (SearchLikeEscape semantics must not regress).
        - MATCH arguments use the RAW normalized query (`matchQuery`), never the
          LIKE-escaped one: a backslash is a literal character for the index.
        - source_page and content_block additionally MUST match the same score
@@ -91,7 +97,7 @@
           AND s.status = 'PUBLISHED'
           AND (
             s.title LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
         UNION ALL
       </if>
@@ -136,7 +142,7 @@
                OR sp.extraction_revision_id = s.current_extraction_revision_id)
           AND (
             cb.normalized_text LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
         UNION ALL
       </if>
@@ -181,7 +187,7 @@
             kp.title LIKE #{containsPattern} ESCAPE '\\'
             OR kp.summary LIKE #{containsPattern} ESCAPE '\\'
             OR kp.content LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
         UNION ALL
       </if>
@@ -218,7 +224,7 @@
           AND q.status = 'PUBLISHED'
           AND (
             q.stem LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
         UNION ALL
       </if>
@@ -258,7 +264,7 @@
           AND ls.owner_subject = #{ownerSubject}
           AND (
             q.stem LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
         UNION ALL
       </if>
@@ -296,7 +302,7 @@
           AND (
             n.title LIKE #{containsPattern} ESCAPE '\\'
             OR n.content LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
         UNION ALL
       </if>
@@ -319,7 +325,7 @@
           AND s.status = 'PUBLISHED'
           AND (
             s.title LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
           AND CASE
             WHEN s.title = #{exactQuery} THEN 100
@@ -352,7 +358,7 @@
                OR sp.extraction_revision_id = s.current_extraction_revision_id)
           AND (
             cb.normalized_text LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
           AND CASE
             WHEN cb.normalized_text = #{exactQuery} THEN 40
@@ -379,7 +385,7 @@
             kp.title LIKE #{containsPattern} ESCAPE '\\'
             OR kp.summary LIKE #{containsPattern} ESCAPE '\\'
             OR kp.content LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
           AND CASE
             WHEN kp.title = #{exactQuery} THEN 100
@@ -406,7 +412,7 @@
           AND q.status = 'PUBLISHED'
           AND (
             q.stem LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
           AND CASE
             WHEN q.stem = #{exactQuery} THEN 60
@@ -434,7 +440,7 @@
           AND ls.owner_subject = #{ownerSubject}
           AND (
             q.stem LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
           AND CASE
             WHEN q.stem = #{exactQuery} THEN 60
@@ -460,7 +466,7 @@
           AND (
             n.title LIKE #{containsPattern} ESCAPE '\\'
             OR n.content LIKE #{containsPattern} ESCAPE '\\'
-            <if test="useFulltext">OR MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+            <if test="fulltextSelects">OR MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
           AND CASE
             WHEN n.title = #{exactQuery} THEN 80

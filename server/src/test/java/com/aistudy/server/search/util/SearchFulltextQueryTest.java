@@ -53,6 +53,20 @@ class SearchFulltextQueryTest {
     }
 
     @Test
+    void onlyWordQueriesMaySelectRows() {
+        assertTrue(SearchFulltextQuery.selectsRowsByFulltext("数据库"));
+        assertTrue(SearchFulltextQuery.selectsRowsByFulltext("数据库 教程"),
+                "whitespace separates ngram tokens and is harmless");
+        assertFalse(SearchFulltextQuery.selectsRowsByFulltext("100%"),
+                "ngram drops % as a delimiter, so it must not decide which rows are returned");
+        assertFalse(SearchFulltextQuery.selectsRowsByFulltext("a_b"));
+        assertFalse(SearchFulltextQuery.selectsRowsByFulltext("索引B+树"));
+        assertFalse(SearchFulltextQuery.selectsRowsByFulltext("数"),
+                "not indexable at all");
+        assertFalse(SearchFulltextQuery.selectsRowsByFulltext(null));
+    }
+
+    @Test
     void normalizeCollapsesWhitespaceAndNeverKeepsLikeEscaping() {
         assertEquals("数据库 教程", SearchFulltextQuery.normalize("  数据库\n 教程  "));
         assertEquals("100\\%完成", SearchFulltextQuery.normalize("100\\%完成"),
