@@ -733,3 +733,62 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
   说法。受影响的一处详情页断言同步改成断言新的可及名称。
   门禁：**70 files / 975 tests**、lint 0、typecheck 0。真实读屏器与 1024×700
   等分辨率证据仍属运行期（挂在账号后）。
+
+## 2026-10-14（第三轮）：契约缺口里有一半已经不存在了
+
+- **`api:live` 第一次真的干活**：把已提交快照与 `http://localhost:8080/v3/api-docs`
+  做规范化比对后确认 197-path 快照就是运行中服务发的文档（`api:check` 与 `api:live`
+  双绿）。这条门的意义在这一轮才显出来——`BACKEND-CONTRACT-REQUESTS.md` 里
+  **C02/C03/C04/C06/C10/C11/C-Paging 七行还写着"后端没做"**，而快照里字段和端点
+  一个都不缺：`KnowledgePointSourceResponse.sourceId/sourcePageId`、
+  `SendMessageRequest{sourceId,sourcePageId,contentBlockId,knowledgePointId}`、
+  `ContextReference` 的同名 id、`GET .../practice-sessions/{id}/result`、
+  `AttemptQuestionView{answer,answered}`、
+  `GET /spaces/{spaceId}/exam-attempts?examId=&status=&page=&size=`、
+  `QuestionPageResponse`。也就是说这些行**已经不是我该等的东西，而是我该做的活**；
+  矩阵与冒烟文档里对应的"Blocked by contract"行因此被移进新的
+  "Closed by the contract wave — frontend work"表，并逐行写明契约证据。
+- **C11 的形状问题在我方消失了**：后端问我们要「单卷 attempt 分页」还是「跨卷最近
+  attempt」，实际发的空间级列表用 `examId` 当可选过滤器同时覆盖两种。已回信
+  **明确请他们不要再补 `/exams/{examId}/attempts`**——先扫现有 path 再要点子，
+  省掉一个端点和一次联调。
+- **散文声明 vs 契约事实（C05）**：后端消息写「PUT /questions/{id}（仅 DRAFT 可改）」，
+  但同仓 `QuestionService.update()`（QuestionService.java:122-126）只拦 ARCHIVED
+  → 控制器 404（QuestionController.java:72-76），PUBLISHED 是能改进去的；重生成后的
+  这个 operation **连 description 都没有，响应只列 200**。两边证据都摆在
+  `BACKEND-CONTRACT-REQUESTS.md` 的 C05 行里，并把状态记成**未验证**而不是"已交付"：
+  既没有据散文给 UI 加 PUBLISHED 门禁（那会禁掉服务端其实允许的操作），也没有放行到
+  详情页/列表页的「编辑」入口逻辑——它保持只禁 ARCHIVED，这是能证明的那一半。
+  已一次一条问后端：运行中到底拦不拦、返回码是什么，并要求把规则落进契约
+  （`@Operation(description=…)` 或结构化 409+错误码）。
+- **同仓 `server/` 副本自己就旧**：`db/migration` 最大编号是
+  `V057__add_note_context_links.sql`，而后端实例已跑到 **V066**（practice 的
+  score/max_score/answered_count/correct_count 四列就是 V066 加的）。全仓 grep
+  `PRACTICE_SESSION_NOT_SUBMITTED`、`PRACTICE_RESULT_NOT_RECORDED` **零命中**。
+  结论：**"读 Java 常量"的守卫测试在这里没有源可读**，硬写只会得到一个正则空匹配的
+  假守卫。所以 A5.3 的两条码写成 `format.ts` 的命名常量
+  （`PRACTICE_RESULT_ERROR_CODES`），注释里写清出处是后端消息 + main V066，
+  并把"码进契约"记在 C11/C12 的开放项里。
+- **A5.3 / C06 分数闭环**：交卷后的成绩页不再留任何 `finish` 响应里的数字，改为每次
+  mount 调 `GET .../practice-sessions/{id}/result`（`usePracticeResult` +
+  纯函数 `practiceResultState` 把 `PracticeResultView` 映射成
+  `no-payload / unknown-status / not-finished / unscored / graded` 五态）。
+  `finish` 的返回值与 result 载荷**故意互相矛盾**地写进测试，再断言屏幕上的数字来自
+  后者——这才是"内存不是成绩来源"的证据。删掉了 `usePracticeSubmitSummary`
+  （应用内唯一的内存分数缓存）与随之失效的 `PracticeSubmitSummary` 类型和
+  `queryKeys.practiceSubmit`。
+- 同轮把两条 409 码接上：`apiProblemCode()`（`lib/api-error.ts`，只读 ProblemDetail
+  的 `code`，`normalizeApiError` 的安全文案不受影响）+
+  `practiceResultErrorNotice()`。"还没交卷"和"结束时后端还没有分数字段"是两件事，
+  后者尤其不能被读成 0 分；未知码保持原文案，不冒充已知原因。英文 `detail`
+  不进 UI（测试直接断言 `queryByText(/some internal english text/)` 为 null）。
+- 后端还告知 `explanation` 在 answers 列表里恒为 null 是**缺陷**不是设计（他们修），
+  因此 PracticeReviewList 保留"缺解析"的可见状态而不是把它渲染成空字符串。
+- 未跟踪文件 `login.json` / `spec-live.json`：后端提醒"看着像调试产物、别提交凭据"。
+  在本仓全深度（排除 `node_modules`/`.git`）搜过——`find` 无命中、`git ls-files`
+  无命中、`git status --ignored` 也没有任何 json 产物。**这两个文件不在我这棵树里**，
+  应属后端自己的 checkout。提交前照旧扫了 staged diff 的
+  `password|secret|token|authorization` 关键字，干净。
+- 门禁（本轮实跑）：`api:check` 与 `api:live` 双绿；lint 0（本轮改动文件）；
+  typecheck 0；practice + lib + questions 三条 lane 共 **88 + 400** 测试绿。
+  全量门禁等仍在写的 exams / ai 两条 lane 收口后重跑并在此更新数字。

@@ -20,24 +20,33 @@ FE-001 + FE-001.5 + FE-002A + FE-002B + FE-AI-001 + FE-QUESTION/PRACTICE/EXAM/SE
 | AI Settings | `/settings/ai` | Implemented |
 | Questions | `/spaces/:spaceId/questions`, `/spaces/:spaceId/questions/new`, `/spaces/:spaceId/questions/:questionId` | Implemented — create (all seven types), publish, edit, archive/restore. The contract's `UpdateQuestionRequest` only carries stem/explanation/difficulty, so options and the correct answer stay read-only and the UI says so |
 | Notes | `/spaces/:spaceId/notes`, `/spaces/:spaceId/notes/:noteId` | Implemented — paged list + keyword, create, edit with unsaved-changes guard, archive/delete, knowledge-point and content-block links |
-| Practice | `/spaces/:spaceId/practice`, `/spaces/:spaceId/practice/:sessionId` | Implemented |
+| Practice | `/spaces/:spaceId/practice`, `/spaces/:spaceId/practice/:sessionId` | Implemented — resume reads `GET .../answers`, and a finished session's score reads `GET .../result` on every visit; nothing is kept from the `finish` response and no number is counted client-side (ADR-031) |
 | Exams | `/spaces/:spaceId/exams`, `/spaces/:spaceId/exams/:examId`, `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | Implemented |
 | Search | `/spaces/:spaceId/search` | Implemented |
 | Auth | `/login` | Implemented |
 
-## Blocked (A-class, pending backend contract)
+## Closed by the contract wave — frontend wiring, not a backend gap
+
+| Feature | Contract that closed it (verified in the committed snapshot; `api:live` green) | Frontend status |
+|---------|-------------------------------------------------------------------------------|-----------------|
+| Practice history score (A5.3) | `GET .../practice-sessions/{sessionId}/result` → `PracticeResultView` | Wired — score comes only from that read; the two 409 codes (`PRACTICE_SESSION_NOT_SUBMITTED`, `PRACTICE_RESULT_NOT_RECORDED`) each get their own copy |
+| Question list paging (A4.2) | `QuestionPageResponse` + `page`/`size` on `GET /questions` | Wired — page from `?page=` |
+| Exam answer resume (A6.2) | `AttemptQuestionView{answer,answered}` on the attempt read | Wiring this round |
+| Exam attempt history (A6.1/W07) | `GET /spaces/{spaceId}/exam-attempts?examId=&status=&page=&size=` | Wiring this round |
+| Full provenance nav (A2.1) | `KnowledgePointSourceResponse.sourceId` / `.sourcePageId` | Wiring this round |
+| AI context chips (A3.2) | `SendMessageRequest{sourceId,sourcePageId,contentBlockId,knowledgePointId}` | Wiring this round |
+| AI reference deep-links (A3.3) | `ContextReference{sourceId,sourcePageId,contentBlockId}` beside `locator` | Wiring this round |
+
+## Still blocked on the contract
 
 | Feature | Blocker | Contract request |
 |---------|---------|------------------|
-| AI context chips (A3.2) | `SendMessageRequest` only has `content` | C03 in `desktop/BACKEND-CONTRACT-REQUESTS.md` |
-| Full provenance nav (A2.1) | `KnowledgePointSourceResponse` missing `sourceId`/`sourcePageId` | C02, same file |
-| AI reference deep-links (A3.3) | `ContextReference.locator` is free text; no page/block ids | C04, same file |
-| Exam answer resume (A6.2) | `/exam-attempts/{id}/answers` is POST-only and `AttemptQuestionView` has no answer | C10, same file |
-| Practice history score (A5.3) | Session read model has no score; only the `finish` response does | C06, delivered only for the per-question review |
-| Question list paging (A4.2) | `GET /questions` accepts no `page`/`size` | C-Paging, same file |
-| Show a stored standard order / pair set | `QuestionAnswerView` has neither `correctOrder` nor `matches` | C09b, same file |
+| Show a stored standard order / pair set | `QuestionAnswerView` has neither `correctOrder` nor `matches` (re-verified against the 197-path snapshot) | C09b, `desktop/BACKEND-CONTRACT-REQUESTS.md` |
+| Notes archive is one-way and invisible | `POST /notes/{id}/archive` exists but there is no restore, `NoteView` has no `archivedAt`, and the list filters archived rows out | C-Notes-archive / C-Notes-reverse / C-Notes-link-noop, same file |
+| Every status/kind field | Still bare `string` — `questionType`, `status`, and the conflict `code`s are not enums in the contract, which is why the vocabulary guards read Java constants instead | C09 (enums) / C12 (codes), same file |
+| Whether a PUBLISHED question may be edited | The backend's prose says DRAFT-only; `QuestionService.update()` (QuestionService.java:122-126) rejects only ARCHIVED, and the operation carries no description or non-200 response. Recorded as **unverified**, and the UI keeps only the gate it can prove | C05 precondition, same file |
 
-Notes (A8) and question edit (A4.5) left this table on 2026-10-14: the
+Notes (A8) and question edit (A4.5) left the blocked table on 2026-10-14: the
 regenerated contract carries both, and the frontend implements them now.
 
 ## Out of scope (B-class)
@@ -75,7 +84,16 @@ What must be green before any release claim:
 
 ## Remaining work
 
-1. Contract asks C02/C03/C04/C06(score)/C09b/C10/C11/C-Paging — backend side.
-2. A10 installed-app auth smoke (manual, needs a desktop test account).
-3. A11.3 critical E2E smoke (manual, same).
-4. R02 install/uninstall of the real NSIS artifact — produced but never installed.
+1. Frontend wiring for the rows that moved out of blocked above (exam resume,
+   attempt history, provenance deep links, AI context ids, citation navigation),
+   then the full gates and a rebuilt artifact.
+2. Backend asks that are still real: C09 (typed matching pairs + `questionType`
+   and `status` enums), C09b (read side of `correctOrder` / `matches`), C12
+   (discriminable codes — including the two practice-result codes, which exist
+   only in a chat message because this workspace's `server/` copy stops at V057),
+   the C-Notes follow-ups, C05's precondition, and the `answers` list returning
+   `explanation: null` always (the backend called that a defect they will fix).
+3. A10 installed-app auth smoke (manual, needs a desktop test account).
+4. A11.3 critical E2E smoke (manual, same).
+5. R02 install/uninstall of the real NSIS artifact — done once; re-run against the
+   next build.
