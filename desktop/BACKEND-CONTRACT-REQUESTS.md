@@ -506,6 +506,35 @@ string[]` (already requested in C09) or drop the "comma-delimited per blank"
 javadoc so the contract and the code agree.
 
 
+## Answer payload rules the renderer must obey (verified in the server, 2026-10-14)
+
+Not asks — constraints our code has to satisfy, read out of
+`practice/service/PracticeAnswerService.java:255-345` and
+`exam/service/ExamAttemptService.java:660-690`:
+
+1. **One field per answer.** Each type branch rejects any other populated field:
+   `ORDERING answer must only carry orderingAnswer`, `TRUE_FALSE … only carry
+   booleanAnswer`, and so on. A payload builder that keeps `selectedOptionKeys`
+   filled while adding `orderingAnswer` gets a 400 on practice.
+2. **ORDERING indices are 1-based on practice** —
+   `PracticeAnswerRequest.orderingAnswer` is
+   `List<@Min(1) Integer>`, so a 0 is a 400 there. The exam DTO
+   (`ExamAttemptDto`:100) has only `@Size(max = 100)` and **no** `@Min`, and
+   `ExamAttemptService`:675 still accepts the legacy `selectedOptionKeys` order
+   for ORDERING. Ask (C-Ordering-space): make both surfaces agree, so a
+   zero-based or dual-field payload is not silently acceptable in one path and a
+   400 in the other.
+3. **FILL_BLANK grading is whole-string.** `QuestionAnswerEvaluator.gradeFillBlank`
+   does `payload.textAnswer().trim().equals(reference.trim())`, so blanks are only
+   correct when they match the reference's exact punctuation and order. The
+   practice error copy says `textAnswer (JSON array string)` but nothing parses a
+   JSON array — `PracticeAnswerService`:319 forwards it verbatim into that
+   string comparison. Ask (minor): either implement per-blank comparison or fix
+   the message, because the two together teach a future reader that a JSON array
+   is expected.
+
+---
+
 ## Resolution order
 
 Rewritten after the `main` merge, because the original list assumed the backend
