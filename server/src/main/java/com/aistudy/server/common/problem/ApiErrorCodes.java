@@ -36,6 +36,15 @@ public final class ApiErrorCodes {
     public static final String AI_NOT_CONFIGURED = "AI_NOT_CONFIGURED";
     public static final String AI_PROVIDER_UNAVAILABLE = "AI_PROVIDER_UNAVAILABLE";
 
+    /**
+     * The practice result was requested while the session is still open
+     * (C06). {@code CONFLICT} alone cannot tell the client "answer more
+     * questions" from "this session belongs to another space".
+     */
+    public static final String PRACTICE_SESSION_NOT_SUBMITTED = "PRACTICE_SESSION_NOT_SUBMITTED";
+    /** The session predates V066 and therefore has no stored summary. */
+    public static final String PRACTICE_RESULT_NOT_RECORDED = "PRACTICE_RESULT_NOT_RECORDED";
+
     private ApiErrorCodes() {
     }
 

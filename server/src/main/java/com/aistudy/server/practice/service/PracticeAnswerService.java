@@ -3,6 +3,7 @@ package com.aistudy.server.practice.service;
 import com.aistudy.server.practice.dto.PracticeAnswerRequest;
 import com.aistudy.server.practice.dto.PracticeAnswerResponse.PracticeAnswerView;
 import com.aistudy.server.practice.dto.PracticeAnswerResponse.PracticeSubmitView;
+import com.aistudy.server.practice.dto.PracticeSessionResponse;
 import com.aistudy.server.practice.entity.PracticeAnswer;
 import com.aistudy.server.practice.entity.PracticeSession;
 import com.aistudy.server.practice.entity.PracticeSessionQuestion;
@@ -16,6 +17,8 @@ import com.aistudy.server.question.eval.QuestionAnswerEvaluator;
 import com.aistudy.server.question.eval.QuestionAnswerEvaluator.AnswerPayload;
 import com.aistudy.server.question.eval.QuestionAnswerEvaluator.GradeResult;
 import org.springframework.http.HttpStatus;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -243,8 +246,58 @@ public class PracticeAnswerService {
                 .toList();
         masteryService.recomputeForQuestions(ownerSubject, spaceId, answeredQuestionIds);
 
+        // C06: persist the summary with the submission — inside this same
+        // transaction — so the result of a finished session stays readable
+        // after a reload instead of living only in the client's component state.
+        practiceSessionMapper.storeResultByIdAndSpace(sessionId, spaceId, ownerSubject,
+                score, maxScore, answeredCount, correctCount, now);
+
         return PracticeSubmitView.from(sessionId, slots.size(), answeredCount,
                 correctCount, score, maxScore);
+    }
+
+    /**
+     * Reads back the summary stored at submission time (frontend contract
+     * C06 / checklist A5.3).
+     *
+     * <p>Per-answer detail is deliberately NOT repeated here: it already has
+     * its own endpoint, {@code GET .../practice-sessions/{sessionId}/answers},
+     * so one answer shape cannot drift into two different meanings.
+     *
+     * @param ownerSubject JWT subject, which is also the session's user
+     * @param spaceId      path space, re-checked against the session owner
+     * @param sessionId    submitted session to summarise
+     * @return the same fields {@code finish} returned once
+     * @throws ResponseStatusException 404 when the session is not the caller's
+     *         in this space
+     * @throws ApiException 409 with {@code PRACTICE_SESSION_NOT_SUBMITTED}
+     *         while the session is still open — there is no result yet, and
+     *         zeros would be a fabricated score
+     */
+    public PracticeSessionResponse.PracticeResultView result(String ownerSubject, Long spaceId,
+                                                             Long sessionId) {
+        PracticeSession session = practiceSessionMapper.selectByIdSpaceOwnerUser(
+                sessionId, spaceId, ownerSubject, ownerSubject);
+        if (session == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "PracticeSession not found");
+        }
+        if (!PracticeSessionService.STATUS_SUBMITTED.equals(session.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    ApiErrorCodes.PRACTICE_SESSION_NOT_SUBMITTED,
+                    "practice session is not SUBMITTED: " + session.getStatus());
+        }
+        if (session.getScore() == null) {
+            // Submitted before V066: no stored summary. Say so rather than
+            // re-deriving a score the submission itself never recorded.
+            throw new ApiException(HttpStatus.CONFLICT,
+                    ApiErrorCodes.PRACTICE_RESULT_NOT_RECORDED,
+                    "this session was submitted before results were recorded");
+        }
+        int questionCount = practiceSessionQuestionMapper
+                .selectBySessionId(spaceId, sessionId).size();
+        return new PracticeSessionResponse.PracticeResultView(sessionId, session.getStatus(),
+                questionCount, session.getAnsweredCount(), session.getCorrectCount(),
+                session.getScore(), session.getMaxScore());
     }
 
     /**

@@ -32,6 +32,22 @@ public class PracticeSession {
 
     private LocalDateTime finishedAt;
 
+    /**
+     * Objective score recorded once at {@code finish}. Nullable: a session
+     * submitted before V066 has no stored result, and the result endpoint
+     * says so instead of reporting 0.
+     */
+    private Integer score;
+
+    /** Maximum achievable objective score of the same submission. */
+    private Integer maxScore;
+
+    /** How many slots carried an answer at submission time. */
+    private Integer answeredCount;
+
+    /** How many answered objective slots were correct. */
+    private Integer correctCount;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
@@ -106,6 +122,38 @@ public class PracticeSession {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public Integer getScore() {
+        return score;
+    }
+
+    public void setScore(Integer score) {
+        this.score = score;
+    }
+
+    public Integer getMaxScore() {
+        return maxScore;
+    }
+
+    public void setMaxScore(Integer maxScore) {
+        this.maxScore = maxScore;
+    }
+
+    public Integer getAnsweredCount() {
+        return answeredCount;
+    }
+
+    public void setAnsweredCount(Integer answeredCount) {
+        this.answeredCount = answeredCount;
+    }
+
+    public Integer getCorrectCount() {
+        return correctCount;
+    }
+
+    public void setCorrectCount(Integer correctCount) {
+        this.correctCount = correctCount;
     }
 
     @Override

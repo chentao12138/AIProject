@@ -106,4 +106,23 @@ public final class PracticeSessionResponse {
     /** Option without any correctness flag. */
     public record OptionView(String optionKey, String content, Integer sortOrder) {
     }
+
+    /**
+     * Result of a finished session (C06): exactly the fields {@code finish}
+     * returned, readable at any later time.
+     *
+     * <p>{@code questionCount} is the session's slot count, so an unanswered
+     * question still lowers the ratio; scores are never nullable because a
+     * session without a recorded result is reported as a conflict instead.
+     */
+    public record PracticeResultView(
+            Long sessionId,
+            String status,
+            Integer questionCount,
+            Integer answeredCount,
+            Integer correctCount,
+            Integer score,
+            Integer maxScore
+    ) {
+    }
 }

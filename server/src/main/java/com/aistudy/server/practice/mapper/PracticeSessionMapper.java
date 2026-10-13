@@ -93,4 +93,27 @@ public interface PracticeSessionMapper extends BaseMapper<PracticeSession> {
                            @Param("toStatus") String toStatus,
                            @Param("finishedAt") LocalDateTime finishedAt,
                            @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
+     * Stores the summary of a submission on the session row (V066) so a
+     * finished session can be read back later without re-deriving the score.
+     *
+     * <p>Conditioned on {@code status = 'SUBMITTED'} and on the owner, so this
+     * can only ever annotate a session the caller just transitioned; it cannot
+     * write a result onto an in-progress or foreign session.
+     */
+    @Update("UPDATE practice_session "
+            + "SET score = #{score}, max_score = #{maxScore}, "
+            + "    answered_count = #{answeredCount}, correct_count = #{correctCount}, "
+            + "    updated_at = #{updatedAt} "
+            + "WHERE id = #{sessionId} AND space_id = #{spaceId} "
+            + "  AND user_subject = #{userSubject} AND status = 'SUBMITTED'")
+    int storeResultByIdAndSpace(@Param("sessionId") Long sessionId,
+                                @Param("spaceId") Long spaceId,
+                                @Param("userSubject") String userSubject,
+                                @Param("score") int score,
+                                @Param("maxScore") int maxScore,
+                                @Param("answeredCount") int answeredCount,
+                                @Param("correctCount") int correctCount,
+                                @Param("updatedAt") LocalDateTime updatedAt);
 }

@@ -3,6 +3,7 @@ package com.aistudy.server.practice.controller;
 import com.aistudy.server.practice.dto.PracticeAnswerRequest;
 import com.aistudy.server.practice.dto.PracticeAnswerResponse.PracticeAnswerView;
 import com.aistudy.server.practice.dto.PracticeAnswerResponse.PracticeSubmitView;
+import com.aistudy.server.practice.dto.PracticeSessionResponse.PracticeResultView;
 import com.aistudy.server.practice.entity.PracticeAnswer;
 import com.aistudy.server.practice.service.PracticeAnswerService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -61,6 +62,19 @@ public class PracticeAnswerController {
                                      @PathVariable Long sessionId,
                                      Authentication authentication) {
         return practiceAnswerService.finish(
+                authentication.getName(), spaceId, sessionId);
+    }
+
+    /**
+     * C06: the result of a finished session, readable again after the
+     * submission response is gone. 409 with
+     * {@code PRACTICE_SESSION_NOT_SUBMITTED} while the session is open.
+     */
+    @GetMapping(value = "/result", produces = MediaType.APPLICATION_JSON_VALUE)
+    public PracticeResultView result(@PathVariable Long spaceId,
+                                     @PathVariable Long sessionId,
+                                     Authentication authentication) {
+        return practiceAnswerService.result(
                 authentication.getName(), spaceId, sessionId);
     }
 

@@ -780,6 +780,19 @@ class PracticeSessionIntegrationTest {
                 .andExpect(jsonPath("$.score").value(1))
                 .andExpect(jsonPath("$.maxScore").value(2));
 
+        // C06: the same summary must still be readable afterwards, so a
+        // reloaded session is not an empty card.
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get(SESSIONS + "/{sessionId}/result", spaceId, sessionId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUBMITTED"))
+                .andExpect(jsonPath("$.questionCount").value(2))
+                .andExpect(jsonPath("$.answeredCount").value(2))
+                .andExpect(jsonPath("$.correctCount").value(1))
+                .andExpect(jsonPath("$.score").value(1))
+                .andExpect(jsonPath("$.maxScore").value(2));
+
         // second finish → 409
         mockMvc.perform(post(SESSIONS + "/{sessionId}/finish", spaceId, sessionId)
                         .header("Authorization", "Bearer " + token))
