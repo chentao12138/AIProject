@@ -56,6 +56,37 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
                                       @Param("ownerSubject") String ownerSubject);
 
     /**
+     * Counts jobs of one asset that a worker can still advance.
+     *
+     * <p>Only the in-flight statuses count: {@code NEEDS_REVIEW},
+     * {@code PUBLISHED}, {@code PARTIAL_FAILED} and {@code FAILED} are terminal
+     * and deliberately excluded, because re-extracting an asset that already
+     * finished is a supported operation — it produces a NEW extraction revision
+     * while the previous revision's pages/blocks stay addressable
+     * (NFR-DATA-001). Two jobs of the same asset running at the same time is
+     * not supported: they would race on the same revision and duplicate
+     * {@code source_page}/{@code content_block} rows.
+     *
+     * <p>Ownership is enforced through the same JOIN chain as
+     * {@link #selectByIdSpaceOwner}, so a caller can never learn about (let
+     * alone block) an asset in a space it does not own.
+     */
+    @Select("SELECT COUNT(*) "
+            + "FROM ingestion_job ij "
+            + "JOIN source s "
+            + "  ON s.id = ij.source_id "
+            + " AND s.space_id = ij.space_id "
+            + "JOIN learning_space ls ON ls.id = ij.space_id "
+            + "WHERE ij.space_id = #{spaceId} "
+            + "  AND ij.asset_id = #{assetId} "
+            + "  AND ls.owner_subject = #{ownerSubject} "
+            + "  AND ij.status IN ('QUEUED', 'IMPORTING', 'EXTRACTING', "
+            + "                     'STRUCTURING', 'AI_PROCESSING')")
+    int countActiveForAsset(@Param("spaceId") Long spaceId,
+                            @Param("assetId") Long assetId,
+                            @Param("ownerSubject") String ownerSubject);
+
+    /**
      * Lists jobs of one owned source, newest first. The owner
      * predicate and the source↔space consistency are enforced IN SQL
      * via the JOINs — this method can never list jobs of a source

@@ -321,17 +321,21 @@ class PdfImageIngestionIntegrationTest {
         assertTrue(failedBody.contains("INVALID_IMAGE"));
         assertEquals(0L, countPages(fx.sourceId));
 
-        // Fresh successful attempt on a NEW asset (FAILED job does not block new create
-        // only for a different asset; same asset is blocked by 409 only when PENDING/
-        // RUNNING/SUCCEEDED). Failed allows a new job for the same asset.
+        // A FAILED job is terminal, so a new job for the SAME asset is allowed
+        // (only an in-flight job conflicts, with code INGESTION_ALREADY_RUNNING).
+        // The create response reports the freshly queued job, never its outcome:
+        // ingestion is asynchronous, so the re-run is awaited below.
         String okBody = mockMvc.perform(post(JOBS, fx.spaceId, fx.sourceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"assetId\":" + badId + "}")
                         .header("Authorization", "Bearer " + fx.token))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.status").value("QUEUED"))
                 .andReturn().getResponse().getContentAsString();
-        assertNotNull(okBody);
+        String rerun = AsyncIngestionJobs.awaitStatus(mockMvc, fx.token, fx.spaceId,
+                AsyncIngestionJobs.jobIdOf(okBody), "FAILED");
+        assertTrue(rerun.contains("INVALID_IMAGE"),
+                "the re-run must report the same reason: " + rerun);
         assertEquals(0L, countPages(fx.sourceId),
                 "still-invalid bytes must not create pages on retry");
     }

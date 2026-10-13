@@ -26,7 +26,10 @@ import java.util.List;
  * <pre>
  *   POST /api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs
  *       → 201, body {assetId}; job PENDING, or FAILED when the ZIP
- *       safety gate rejects the asset
+ *       safety gate rejects the asset. 409 with
+ *       code=INGESTION_ALREADY_RUNNING when a job for the SAME asset
+ *       is still in flight; a terminal asset may be re-ingested and
+ *       produces a new extraction revision.
  *   GET  /api/v1/spaces/{spaceId}/sources/{sourceId}/ingestion-jobs
  *       → 200, job history for my source (newest first)
  *   GET  /api/v1/spaces/{spaceId}/ingestion-jobs/{jobId}

@@ -480,9 +480,48 @@ class ContentIngestionIntegrationTest {
         assertEquals(0L, pageCount, "failed image must not persist pages");
     }
 
-    /** (8) re-ingesting an already-ingested asset → 409, no duplicate content. */
+    /**
+     * (8a) a second job for an asset whose first job is STILL IN FLIGHT is a
+     * conflict, and the client gets a stable machine-readable code instead of
+     * having to parse English.
+     *
+     * <p>This replaces the old {@code duplicateCreateOnSucceededAssetReturns409}
+     * assertion, which expected 409 for ANY re-ingest. That expectation belongs
+     * to the retired synchronous design: re-extracting a finished asset is a
+     * supported operation (NFR-DATA-001 keeps the previous revision
+     * addressable), so only genuine concurrent duplication may be refused.
+     */
     @Test
-    void duplicateCreateOnSucceededAssetReturns409() throws Exception {
+    void activeJobOnSameAssetReturns409WithStableCode() throws Exception {
+        Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
+        Long sourceId = insertFixtureSource(spaceId, "笔记");
+        String token = tokenFor("biz-e2e-user-1");
+        Long assetId = uploadAsset(token, spaceId, sourceId,
+                "note.txt", "text/plain", "once".getBytes(StandardCharsets.UTF_8));
+
+        jdbcTemplate.update(
+                "INSERT INTO ingestion_job (space_id, source_id, asset_id, "
+                        + "created_by_user_id, status, stage, progress_percent, "
+                        + "retry_count, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, ?, 'IMPORTING', 'IMPORT', 10, 0, "
+                        + "NOW(6), NOW(6))",
+                spaceId, sourceId, assetId, "biz-e2e-user-1");
+
+        mockMvc.perform(post(JOBS, spaceId, sourceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"assetId\":" + assetId + "}")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INGESTION_ALREADY_RUNNING"));
+    }
+
+    /**
+     * (8b) re-ingesting an asset whose job already reached its terminal state
+     * is legal and produces a NEW extraction revision; the first revision's
+     * pages and blocks must survive so existing provenance keeps resolving.
+     */
+    @Test
+    void reIngestAfterTerminalStateCreatesANewRevisionAndKeepsTheOldOne() throws Exception {
         Long spaceId = insertFixtureSpace("biz-e2e-user-1", "user1 空间");
         Long sourceId = insertFixtureSource(spaceId, "笔记");
         String token = tokenFor("biz-e2e-user-1");
@@ -490,16 +529,33 @@ class ContentIngestionIntegrationTest {
                 "note.txt", "text/plain", "once".getBytes(StandardCharsets.UTF_8));
         createJobBody(token, spaceId, sourceId, assetId, INGESTED);
 
+        Long firstRevision = jdbcTemplate.queryForObject(
+                "SELECT current_extraction_revision_id FROM source WHERE id = ?",
+                Long.class, sourceId);
+        assertNotNull(firstRevision, "the first ingestion must publish a revision pointer");
+
         mockMvc.perform(post(JOBS, spaceId, sourceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"assetId\":" + assetId + "}")
                         .header("Authorization", "Bearer " + token))
-                .andExpect(status().isConflict());
+                .andExpect(status().isCreated());
+        AsyncIngestionJobs.awaitStatus(mockMvc, token, spaceId,
+                jdbcTemplate.queryForObject(
+                        "SELECT MAX(id) FROM ingestion_job WHERE asset_id = ?",
+                        Long.class, assetId),
+                INGESTED);
 
-        List<Map<String, Object>> blocks = rows(
-                "SELECT * FROM content_block WHERE space_id = ? AND source_id = ?",
-                spaceId, sourceId);
-        assertEquals(1, blocks.size(), "no duplicate content blocks on 409");
+        Long revisionCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM extraction_revision WHERE source_id = ?",
+                Long.class, sourceId);
+        assertTrue(revisionCount >= 2, "re-extraction must add a revision, got " + revisionCount);
+
+        List<Map<String, Object>> oldBlocks = rows(
+                "SELECT * FROM content_block WHERE space_id = ? AND source_id = ? "
+                        + "AND extraction_revision_id = ?",
+                spaceId, sourceId, firstRevision);
+        assertEquals(1, oldBlocks.size(),
+                "the previous revision's blocks must remain addressable");
     }
 
     /** (9) a FAILED job does NOT block a fresh attempt. */

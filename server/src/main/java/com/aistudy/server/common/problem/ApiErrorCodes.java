@@ -23,6 +23,12 @@ public final class ApiErrorCodes {
     public static final String SOURCE_NOT_FOUND = "SOURCE_NOT_FOUND";
     public static final String QUESTION_NOT_FOUND = "QUESTION_NOT_FOUND";
     public static final String INGESTION_NOT_READY = "INGESTION_NOT_READY";
+    /**
+     * A second ingestion job was submitted for an asset whose first job is
+     * still in flight. Distinct from {@link #CONFLICT} so the Desktop client
+     * can offer "wait for the running job" instead of parsing English text.
+     */
+    public static final String INGESTION_ALREADY_RUNNING = "INGESTION_ALREADY_RUNNING";
     public static final String CONTENT_NOT_PUBLISHED = "CONTENT_NOT_PUBLISHED";
     public static final String EXAM_NOT_AVAILABLE = "EXAM_NOT_AVAILABLE";
     public static final String EXAM_ATTEMPT_NOT_IN_PROGRESS = "EXAM_ATTEMPT_NOT_IN_PROGRESS";

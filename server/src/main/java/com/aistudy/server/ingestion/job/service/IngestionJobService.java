@@ -20,6 +20,8 @@ import com.aistudy.server.storage.StorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import com.aistudy.server.common.problem.ApiErrorCodes;
+import com.aistudy.server.common.problem.ApiException;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -121,6 +123,16 @@ public class IngestionJobService {
                 .orElse(null);
         if (asset == null) {
             return null;
+        }
+        // One in-flight job per asset. Two concurrent jobs would race on the
+        // same extraction revision and duplicate source_page/content_block
+        // rows. Re-submitting AFTER a terminal state is still allowed: that is
+        // the supported re-extraction path and it creates a NEW revision while
+        // the previous revision stays addressable for provenance.
+        if (ingestionJobMapper.countActiveForAsset(spaceId, asset.getId(), ownerSubject) > 0) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    ApiErrorCodes.INGESTION_ALREADY_RUNNING,
+                    "an ingestion job for this asset is still running");
         }
         LocalDateTime now = LocalDateTime.now();
         IngestionJob job = new IngestionJob();

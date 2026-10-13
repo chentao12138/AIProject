@@ -731,7 +731,10 @@ class IngestionJobIntegrationTest {
         Long assetId = uploadAsset(token, spaceId, sourceId,
                 "book.zip", "application/zip", validZip());
 
-        createJob(token, spaceId, sourceId, assetId); // run 1 extracts entries
+        // Extraction runs on the worker pool: the create response only ever
+        // reports QUEUED, so the run must be awaited before its rows are read.
+        AsyncIngestionJobs.awaitStatus(mockMvc, token, spaceId,
+                createJob(token, spaceId, sourceId, assetId), "NEEDS_REVIEW"); // run 1 extracts entries
 
         List<Map<String, Object>> firstRun = jdbcTemplate.queryForList(
                 "SELECT id, storage_key, sha256, asset_version FROM source_asset "
@@ -774,13 +777,15 @@ class IngestionJobIntegrationTest {
         v1.put("chapter1/1.txt", "hello".getBytes(StandardCharsets.UTF_8));
         Long zipOne = uploadAsset(token, spaceId, sourceId,
                 "book.zip", "application/zip", zipBytes(v1));
-        createJob(token, spaceId, sourceId, zipOne);
+        AsyncIngestionJobs.awaitStatus(mockMvc, token, spaceId,
+                createJob(token, spaceId, sourceId, zipOne), "NEEDS_REVIEW");
 
         Map<String, byte[]> v2 = new java.util.LinkedHashMap<>();
         v2.put("chapter1/1.txt", "changed content".getBytes(StandardCharsets.UTF_8));
         Long zipTwo = uploadAsset(token, spaceId, sourceId,
                 "book-v2.zip", "application/zip", zipBytes(v2));
-        createJob(token, spaceId, sourceId, zipTwo);
+        AsyncIngestionJobs.awaitStatus(mockMvc, token, spaceId,
+                createJob(token, spaceId, sourceId, zipTwo), "NEEDS_REVIEW");
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 "SELECT id, asset_version, superseded_at, sha256 FROM source_asset "
