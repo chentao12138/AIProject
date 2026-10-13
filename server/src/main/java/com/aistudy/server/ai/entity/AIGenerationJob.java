@@ -13,6 +13,16 @@ import java.time.LocalDateTime;
  * knowledge-extraction, question-generation, etc.). State
  * transitions are driven by a DB-backed worker framework;
  * progress is integer 0..100.
+ *
+ * <p>Visibility is {@code spaceId + requester}: every owner-facing read goes
+ * through a mapper statement bound to both, so a job row is never reachable
+ * from a space it does not belong to (F-21).
+ *
+ * <p>Lease semantics: {@code status='PROCESSING'} always means "some worker
+ * holds {@link #claimToken}", and the token changes on every claim.
+ * {@link #claimedAt} is the lease heartbeat, not a creation timestamp —
+ * it is re-written while the job runs, and recovery only requeues a job once
+ * it falls behind. Terminal states clear the lease columns.
  */
 @TableName("ai_generation_job")
 public class AIGenerationJob {
@@ -36,6 +46,27 @@ public class AIGenerationJob {
 
     /** Semantic target for question-generation / KP-scoped jobs (C-30). */
     private Long knowledgePointId;
+
+    /**
+     * Worker that currently owns the lease (V056), paired with
+     * {@link #claimedAt} and {@link #claimToken}.
+     */
+    private String claimedBy;
+
+    /**
+     * Lease heartbeat (V056). Recovery only requeues a PROCESSING job once
+     * this is older than {@code aistudy.ai.worker.stale-lease-ms}; the worker
+     * pushes it forward while the job is still running (F-29).
+     */
+    private LocalDateTime claimedAt;
+
+    /**
+     * Identity of the current claim (V061). Minted fresh on every successful
+     * claim; only the holder of this value may renew the lease or write a
+     * terminal state, which is what stops an abandoned-but-still-alive worker
+     * from finalizing a job recovery already handed to somebody else.
+     */
+    private String claimToken;
 
     private Integer successCount;
 
@@ -125,6 +156,30 @@ public class AIGenerationJob {
 
     public void setKnowledgePointId(Long knowledgePointId) {
         this.knowledgePointId = knowledgePointId;
+    }
+
+    public String getClaimedBy() {
+        return claimedBy;
+    }
+
+    public void setClaimedBy(String claimedBy) {
+        this.claimedBy = claimedBy;
+    }
+
+    public LocalDateTime getClaimedAt() {
+        return claimedAt;
+    }
+
+    public void setClaimedAt(LocalDateTime claimedAt) {
+        this.claimedAt = claimedAt;
+    }
+
+    public String getClaimToken() {
+        return claimToken;
+    }
+
+    public void setClaimToken(String claimToken) {
+        this.claimToken = claimToken;
     }
 
     public Integer getSuccessCount() {
