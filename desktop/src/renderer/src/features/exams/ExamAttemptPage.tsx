@@ -6,13 +6,17 @@
  * Rules this page must keep (rationale in exam-attempt-state.ts / exam-error.ts):
  *  - every question slot owns its save state — no flag may be shared across
  *    slots (G03)
- *  - "已保存" only ever comes from the server's `ExamAnswerView.answeredAt` (W04)
+ *  - "已保存" only ever comes from the server: the `answered` flag of the
+ *    attempt read on entry (A6.2), the `ExamAnswerView.answeredAt` stamp after
+ *    a save (W04)
+ *  - what the learner already saved is rebuilt from that same read, so opening
+ *    an attempt again resumes it (A6.2)
  *  - progress and remaining time come from the attempt the server returned (W06)
  *  - every action failure is rendered with the recovery it promises (W05)
  *  - a SUBMITTED attempt is read-only: the result view, never the paper (W04)
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
@@ -36,11 +40,14 @@ import {
   buildAnswerBody,
   countAnswered,
   isSavedOnServer,
+  mergeAttemptResume,
   questionSaveStatus,
+  resumeFromAttempt,
+  serverStateOfRecord,
   QUESTION_SAVE_LABELS,
+  type AttemptResumeState,
   type ExamAnswerBody,
   type ExamAnswerPayload,
-  type ExamAnswerRecord,
   type ExamQuestionSlot,
 } from './exam-attempt-state';
 import { examActionError, type ExamActionError } from './exam-error';
@@ -83,8 +90,14 @@ export function ExamAttemptPage() {
   const api = useApiClient();
   const queryClient = useQueryClient();
   const spaceId = useSpaceId();
-  const { attemptId: attemptIdParam } = useParams();
+  const { attemptId: attemptIdParam, examId: examIdParam } = useParams();
   const attemptId = parsePositiveIdParam(attemptIdParam);
+  /**
+   * The paper this attempt belongs to, from the URL the learner came in on
+   * (`/exams/:examId/attempts/:attemptId`). Used only to invalidate that
+   * paper's attempt history once this attempt changes state (W07).
+   */
+  const examId = parsePositiveIdParam(examIdParam);
 
   const attemptQuery = useQuery(
     entityQuery(spaceId, attemptId, queryKeys.examAttempt(spaceId, attemptId), (id, entity) =>
@@ -124,6 +137,11 @@ export function ExamAttemptPage() {
       // SUBMITTED attempt shows the same thing as the first one (W04).
       void queryClient.invalidateQueries({
         queryKey: queryKeys.examResult(spaceId, attemptId),
+      });
+      // …and the paper's history list stops claiming this attempt is still
+      // being answered (W07 — that row's status is server data too).
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.examAttempts(spaceId, examId),
       });
     },
   });
@@ -280,15 +298,28 @@ function ActiveExam({
   const api = useApiClient();
   const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<number, ExamAnswerPayload>>({});
   /**
-   * G03 + W04: the server's `ExamAnswerView` per `examQuestionId`. This map —
-   * not `mutation.isSuccess`, not a boolean — is what makes a slot "已保存",
-   * and a save on slot A can never mark slot B.
+   * A6.2 — the attempt read already carries what the learner saved, so the
+   * paper starts from THAT (`answered` per slot + its `answer` payload) instead
+   * of from an empty form. The initializer runs on entry: a reload, a revisit
+   * from the exam list, a history row from the paper page.
+   *
+   * G03 + W04: `serverRecords` — not `mutation.isSuccess`, not a boolean — is
+   * what makes a slot 已保存, and a save on slot A can never mark slot B.
    */
-  const [serverRecords, setServerRecords] = useState<
-    Record<number, ExamAnswerRecord>
-  >({});
+  const [resume, setResume] = useState<AttemptResumeState>(() =>
+    resumeFromAttempt(questions)
+  );
+  const answers = resume.drafts;
+  const serverRecords = resume.serverRecords;
+  /**
+   * A later read (every save invalidates the attempt) is folded in rather than
+   * replacing: a slot this client already has state for keeps its own, so a
+   * save or an edit is never rolled back by a response that predates it.
+   */
+  useEffect(() => {
+    setResume((previous) => mergeAttemptResume(previous, questions));
+  }, [questions]);
   /** Draft touched after that record arrived -> the save is stale again. */
   const [editedSinceSave, setEditedSinceSave] = useState<Record<number, boolean>>({});
   const [answerErrors, setAnswerErrors] = useState<Record<number, ExamActionError>>({});
@@ -314,12 +345,16 @@ function ActiveExam({
   const submitAnswer = useMutation({
     mutationFn: (body: ExamAnswerBody) =>
       api.submitExamAnswer(spaceId, attemptId, body).then(unwrap),
-    onSuccess: (record: ExamAnswerRecord | undefined, body: ExamAnswerBody) => {
+    onSuccess: (record, body: ExamAnswerBody) => {
       if (isSavedOnServer(record)) {
-        setServerRecords((prev) => ({
-          ...prev,
-          [body.examQuestionId]: record as ExamAnswerRecord,
-        }));
+        // W04: the POST's own stamp is what marks the slot saved.
+        const state = serverStateOfRecord(record);
+        if (state !== undefined) {
+          setResume((prev) => ({
+            ...prev,
+            serverRecords: { ...prev.serverRecords, [body.examQuestionId]: state },
+          }));
+        }
         setEditedSinceSave((prev) => ({ ...prev, [body.examQuestionId]: false }));
         setAnswerErrors((prev) => {
           const next = { ...prev };
@@ -383,7 +418,10 @@ function ActiveExam({
    */
   function editDraft(patch: (previous: ExamAnswerPayload | undefined) => ExamAnswerPayload) {
     setEditedSinceSave((prev) => ({ ...prev, [currentId]: true }));
-    setAnswers((prev) => ({ ...prev, [currentId]: patch(prev[currentId]) }));
+    setResume((prev) => ({
+      ...prev,
+      drafts: { ...prev.drafts, [currentId]: patch(prev.drafts[currentId]) },
+    }));
   }
 
   function goNext() {

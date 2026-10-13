@@ -1,8 +1,10 @@
 /**
- * Per-question exam save state (G03 / W04 / W06) — the pure half of the fix.
+ * Per-question exam save state (G03 / W04 / W06 / A6.2) — the pure half of the fix.
  *
  * The `questionSaveStatus` cases below are the G03 gate in miniature: a save
- * that happened for slot A must not be reported for slot B.
+ * that happened for slot A must not be reported for slot B. The `resumeFromAttempt`
+ * cases are A6.2's gate: what a re-opened attempt shows is decided by the
+ * attempt read's own `answered` flag and `answer` payload, never by memory.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -10,9 +12,13 @@ import {
   buildAnswerBody,
   countAnswered,
   isSavedOnServer,
+  mergeAttemptResume,
   questionSaveStatus,
+  resumeFromAttempt,
   QUESTION_SAVE_LABELS,
+  type ExamAnswerPayload,
   type ExamAnswerRecord,
+  type ExamQuestionSlot,
 } from './exam-attempt-state';
 
 const savedRecord: ExamAnswerRecord = {
@@ -23,7 +29,29 @@ const savedRecord: ExamAnswerRecord = {
   answeredAt: '2026-10-13T10:00:00',
 };
 
-describe('isSavedOnServer (W04: server truth, not memory)', () => {
+/** A paper slot exactly as `GET .../exam-attempts/{attemptId}` returns it. */
+function slot(examQuestionId: number, questionType: string): ExamQuestionSlot {
+  return {
+    examQuestionId,
+    questionId: 100 + examQuestionId,
+    sortOrder: examQuestionId,
+    score: 5,
+    questionType,
+    stem: `第 ${examQuestionId} 题题干`,
+    options: [],
+  };
+}
+
+/** The same row once the server has an answer for it (A6.2's `answered`). */
+function answeredSlot(
+  examQuestionId: number,
+  questionType: string,
+  answer: ExamAnswerPayload
+): ExamQuestionSlot {
+  return { ...slot(examQuestionId, questionType), answered: true, answer };
+}
+
+describe('isSavedOnServer (W04 + A6.2: server truth, not memory)', () => {
   it('counts a record only when the server sent answeredAt', () => {
     expect(isSavedOnServer(savedRecord)).toBe(true);
   });
@@ -32,8 +60,148 @@ describe('isSavedOnServer (W04: server truth, not memory)', () => {
     // `unwrap` yields `undefined` for an empty 200 body, and the contract's
     // ExamAnswerView marks every field optional — neither proves storage.
     expect(isSavedOnServer(undefined)).toBe(false);
-    expect(isSavedOnServer({ id: 1, examQuestionId: 11 })).toBe(false);
+    const recordWithoutStamp: ExamAnswerRecord = {
+      id: 1,
+      examQuestionId: 11,
+    };
+    expect(isSavedOnServer(recordWithoutStamp)).toBe(false);
     expect(isSavedOnServer({ answeredAt: '   ' })).toBe(false);
+  });
+
+  it("accepts the attempt read's `answered` flag as the server's word", () => {
+    expect(isSavedOnServer({ answered: true })).toBe(true);
+    // A6.2: the flag decides on its own. `answered: false` is unanswered even
+    // beside a stamp — the server said this slot has no answer, and that is
+    // the end of the discussion.
+    expect(isSavedOnServer({ answered: false })).toBe(false);
+    expect(isSavedOnServer({ answered: false, answeredAt: '2026-10-13T10:00:00' })).toBe(
+      false
+    );
+    // Neither field at all (a row from a contract that predates the read) is
+    // not a statement about the slot.
+    expect(isSavedOnServer({})).toBe(false);
+  });
+});
+
+describe('resumeFromAttempt (A6.2: rebuild the paper from the server read)', () => {
+  it('restores each question type from its own answer field', () => {
+    const matchingWire = JSON.stringify([
+      { left: 'A', right: 'C' },
+      { left: 'B', right: 'D' },
+    ]);
+    const questions: ExamQuestionSlot[] = [
+      answeredSlot(11, 'SINGLE_CHOICE', { selectedOptionKeys: ['B'] }),
+      answeredSlot(12, 'MULTIPLE_CHOICE', { selectedOptionKeys: ['A', 'C'] }),
+      answeredSlot(13, 'TRUE_FALSE', { booleanAnswer: false }),
+      answeredSlot(14, 'SHORT_ANSWER', { textAnswer: '因为引擎不同。' }),
+      // 1-based option positions, straight off the wire (`minimum: 1`).
+      answeredSlot(15, 'ORDERING', { orderingAnswer: [3, 1, 2] }),
+      // the serialized {left,right} array `gradeMatching` parses.
+      answeredSlot(16, 'MATCHING', { matchingAnswer: matchingWire }),
+    ];
+
+    const resumed = resumeFromAttempt(questions);
+
+    // Every slot is answered per the server, so every slot is 已保存 / 已作答.
+    expect(
+      Object.keys(resumed.serverRecords)
+        .map(Number)
+        .sort((a, b) => a - b)
+    ).toEqual([11, 12, 13, 14, 15, 16]);
+    expect(
+      countAnswered(
+        questions.map((question) => question.examQuestionId),
+        resumed.serverRecords
+      )
+    ).toBe(6);
+    // The draft is the stored payload verbatim — the wire shapes the renderer
+    // and components/answer-grammar.ts already read — so a resumed slot re-sends
+    // exactly what is stored, with nothing re-derived here.
+    expect(resumed.drafts[11]).toEqual({ selectedOptionKeys: ['B'] });
+    expect(resumed.drafts[12]).toEqual({ selectedOptionKeys: ['A', 'C'] });
+    expect(resumed.drafts[13]).toEqual({ booleanAnswer: false });
+    expect(resumed.drafts[14]).toEqual({ textAnswer: '因为引擎不同。' });
+    expect(resumed.drafts[15]).toEqual({ orderingAnswer: [3, 1, 2] });
+    expect(resumed.drafts[16]).toEqual({ matchingAnswer: matchingWire });
+    // A resumed slot needs no re-save: the label is 已保存, not 保存答案.
+    expect(
+      QUESTION_SAVE_LABELS[
+        questionSaveStatus({
+          saving: false,
+          failed: false,
+          serverRecord: resumed.serverRecords[15],
+          editedSinceSave: false,
+        })
+      ]
+    ).toBe('已保存');
+    // And saving that resumed draft sends the stored positions back unchanged.
+    expect(buildAnswerBody(slot(15, 'ORDERING'), resumed.drafts[15])).toEqual({
+      examQuestionId: 15,
+      answer: { orderingAnswer: [3, 1, 2] },
+    });
+  });
+
+  it('leaves a slot the server does not report as answered unanswered', () => {
+    const questions: ExamQuestionSlot[] = [
+      // A fresh row: neither flag nor payload.
+      slot(11, 'SINGLE_CHOICE'),
+      // `answered: false` is unanswered even when a payload travelled with it —
+      // nothing here may promote content the server does not count.
+      { ...slot(12, 'SHORT_ANSWER'), answered: false, answer: { textAnswer: '草稿' } },
+      { ...slot(13, 'TRUE_FALSE'), answered: false },
+    ];
+
+    const resumed = resumeFromAttempt(questions);
+
+    expect(resumed.serverRecords).toEqual({});
+    expect(resumed.drafts).toEqual({});
+    expect(countAnswered([11, 12, 13], resumed.serverRecords)).toBe(0);
+  });
+
+  it('counts an answered slot with no payload as answered, and keeps it empty', () => {
+    // The server says a row exists but sends no content for it: honest reading
+    // is 已作答 with an empty form, not a fabricated draft and not 未答.
+    const resumed = resumeFromAttempt([
+      { ...slot(11, 'SINGLE_CHOICE'), answered: true },
+    ]);
+
+    expect(isSavedOnServer(resumed.serverRecords[11])).toBe(true);
+    expect(resumed.drafts[11]).toBeUndefined();
+  });
+});
+
+describe('mergeAttemptResume (a later read never rolls back this client)', () => {
+  it('adds only slots the page does not know yet', () => {
+    const previous = {
+      serverRecords: { 11: { answeredAt: '2026-10-13T10:00:00' } },
+      drafts: { 11: { selectedOptionKeys: ['A'] } },
+    };
+    // Slot 11 also arrives as an `answered` row with a DIFFERENT payload (a read
+    // that predates this client's newer save): the local entry must survive.
+    const questions: ExamQuestionSlot[] = [
+      answeredSlot(11, 'SINGLE_CHOICE', { selectedOptionKeys: ['B'] }),
+      answeredSlot(12, 'SINGLE_CHOICE', { selectedOptionKeys: ['C'] }),
+    ];
+
+    const merged = mergeAttemptResume(previous, questions);
+
+    expect(merged.serverRecords[11]).toEqual({ answeredAt: '2026-10-13T10:00:00' });
+    expect(merged.drafts[11]).toEqual({ selectedOptionKeys: ['A'] });
+    expect(merged.serverRecords[12]).toEqual({ answered: true });
+    expect(merged.drafts[12]).toEqual({ selectedOptionKeys: ['C'] });
+  });
+
+  it('returns the same object when the read adds nothing new', () => {
+    const previous = {
+      serverRecords: { 11: { answered: true } },
+      drafts: { 11: { selectedOptionKeys: ['A'] } },
+    };
+    const questions: ExamQuestionSlot[] = [
+      answeredSlot(11, 'SINGLE_CHOICE', { selectedOptionKeys: ['A'] }),
+      slot(12, 'SINGLE_CHOICE'),
+    ];
+
+    expect(mergeAttemptResume(previous, questions)).toBe(previous);
   });
 });
 

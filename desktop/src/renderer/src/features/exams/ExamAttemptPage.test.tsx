@@ -87,6 +87,104 @@ function renderAttempt(overrides: ApiClientOverrides = {}) {
   });
 }
 
+/** The same entry point over an arbitrary paper (A6.2 resume fixtures). */
+function renderPaper(questions: unknown[], overrides: ApiClientOverrides = {}) {
+  return renderAttempt({
+    getExamAttempt: vi.fn(async () =>
+      ok({ id: 5, examId: 21, examPaperId: 31, status: 'IN_PROGRESS', questions })
+    ),
+    ...overrides,
+  });
+}
+
+/**
+ * A server that behaves like the contract: whatever this client saves is what
+ * the NEXT `GET /exam-attempts/{attemptId}` reports back for that row —
+ * `answered: true` plus the stored `answer` payload — and nothing else is
+ * answered. This is the only way to test re-entering an attempt with a payload
+ * a real server could have produced instead of a hand-written one.
+ */
+function makeAttemptServer(questions: { examQuestionId: number }[]) {
+  const stored = new Map<number, unknown>();
+  const server = {
+    getExamAttempt: vi.fn(async () =>
+      ok({
+        id: 5,
+        examId: 21,
+        examPaperId: 31,
+        status: 'IN_PROGRESS',
+        questions: questions.map((question) => ({
+          ...question,
+          answered: stored.has(question.examQuestionId),
+          ...(stored.has(question.examQuestionId)
+            ? { answer: stored.get(question.examQuestionId) }
+            : {}),
+        })),
+      })
+    ),
+    submitExamAnswer: vi.fn(
+      async (
+        _spaceId: number,
+        _attemptId: number,
+        body: { examQuestionId: number; answer: unknown }
+      ) => {
+        stored.set(body.examQuestionId, body.answer);
+        return ok(answerRecord(body.examQuestionId));
+      }
+    ),
+  };
+  return server;
+}
+
+const ORDERING_QUESTION = {
+  examQuestionId: 14,
+  questionId: 114,
+  sortOrder: 1,
+  score: 5,
+  questionType: 'ORDERING',
+  stem: '把步骤排序',
+  options: [
+    { optionKey: 'A', content: '第一步' },
+    { optionKey: 'B', content: '第二步' },
+    { optionKey: 'C', content: '第三步' },
+  ],
+};
+
+const MATCHING_QUESTION = {
+  examQuestionId: 15,
+  questionId: 115,
+  sortOrder: 2,
+  score: 5,
+  questionType: 'MATCHING',
+  stem: '配一对',
+  options: [
+    { optionKey: 'A', content: '甲项' },
+    { optionKey: 'B', content: '乙项' },
+    { optionKey: 'C', content: '丁值' },
+    { optionKey: 'D', content: '戊值' },
+  ],
+};
+
+const TRUE_FALSE_QUESTION = {
+  examQuestionId: 16,
+  questionId: 116,
+  sortOrder: 3,
+  score: 5,
+  questionType: 'TRUE_FALSE',
+  stem: '引擎不同，结论就不同。',
+  options: [],
+};
+
+const SHORT_ANSWER_QUESTION = {
+  examQuestionId: 17,
+  questionId: 117,
+  sortOrder: 4,
+  score: 5,
+  questionType: 'SHORT_ANSWER',
+  stem: '为什么引擎不同？',
+  options: [],
+};
+
 describe('ExamAttemptPage', () => {
   // G03 regression gate.
   it('keeps the next question saveable after one answer was saved', async () => {
@@ -681,5 +779,163 @@ describe('ExamAttemptPage', () => {
       })
     );
     expect(await screen.findByRole('button', { name: '已保存' })).toBeInTheDocument();
+  });
+
+  /* ------------------------------------------------------------------ *
+   * A6.2 / W04 — the attempt read carries `answered` + `answer` per row,
+   * so entering an attempt rebuilds what the learner already saved.
+   * ------------------------------------------------------------------ */
+
+  it('rebuilds every question type from the answers the server reports', async () => {
+    const user = userEvent.setup();
+    const matchingWire = JSON.stringify([
+      { left: 'A', right: 'D' },
+      { left: 'B', right: 'C' },
+    ]);
+    renderPaper([
+      { ...QUESTION_1, answered: true, answer: { selectedOptionKeys: ['A'] } },
+      { ...ORDERING_QUESTION, answered: true, answer: { orderingAnswer: [3, 1, 2] } },
+      { ...MATCHING_QUESTION, answered: true, answer: { matchingAnswer: matchingWire } },
+      { ...TRUE_FALSE_QUESTION, answered: true, answer: { booleanAnswer: true } },
+      {
+        ...SHORT_ANSWER_QUESTION,
+        answered: true,
+        answer: { textAnswer: '因为引擎不同。' },
+      },
+      // The last row of the paper is genuinely empty.
+      { ...QUESTION_2, answered: false },
+    ]);
+
+    // Slot 11: the stored choice is selected, and the slot counts as saved
+    // without this client having POSTed anything in this visit.
+    expect(await screen.findByText('第一题题干')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '甲选项' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: '已保存' })).toBeInTheDocument();
+    expect(await screen.findByText(/已答 5 · 未答 1/)).toBeInTheDocument();
+
+    // ORDERING: the 1-based positions come back as the committed sequence.
+    const sidebar = await screen.findByRole('complementary');
+    await user.click(within(sidebar).getByRole('button', { name: '第 2 题（已作答）' }));
+    expect(await screen.findByText('把步骤排序')).toBeInTheDocument();
+    expect(screen.getByTestId('ordering-status')).toHaveTextContent(
+      '已提交顺序：第三步、第一步、第二步'
+    );
+    expect(screen.getByRole('button', { name: '已保存' })).toBeInTheDocument();
+
+    // MATCHING: the serialized {left,right} pairs land in the pair editor.
+    await user.click(within(sidebar).getByRole('button', { name: '第 3 题（已作答）' }));
+    expect(await screen.findByText('配一对')).toBeInTheDocument();
+    expect(screen.getByLabelText('为「甲项」选择配对项')).toHaveValue('D');
+    expect(screen.getByLabelText('为「乙项」选择配对项')).toHaveValue('C');
+
+    // TRUE_FALSE keeps the learner's judgement — an unjudged slot would be a
+    // fabricated `false`, which is why `booleanAnswer` is a tri-state.
+    await user.click(within(sidebar).getByRole('button', { name: '第 4 题（已作答）' }));
+    expect(await screen.findByText('引擎不同，结论就不同。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '正确' })).toHaveAttribute('aria-pressed', 'true');
+
+    // SHORT_ANSWER shows its stored text.
+    await user.click(within(sidebar).getByRole('button', { name: '第 5 题（已作答）' }));
+    expect(await screen.findByText('为什么引擎不同？')).toBeInTheDocument();
+    expect(screen.getByLabelText('作答')).toHaveValue('因为引擎不同。');
+
+    // A6.2: the unanswered row stays unanswered — no prefilled draft.
+    await user.click(within(sidebar).getByRole('button', { name: '第 6 题（未作答）' }));
+    expect(await screen.findByText('第二题题干')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存答案' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '丙选项' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('resumes what this client saved once the attempt is read again', async () => {
+    const user = userEvent.setup();
+    const server = makeAttemptServer([QUESTION_1, ORDERING_QUESTION]);
+
+    const firstVisit = renderAttempt(server);
+    await user.click(await screen.findByRole('button', { name: '甲选项' }));
+    await user.click(screen.getByRole('button', { name: '保存答案' }));
+    await screen.findByRole('button', { name: '已保存' });
+    await user.click(screen.getByRole('button', { name: '下一题' }));
+    // 第三步 up twice: the committed sequence is [3, 1, 2].
+    await user.click(await screen.findByRole('button', { name: '上移第 3 项' }));
+    await user.click(screen.getByRole('button', { name: '上移第 2 项' }));
+    await user.click(screen.getByRole('button', { name: '保存答案' }));
+    await screen.findByRole('button', { name: '已保存' });
+
+    // A reload / a revisit from the paper page: nothing is kept in memory here,
+    // only what `GET /exam-attempts/{attemptId}` now reports per row.
+    firstVisit.unmount();
+    renderAttempt(server);
+
+    expect(await screen.findByText('第一题题干')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '甲选项' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '已保存' })).toBeInTheDocument();
+    expect(screen.getByText(/已答 2 · 未答 0/)).toBeInTheDocument();
+
+    const sidebar = await screen.findByRole('complementary');
+    await user.click(within(sidebar).getByRole('button', { name: '第 2 题（已作答）' }));
+    expect(await screen.findByTestId('ordering-status')).toHaveTextContent(
+      '已提交顺序：第三步、第一步、第二步'
+    );
+  });
+
+  it('does not restore an answer the server did not mark as answered', async () => {
+    const user = userEvent.setup();
+    renderPaper([
+      // A row that carries content but is NOT `answered` must still read as
+      // unanswered — the flag is the server's word, the payload is not.
+      { ...SHORT_ANSWER_QUESTION, answered: false, answer: { textAnswer: '不该出现的草稿' } },
+      // A row from a server that says nothing at all: same, unanswered.
+      { ...QUESTION_1 },
+    ]);
+
+    expect(await screen.findByText('为什么引擎不同？')).toBeInTheDocument();
+    expect(screen.getByLabelText('作答')).toHaveValue('');
+    expect(screen.queryByRole('button', { name: '已保存' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存答案' })).toBeInTheDocument();
+    expect(screen.getByText(/已答 0 · 未答 2/)).toBeInTheDocument();
+
+    // The slot behaves like the fresh one it is: an edit unlocks 保存答案, and
+    // an unsaved draft still counts as 未答 (W06).
+    await user.type(screen.getByLabelText('作答'), '作答');
+    expect(screen.getByRole('button', { name: '保存答案' })).toBeEnabled();
+    expect(screen.getByText(/已答 0 · 未答 2/)).toBeInTheDocument();
+
+    const sidebar = await screen.findByRole('complementary');
+    expect(within(sidebar).getByRole('button', { name: '第 1 题（未作答）' })).toBeInTheDocument();
+    expect(within(sidebar).queryByRole('button', { name: /已作答/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps a resumed draft out of the way of a fresh save on another slot', async () => {
+    const user = userEvent.setup();
+    const submitExamAnswer = mockSave();
+    renderPaper(
+      [
+        { ...QUESTION_1, answered: true, answer: { selectedOptionKeys: ['A'] } },
+        QUESTION_2,
+      ],
+      { submitExamAnswer }
+    );
+
+    // Slot 11 came back saved; slot 12 is this visit's own answer.
+    await user.click(await screen.findByRole('button', { name: '下一题' }));
+    await user.click(screen.getByRole('button', { name: '丙选项' }));
+    await user.click(screen.getByRole('button', { name: '保存答案' }));
+
+    await waitFor(() =>
+      expect(submitExamAnswer).toHaveBeenCalledWith(7, 5, {
+        examQuestionId: 12,
+        answer: { selectedOptionKeys: ['A'] },
+      })
+    );
+    expect(await screen.findByText(/已答 2 · 未答 0/)).toBeInTheDocument();
+
+    // And the resumed slot is untouched by it: still its stored choice, still 已保存.
+    await user.click(screen.getByRole('button', { name: '上一题' }));
+    expect(await screen.findByText('第一题题干')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '甲选项' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '已保存' })).toBeInTheDocument();
   });
 });
