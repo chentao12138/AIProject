@@ -172,6 +172,16 @@ npm run dist:linux     # AppImage
 
 - 配置在 `package.json` 的 `build` 字段；应用 ID `com.aistudy.desktop`，
   产品名 AIStudy。NSIS 非一键安装、可改安装目录、创建桌面/开始菜单快捷方式。
+- **electron-builder 需要额外下载 NSIS/winCodeSign 二进制**：直连 GitHub 的机器上
+  `npm run dist:win` 会停在 `⨯ connect ETIMEDOUT <github-ip>:443`（`packaging` 阶段，
+  产物仍是 `dist/` 里的旧包，容易误判成成功）。走镜像即可成功（本仓库实测产出
+  `dist/AIStudy Setup 0.1.0.exe`，约 111 MB）：
+  ```powershell
+  $env:ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"
+  $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+  npm run dist:win
+  ```
+  判成功要看 `dist/` 里 exe 的时间戳，不要只看退出码。
 - 打包只收 `out/` 与 `package.json`（renderer bundle 已自包含 React/openapi-fetch/
   共享 client，故显式排除 `node_modules`，app.asar 约 0.6 MB；Electron 运行时另计）。
 - 产物在 `dist/`（gitignore）；`win-unpacked/AIStudy.exe` 为免安装可执行文件，
