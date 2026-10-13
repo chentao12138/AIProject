@@ -33,6 +33,12 @@ public final class ApiErrorCodes {
     public static final String EXAM_NOT_AVAILABLE = "EXAM_NOT_AVAILABLE";
     public static final String EXAM_ATTEMPT_NOT_IN_PROGRESS = "EXAM_ATTEMPT_NOT_IN_PROGRESS";
     public static final String EXAM_DEADLINE_EXCEEDED = "EXAM_DEADLINE_EXCEEDED";
+    /**
+     * The question pool cannot satisfy a blueprint's declared type/difficulty
+     * quotas or total (F-24). Reported instead of quietly generating a shorter
+     * or differently-shaped paper than the one the user reviewed.
+     */
+    public static final String EXAM_BLUEPRINT_UNSATISFIED = "EXAM_BLUEPRINT_UNSATISFIED";
 
     /**
      * Exam conflict codes (contract request C12 / audit F-30). Every one of

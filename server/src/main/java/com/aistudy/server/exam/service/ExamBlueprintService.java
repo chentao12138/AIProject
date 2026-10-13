@@ -138,16 +138,20 @@ public class ExamBlueprintService {
                     "no questions match the blueprint rules");
         }
 
-        int totalCount = rules.totalQuestionCount() != null ? rules.totalQuestionCount() : candidates.size();
+        // A declared distribution IS the requested paper length when the author
+        // left totalQuestionCount out; falling back to the pool size would make
+        // the quotas unsatisfiable by construction (F-24).
+        int totalCount = rules.totalQuestionCount() != null
+                ? rules.totalQuestionCount() : defaultTotalCount(rules, candidates);
         if (totalCount <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "totalQuestionCount must be positive");
         }
-        if (totalCount > candidates.size()) {
-            totalCount = candidates.size();
-        }
 
-        List<Question> selected = candidates.subList(0, totalCount);
+        // F-24: the distributions are quotas, not a filter followed by a
+        // subList; a paper that cannot honour them is refused instead of being
+        // silently reshaped.
+        List<Question> selected = selectByQuotas(candidates, rules, totalCount);
 
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
 
@@ -271,14 +275,226 @@ public class ExamBlueprintService {
         return pool;
     }
 
+    /**
+     * Score of one slot: an explicit {@code scoreByDifficulty} rule wins, and
+     * the constants below remain only the documented default (F-24).
+     *
+     * @throws com.aistudy.server.common.problem.ApiException when a declared
+     *         score is not positive, since a zero-scored question would quietly
+     *         distort diagnosis and mastery
+     */
     private int resolveScore(BlueprintRules rules, Question q) {
-        String diff = q.getDifficulty();
-        if (diff == null) diff = "MEDIUM";
+        String diff = normalizeDifficulty(q.getDifficulty());
+        Map<String, Integer> scores = rules.scoreByDifficulty();
+        if (scores != null && scores.containsKey(diff)) {
+            Integer declared = scores.get(diff);
+            if (declared == null || declared <= 0) {
+                throw new com.aistudy.server.common.problem.ApiException(
+                        HttpStatus.BAD_REQUEST,
+                        com.aistudy.server.common.problem.ApiErrorCodes.VALIDATION_ERROR,
+                        "scoreByDifficulty " + diff + " must be a positive number");
+            }
+            return declared;
+        }
         return switch (diff) {
             case "EASY" -> 2;
             case "HARD" -> 10;
             default -> 5;
         };
+    }
+
+    private static String normalizeDifficulty(String difficulty) {
+        return difficulty == null ? "MEDIUM" : difficulty;
+    }
+
+    /**
+     * Chooses exactly {@code totalCount} questions honouring BOTH declared
+     * distributions, or refuses with {@code EXAM_BLUEPRINT_UNSATISFIED}
+     * (audit F-24).
+     *
+     * <p>Before this the distributions only decided which types/difficulties
+     * were allowed at all, and the paper was then {@code subList(0, total)} of
+     * the id-ordered pool: a blueprint asking for 5 EASY and 5 HARD produced ten
+     * questions of whichever type sorted first, and a pool smaller than the
+     * total silently yielded a shorter paper that still reported success. The
+     * generated exam therefore did not match the blueprint the user reviewed.
+     *
+     * <h3>How the quotas are met</h3>
+     *
+     * <p>Candidates are bucketed by (type, difficulty) in their existing
+     * deterministic id order, and cells are filled scarcest-first, so a pair
+     * with few available questions takes what it can before a richer cell spends
+     * the same type or difficulty budget. The selection is then re-checked
+     * against every quota and the total, so a mismatch is a refusal naming the
+     * shortfall rather than a quiet degradation. Scarcest-first greedy is not a
+     * proof of feasibility for every input, which is exactly why the
+     * verification step exists.
+     *
+     * @param candidates same-space pool, already filtered and ordered by id
+     * @param rules      the blueprint rules whose quotas must hold
+     * @param totalCount questions the paper must contain
+     * @return the selected questions, ordered by id
+     * @throws com.aistudy.server.common.problem.ApiException 409
+     *         {@code EXAM_BLUEPRINT_UNSATISFIED} when the pool cannot meet the
+     *         quotas or the total
+     * @throws ResponseStatusException 400 when the quotas contradict
+     *         {@code totalQuestionCount}, which is an authoring mistake rather
+     *         than a shortage of questions
+     */
+    static List<Question> selectByQuotas(List<Question> candidates, BlueprintRules rules,
+                                         int totalCount) {
+        Map<String, Integer> typeQuotas = rules.questionTypeDistribution();
+        Map<String, Integer> difficultyQuotas = rules.difficultyDistribution();
+        boolean typeConstrained = typeQuotas != null && !typeQuotas.isEmpty();
+        boolean difficultyConstrained = difficultyQuotas != null && !difficultyQuotas.isEmpty();
+
+        // Re-checked here because generate() reads rules persisted before this
+        // validation existed (and rows written straight to the table).
+        requireQuotasMatchTotal("questionTypeDistribution", typeQuotas, totalCount);
+        requireQuotasMatchTotal("difficultyDistribution", difficultyQuotas, totalCount);
+
+        if (!typeConstrained && !difficultyConstrained) {
+            if (totalCount > candidates.size()) {
+                throw unsatisfied("totalQuestionCount " + totalCount
+                        + " but only " + candidates.size() + " matching questions exist");
+            }
+            return List.copyOf(candidates.subList(0, totalCount));
+        }
+
+        Map<String, Integer> remainingType = new java.util.HashMap<>(
+                typeConstrained ? typeQuotas : Map.of());
+        Map<String, Integer> remainingDifficulty = new java.util.HashMap<>(
+                difficultyConstrained ? difficultyQuotas : Map.of());
+
+        Map<String, Map<String, java.util.ArrayDeque<Question>>> buckets =
+                new java.util.LinkedHashMap<>();
+        for (Question question : candidates) {
+            buckets.computeIfAbsent(question.getQuestionType(), key -> new java.util.LinkedHashMap<>())
+                    .computeIfAbsent(normalizeDifficulty(question.getDifficulty()),
+                            key -> new java.util.ArrayDeque<>())
+                    .add(question);
+        }
+
+        Set<String> types = new java.util.LinkedHashSet<>();
+        if (typeConstrained) {
+            types.addAll(typeQuotas.keySet());
+        } else {
+            types.addAll(buckets.keySet());
+        }
+        List<String[]> cells = new ArrayList<>();
+        for (String type : types) {
+            Map<String, java.util.ArrayDeque<Question>> byDifficulty =
+                    buckets.getOrDefault(type, Map.of());
+            Set<String> difficulties = new java.util.LinkedHashSet<>();
+            if (difficultyConstrained) {
+                difficulties.addAll(difficultyQuotas.keySet());
+            } else {
+                difficulties.addAll(byDifficulty.keySet());
+            }
+            for (String difficulty : difficulties) {
+                int available = byDifficulty.getOrDefault(difficulty,
+                        new java.util.ArrayDeque<>()).size();
+                cells.add(new String[]{type, difficulty, String.valueOf(available)});
+            }
+        }
+        cells.sort(Comparator.comparingInt((String[] cell) -> Integer.parseInt(cell[2]))
+                .thenComparing(cell -> cell[0])
+                .thenComparing(cell -> cell[1]));
+
+        List<Question> selected = new ArrayList<>();
+        for (String[] cell : cells) {
+            if (selected.size() >= totalCount) {
+                break;
+            }
+            String type = cell[0];
+            String difficulty = cell[1];
+            int take = totalCount - selected.size();
+            if (typeConstrained) {
+                take = Math.min(take, remainingType.getOrDefault(type, 0));
+            }
+            if (difficultyConstrained) {
+                take = Math.min(take, remainingDifficulty.getOrDefault(difficulty, 0));
+            }
+            java.util.ArrayDeque<Question> pool = buckets.getOrDefault(type, Map.of())
+                    .get(difficulty);
+            if (pool == null || take <= 0) {
+                continue;
+            }
+            for (int i = 0; i < take && !pool.isEmpty(); i++) {
+                selected.add(pool.removeFirst());
+                if (typeConstrained) {
+                    remainingType.put(type, remainingType.getOrDefault(type, 0) - 1);
+                }
+                if (difficultyConstrained) {
+                    remainingDifficulty.put(difficulty,
+                            remainingDifficulty.getOrDefault(difficulty, 0) - 1);
+                }
+            }
+        }
+
+        if (selected.size() != totalCount) {
+            // Both quota maps add up to totalCount and every take is bounded by
+            // its remaining budget, so a shortfall here is the only way the
+            // marginals can be missed: name the unmet quotas in the refusal.
+            List<String> remaining = new ArrayList<>();
+            if (typeConstrained) {
+                for (Map.Entry<String, Integer> entry : remainingType.entrySet()) {
+                    if (entry.getValue() != 0) {
+                        remaining.add("type " + entry.getKey() + " short by " + entry.getValue());
+                    }
+                }
+            }
+            if (difficultyConstrained) {
+                for (Map.Entry<String, Integer> entry : remainingDifficulty.entrySet()) {
+                    if (entry.getValue() != 0) {
+                        remaining.add("difficulty " + entry.getKey() + " short by " + entry.getValue());
+                    }
+                }
+            }
+            throw unsatisfied("cannot reach " + totalCount + " questions from "
+                    + candidates.size() + " matching questions: " + String.join("; ", remaining));
+        }
+
+        selected.sort(Comparator.comparingLong(Question::getId));
+        return List.copyOf(selected);
+    }
+
+    private static void requireQuotasMatchTotal(String name, Map<String, Integer> quotas, int total) {
+        if (quotas == null || quotas.isEmpty()) {
+            return;
+        }
+        int sum = sum(quotas);
+        if (sum != total) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    name + " must add up to totalQuestionCount: asked " + total
+                            + ", distribution sums to " + sum);
+        }
+    }
+
+    private static int defaultTotalCount(BlueprintRules rules, List<Question> candidates) {
+        Map<String, Integer> typeQuotas = rules.questionTypeDistribution();
+        if (typeQuotas != null && !typeQuotas.isEmpty()) {
+            return sum(typeQuotas);
+        }
+        Map<String, Integer> difficultyQuotas = rules.difficultyDistribution();
+        if (difficultyQuotas != null && !difficultyQuotas.isEmpty()) {
+            return sum(difficultyQuotas);
+        }
+        return candidates.size();
+    }
+
+    private static int sum(Map<String, Integer> quotas) {
+        int total = 0;
+        for (Integer value : quotas.values()) {
+            total += value == null ? 0 : value;
+        }
+        return total;
+    }
+
+    private static com.aistudy.server.common.problem.ApiException unsatisfied(String detail) {
+        return com.aistudy.server.common.problem.ApiException.conflict(
+                com.aistudy.server.common.problem.ApiErrorCodes.EXAM_BLUEPRINT_UNSATISFIED,
+                "blueprint cannot be satisfied: " + detail);
     }
 
     private void validateRules(BlueprintRules rules) {
@@ -306,9 +522,31 @@ public class ExamBlueprintService {
                 }
             }
         }
+        // F-24: scores are honoured at generate time, so an unusable entry has
+        // to be rejected while the blueprint is still editable.
+        if (rules.scoreByDifficulty() != null) {
+            for (Map.Entry<String, Integer> entry : rules.scoreByDifficulty().entrySet()) {
+                if (!ALLOWED_DIFFICULTIES.contains(entry.getKey())) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "scoreByDifficulty key must be one of " + ALLOWED_DIFFICULTIES + ": " + entry.getKey());
+                }
+                if (entry.getValue() == null || entry.getValue() <= 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "scoreByDifficulty values must be positive: " + entry.getKey());
+                }
+            }
+        }
         if (rules.totalQuestionCount() != null && rules.totalQuestionCount() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "totalQuestionCount must be positive when provided");
+        }
+        // Reject a self-contradictory blueprint while it is still editable,
+        // instead of only discovering it when generate() computes the paper.
+        if (rules.totalQuestionCount() != null && rules.totalQuestionCount() > 0) {
+            requireQuotasMatchTotal("questionTypeDistribution", rules.questionTypeDistribution(),
+                    rules.totalQuestionCount());
+            requireQuotasMatchTotal("difficultyDistribution", rules.difficultyDistribution(),
+                    rules.totalQuestionCount());
         }
         if (rules.timeLimitMinutes() != null && rules.timeLimitMinutes() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

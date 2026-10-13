@@ -42,6 +42,9 @@ public final class ExamBlueprintDto {
             @Size(max = 100, message = "at most 100 include question ids")
             List<Long> includeQuestionIds,
 
+            @Size(max = 3, message = "at most 3 difficulty score entries")
+            java.util.Map<String, Integer> scoreByDifficulty,
+
             Integer totalQuestionCount,
 
             Integer timeLimitMinutes
