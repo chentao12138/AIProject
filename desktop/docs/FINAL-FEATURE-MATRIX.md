@@ -8,7 +8,8 @@
 | Sources | `/spaces/:spaceId/sources`, `/spaces/:spaceId/sources/:sourceId` | Implemented |
 | Knowledge | `/spaces/:spaceId/knowledge`, `/spaces/:spaceId/knowledge/:knowledgePointId` | Implemented |
 | AI Tutor | `/spaces/:spaceId/ai`, `/spaces/:spaceId/ai/:conversationId` | Implemented |
-| Questions | `/spaces/:spaceId/questions`, `/spaces/:spaceId/questions/new`, `/spaces/:spaceId/questions/:questionId` | Implemented (create + detail + publish; there is no edit route, see Blocked) |
+| Questions | `/spaces/:spaceId/questions`, `/spaces/:spaceId/questions/new`, `/spaces/:spaceId/questions/:questionId`, `/spaces/:spaceId/questions/:questionId/edit` | Implemented — all seven types authorable, edit (stem/explanation/difficulty only, as the contract allows), publish, archive/restore |
+| Notes | `/spaces/:spaceId/notes`, `/spaces/:spaceId/notes/:noteId` | Implemented — server-paged list + keyword, create with cross-entity prefill, editor with unsaved-changes guard, archive/delete, knowledge-point and content-block links |
 | Practice | `/spaces/:spaceId/practice`, `/spaces/:spaceId/practice/:sessionId` | Implemented |
 | Exams | `/spaces/:spaceId/exams`, `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | Implemented |
 | Search | `/spaces/:spaceId/search` | Implemented |
@@ -19,16 +20,21 @@
 
 | Feature | Routes | Blocker |
 |---------|--------|---------|
-| Notes | `/spaces/:spaceId/notes`, `/spaces/:spaceId/notes/:noteId` | No Notes endpoints in `api.d.ts`. See `BACKEND-CONTRACT-REQUESTS.md`. |
-| Question edit | *(no route — `route-contract.test.ts` rejects unreachable routes)* | No `PUT`/`PATCH /questions/{questionId}`; POST would duplicate the question. |
-| AI context chips | N/A (request body extension) | `SendMessageRequest` lacks `sourceId`/`sourcePageId`/`contentBlockId`/`knowledgePointId`. |
-| Full provenance nav | `/spaces/:spaceId/knowledge/:knowledgePointId` | `KnowledgePointSourceResponse` lacks `sourceId`/`sourcePageId`. |
-| AI citation deep link | `/spaces/:spaceId/ai/:conversationId` | `ContextReference.locator` is free text; no page/block ids, so `CONTENT_BLOCK` cannot navigate. |
-| Practice result history | `/spaces/:spaceId/practice/:sessionId` | `PracticeSessionDetail` has no score fields and no per-question result; only the `finish` response carries them. |
-| Exam answer resume | `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | `ExamAnswerView` returns no answer content, so a reload cannot rebuild saved answers. |
-| Question paging | `/spaces/:spaceId/questions` | `GET /questions` accepts no `page`/`size`; client-side paging over a full fetch is not allowed. |
-| Search → Note hit | `/spaces/:spaceId/search` | `SearchResult.type` enum has no `NOTE`. |
-| ORDERING / MATCHING authoring | `/spaces/:spaceId/questions/new` | `AnswerPayloadView`/`QuestionAnswerView` cannot express an ordered answer or pairs. |
+| AI context chips | N/A (request body extension) | `SendMessageRequest` lacks `sourceId`/`sourcePageId`/`contentBlockId`/`knowledgePointId` (C03). |
+| Full provenance nav | `/spaces/:spaceId/knowledge/:knowledgePointId` | `KnowledgePointSourceResponse` lacks `sourceId`/`sourcePageId` (C02). |
+| AI citation deep link | `/spaces/:spaceId/ai/:conversationId` | `ContextReference.locator` is free text; no page/block ids, so `CONTENT_BLOCK` cannot navigate (C04). |
+| Exam answer resume | `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | `/exam-attempts/{attemptId}/answers` is POST-only and `AttemptQuestionView` carries no answer (C10). The per-question save state and the "cannot resume" copy are honest; nothing restores. |
+| Practice history score | `/spaces/:spaceId/practice/:sessionId` | `PracticeSessionSummary`/`Detail` have no score fields; only the `finish` response does (C06, review half landed via `GET .../answers`). |
+| Question paging | `/spaces/:spaceId/questions` | `GET /questions` accepts no `page`/`size` (C-Paging); the list states this instead of faking a pager. |
+| Exam attempt history | `/spaces/:spaceId/exams/:examId` | Attempts are only listable under `/admin/exams/{examId}/attempts` (C11), which the desktop client does not call. |
+| Show a stored standard order / pair set | `/spaces/:spaceId/questions/:questionId` | `QuestionAnswerView` has neither `correctOrder` nor `matches` (C09b): authoring is one-way, so the detail page cannot echo what was set and an editor cannot pre-fill it. |
+| Notes archive is one-way and invisible | `/spaces/:spaceId/notes` | Archive sets `archived_at` while the list filters it out, `NoteView` has no `archivedAt` and there is no restore endpoint (C-Notes-archive); there is also no entity → notes read (C-Notes-reverse) and both link-add endpoints answer 201 while silently dropping a foreign id (C-Notes-link-noop). |
+
+Closed by the 2026-10-14 contract wave (previously in this table): Notes CRUD /
+editor / context links (C01), question edit (C05) and archive/restore (C07),
+practice per-question review and refresh-resume (C06 half), search `NOTE` hits
+(C-Search), and ORDERING / MATCHING authoring + answering + grading on the write
+side (C09).
 
 ## Measured decisions (A9.5 / audit W18)
 
@@ -49,18 +55,25 @@ to every route for no observed gain, so the checklist item is closed as
 **measured, no action**. Re-open it only with a startup or navigation
 measurement that shows a regression.
 
-## Verification evidence, 2026-10-13 (branch `feat/fe-001`, after merging `main`)
-Real command output, not a historical claim:
+## Verification evidence, 2026-10-14 (branch `feat/fe-001`, after the contract wave)
+
+Real command output at this commit, not a historical claim:
 
 | Gate | Command | Result |
 |------|---------|--------|
 | Lint | `npm run lint` | 0 errors, 0 warnings |
 | Typecheck | `npx tsc --noEmit -p tsconfig.node.json` / `-p tsconfig.web.json` | 0 errors |
 | Contract gate | `npm run api:check` | `openapi.json and api.d.ts are in sync` |
-| Unit | `npm run test:run` | 65 files / 777 tests passed |
-| Coverage | `npm run test:coverage` | statements 90% (7275/8083), branches 84.4%, functions 81.34% |
-| Build | `npm run build` | main 13.93 kB, preload 1.65 kB, renderer 775.91 kB |
-| Package | `npm run dist:win` (with the two mirror variables in README) | `dist/AIStudy Setup 0.1.0.exe`, 111 MB, timestamp matches the built commit |
+| **Live contract gate** | `OPENAPI_URL=http://localhost:8081/v3/api-docs npm run api:live` | `committed snapshot equals http://localhost:8081/v3/api-docs`. Negative proofs: a fixture with `timeLimitMinutes` renamed to `durationMinutes` (no path change) → exit 1; a fixture with `/api/v1/spaces` removed → refused as a non-AIStudy document |
+| Unit | `npm run test:run` | 69 files / 951 tests passed |
+| Coverage | `npm run test:coverage` | statements 91.39% (9770/10690), branches 86.34%, functions 82.95% |
+| Build | `npm run build` | main + preload 1.65 kB, renderer **889.64 kB** (+ CSS 30.31 kB) |
+| Package | `npm run dist:win` | see "what this does not prove" — the artifact is produced, and installing it is a separate gate |
+
+The previous table (2026-10-13: 65 files / 777 tests, renderer 775.91 kB) is kept
+here as the delta, because the audit is written against those numbers: +4 files,
++174 tests, +114 kB of renderer. The growth is the Notes module, the ordering /
+matching widgets and the contract-derived limits — none of it a new dependency.
 
 Packaging inputs and workspace hygiene (audit A1.3 / risk 15) were checked in the
 real checkout rather than in the shared ZIP the audit was written from:
