@@ -126,8 +126,9 @@ public class SourceAssetService {
             if (raw == null || raw.isBlank()) {
                 return null;
             }
+            String cleaned = raw.trim().replace("_", "");
             for (DuplicatePolicy policy : values()) {
-                if (policy.name().equalsIgnoreCase(raw.trim())) {
+                if (policy.name().replace("_", "").equalsIgnoreCase(cleaned)) {
                     return policy;
                 }
             }
