@@ -44,19 +44,162 @@ export const QUESTION_TYPES = [
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
 /**
- * The subset the renderer can author and answer. The backend also accepts
- * FILL_BLANK / ORDERING / MATCHING, which have no editor yet — offering them
- * would let users create questions they cannot fill in.
+ * What the renderer can actually do with each backend question type, given
+ * the published contract and nothing else.
+ *
+ * `authorable` — the create form can produce a question of this type.
+ * `publishable` — a question of this type can be published *and* later graded
+ * from contract fields, so publishing it is not a lie.
+ * `answerable` — `QuestionRenderer` collects an answer for it.
+ *
+ * ORDERING and MATCHING are false everywhere except `answerable` for ORDERING
+ * because the contract has no way to carry a correct order or a pair set.
+ * `question-type-contract.test.ts` asserts the two "cannot" claims by proving
+ * the fields stay ABSENT from openapi.json; the day the backend publishes
+ * `correctOrder` / a pair structure, that guard fails on purpose and this
+ * matrix has to be re-decided.
+ */
+export interface QuestionTypeSupport {
+  authorable: boolean;
+  publishable: boolean;
+  answerable: boolean;
+  /** Contract-gap copy shown wherever the type appears. Null when complete. */
+  gap: string | null;
+}
+
+/**
+ * The subset the authoring form offers. FILL_BLANK belongs here: the contract
+ * already carries its reference answer (`CreateQuestionRequest.referenceAnswer`)
+ * and its answer (`AnswerPayloadView.textAnswer`), so create → answer → grade →
+ * review all close. ORDERING / MATCHING do not — see their rows below.
  */
 export const AUTHORABLE_QUESTION_TYPES = [
   'SINGLE_CHOICE',
   'MULTIPLE_CHOICE',
   'TRUE_FALSE',
   'SHORT_ANSWER',
+  'FILL_BLANK',
 ] as const satisfies readonly QuestionType[];
 
 export type AuthorableQuestionType =
   (typeof AUTHORABLE_QUESTION_TYPES)[number];
+
+/**
+ * Copy for the contract gaps this line cannot close. Each string names the
+ * exact contract fields that are missing, so a user (and the audit report)
+ * can tell "not built yet" apart from "the contract cannot express it".
+ */
+export const CONTRACT_GAP_NOTICES = {
+  ORDERING_AUTHORING:
+    '排序题暂不能在本题库创建：契约的 CreateQuestionRequest 没有任何表达标准顺序的字段（后端 Java 侧的 correctOrder 未进入已发布契约，缺口 C09）。没有标准顺序就无法判分，所以这里不把「能创建」说成「能发布」。',
+  ORDERING_ANSWER:
+    '排序题作答：你的顺序通过 AnswerPayloadView.selectedOptionKeys（有序数组）表达。契约无法提交标准顺序，后端目前无法判分（缺口 C09）。',
+  ORDERING_REVIEW:
+    '无法显示标准顺序：QuestionAnswerView 只有 correctOptionKey / correctOptionKeys / correctBoolean / referenceAnswer，没有顺序字段（缺口 C09）。下面展示的是你提交的顺序。',
+  MATCHING:
+    '配对题暂不能创建、也不能作答：契约里不存在配对结构 —— CreateQuestionRequest 没有 matches、AnswerPayloadView 没有配对字段、QuestionAnswerView 没有 pairs。当前只读展示题干与选项。',
+  QUESTION_PAGING:
+    '列表没有分页：GET /questions 只接受 status / questionType / knowledgePointId，没有 page / size（缺口 C-Paging）。前端不会拉全量自己做假分页。',
+  QUESTION_UPDATE:
+    '题目不能编辑也不能删除或归档：契约在这里只有 GET 与 POST（含 /publish），没有 PUT /questions/{questionId}，也没有 DELETE / archive（缺口 G04 / G09）。用「新建」代替编辑会复制出一道新题，所以不提供。',
+} as const;
+
+/** Per-type support matrix — the single source for every gate in this line. */
+export const QUESTION_TYPE_SUPPORT: Record<QuestionType, QuestionTypeSupport> =
+  {
+    SINGLE_CHOICE: {
+      authorable: true,
+      publishable: true,
+      answerable: true,
+      gap: null,
+    },
+    MULTIPLE_CHOICE: {
+      authorable: true,
+      publishable: true,
+      answerable: true,
+      gap: null,
+    },
+    TRUE_FALSE: {
+      authorable: true,
+      publishable: true,
+      answerable: true,
+      gap: null,
+    },
+    SHORT_ANSWER: {
+      authorable: true,
+      publishable: true,
+      answerable: true,
+      gap: null,
+    },
+    FILL_BLANK: {
+      authorable: true,
+      publishable: true,
+      answerable: true,
+      gap: null,
+    },
+    ORDERING: {
+      authorable: false,
+      publishable: false,
+      answerable: true,
+      gap: CONTRACT_GAP_NOTICES.ORDERING_AUTHORING,
+    },
+    MATCHING: {
+      authorable: false,
+      publishable: false,
+      answerable: false,
+      gap: CONTRACT_GAP_NOTICES.MATCHING,
+    },
+  };
+
+/**
+ * Support for a `questionType` string. Unknown / free-form values return null:
+ * the contract types the field as a plain string, and a type this app has
+ * never seen must keep rendering as its options instead of being gated by a
+ * guess (see `QuestionRenderer`).
+ */
+export function questionTypeSupport(
+  type?: string | null
+): QuestionTypeSupport | null {
+  if (!type) return null;
+  return QUESTION_TYPE_SUPPORT[type.trim().toUpperCase() as QuestionType] ?? null;
+}
+
+/** True only for a type the create form may offer. Unknown types: false. */
+export function isAuthorableQuestionType(type?: string | null): boolean {
+  return questionTypeSupport(type)?.authorable === true;
+}
+
+/** True only when publishing this type yields a gradeable question. */
+export function isPublishableQuestionType(type?: string | null): boolean {
+  return questionTypeSupport(type)?.publishable === true;
+}
+
+/** The contract-gap copy for a type, or null when there is nothing to flag. */
+export function questionTypeGap(type?: string | null): string | null {
+  return questionTypeSupport(type)?.gap ?? null;
+}
+
+/**
+ * Length caps copied out of openapi.json — `maxLength` on a string,
+ * `maxItems` on an array. Never invent a value here: the guard test compares
+ * every entry against the contract and fails on drift. `stem` is deliberately
+ * absent because the contract declares only `minLength: 1` for it, so a UI cap
+ * would be a rule the server does not have.
+ */
+export const QUESTION_FIELD_LIMITS = {
+  questionType: 32,
+  explanation: 4000,
+  difficulty: 32,
+  optionKey: 16,
+  optionContent: 500,
+  correctOptionKey: 16,
+  /** `maxItems` of CreateQuestionRequest.correctOptionKeys. */
+  correctOptionKeys: 16,
+  referenceAnswer: 4000,
+  /** `maxItems` of AnswerPayloadView.selectedOptionKeys. */
+  selectedOptionKeys: 16,
+  textAnswer: 4000,
+} as const;
 
 /** Backend question types -> display copy. Unknown values show as-is. */
 const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {

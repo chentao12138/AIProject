@@ -93,6 +93,27 @@ export type ExamQuestionSlot = NonNullable<
 export type PracticeSessionDetail = ResultData<ApiClient['getPracticeSession']>;
 
 /**
+ * Server-graded answer row for one practice question. Derived from the only
+ * method that produces it, so a feature cannot hand-copy `isCorrect` /
+ * `correctAnswer` / `score` and drift from the contract (ADR-031: the server
+ * grades, the renderer displays).
+ */
+export type PracticeAnswerRecord = ResultData<ApiClient['submitPracticeAnswer']>;
+
+/** Contract `PracticeAnswerRequest` — the body the practice answer accepts. */
+export type PracticeAnswerBody = NonNullable<
+  Parameters<ApiClient['submitPracticeAnswer']>[2]
+>;
+
+/** Contract `AnswerPayloadView`, reached through its request wrapper. */
+export type PracticeAnswerPayload = NonNullable<PracticeAnswerBody['answer']>;
+
+/** One question of a practice paper, as the session detail lists it. */
+export type PracticeQuestionSlot = NonNullable<
+  PracticeSessionDetail['questions']
+>[number];
+
+/**
  * Practice score summary. NOTE: only `finishPracticeSession` returns this —
  * the session detail does NOT carry score/answered/correct counts, so a
  * finished session re-read from the server has no score to display. See

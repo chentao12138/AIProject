@@ -1,10 +1,15 @@
 /**
- * Question List (A4.2).
+ * Question List (A4.2, W08).
  *
  * /spaces/:spaceId/questions
  *
- * Server-driven filters. Only sends filters that the backend
- * contract supports (status, questionType, knowledgePointId).
+ * Server-driven filters, URL as the only holder of them: the query key and
+ * the request read the same `searchParams`, so what you see in the address
+ * bar is what was asked for. The contract's `GET /questions` accepts exactly
+ * `status`, `questionType` and `knowledgePointId` — so those are the three
+ * controls, and there is no pager: `page`/`size` do not exist in the contract
+ * (C-Paging), and faking one by fetching everything and slicing locally is
+ * forbidden. The gap is stated in the UI instead of being papered over.
  */
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -15,7 +20,12 @@ import { queryKeys } from '../../lib/query-keys';
 import { spaceQuery } from '../../lib/queries';
 import { useSpaceId } from '../../lib/space-scope';
 import { isPositiveId } from '../../lib/ids';
-import { difficultyLabel, questionTypeLabel, QUESTION_TYPES } from '../../lib/format';
+import {
+  CONTRACT_GAP_NOTICES,
+  difficultyLabel,
+  questionTypeLabel,
+  QUESTION_TYPES,
+} from '../../lib/format';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
@@ -51,6 +61,17 @@ export function QuestionsPage() {
     )
   );
 
+  /** Data source for the knowledge-point filter — the same list the
+   *  knowledge page edits, so the filter can never offer a point that
+   *  does not exist. */
+  const knowledgePointsQuery = useQuery(
+    spaceQuery(
+      spaceId,
+      queryKeys.knowledgePoints(spaceId),
+      (id) => api.listKnowledgePoints(id)
+    )
+  );
+
   const items = listQuery.data ?? [];
 
   function setFilter(key: string, value: string | null) {
@@ -61,6 +82,16 @@ export function QuestionsPage() {
       next.set(key, value);
     }
     setSearchParams(next, { replace: true });
+  }
+
+  const filterActive = Boolean(status || questionType || knowledgePointId);
+
+  const points: Array<{ id: number; title: string }> = [];
+  for (const kp of knowledgePointsQuery.data ?? []) {
+    const kpId = kp.id;
+    if (isPositiveId(kpId)) {
+      points.push({ id: kpId, title: kp.title ?? `知识点 #${kpId}` });
+    }
   }
 
   return (
@@ -107,7 +138,44 @@ export function QuestionsPage() {
               ))}
             </select>
           </div>
+          <div className="form__field">
+            <label htmlFor="q-kp" className="form__label">知识点</label>
+            <select
+              id="q-kp"
+              className="select"
+              data-testid="kp-filter"
+              value={knowledgePointId === undefined ? '' : String(knowledgePointId)}
+              onChange={(e) => setFilter('knowledgePointId', e.target.value)}
+            >
+              <option value="">全部</option>
+              {points.map((point) => (
+                <option key={point.id} value={String(point.id)}>
+                  {point.title}
+                </option>
+              ))}
+            </select>
+            {knowledgePointsQuery.isPending && (
+              <p className="field__hint">知识点加载中…</p>
+            )}
+            {knowledgePointsQuery.isError && (
+              <p className="field__hint">
+                知识点列表加载失败，仍可手动用 URL 参数 knowledgePointId 筛选。
+              </p>
+            )}
+          </div>
+          {filterActive && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setSearchParams(new URLSearchParams(), { replace: true })}
+            >
+              清除筛选
+            </Button>
+          )}
         </div>
+        <p className="page__note" role="note" data-testid="paging-gap-notice">
+          {CONTRACT_GAP_NOTICES.QUESTION_PAGING}
+        </p>
       </section>
 
       {listQuery.isPending && <LoadingState text="加载题目…" />}

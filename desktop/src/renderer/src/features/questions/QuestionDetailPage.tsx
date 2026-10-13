@@ -16,7 +16,14 @@ import { queryKeys } from '../../lib/query-keys';
 import { entityQuery } from '../../lib/queries';
 import { requireId, useSpaceId } from '../../lib/space-scope';
 import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
-import { difficultyLabel, formatDateTime, questionTypeLabel } from '../../lib/format';
+import {
+  CONTRACT_GAP_NOTICES,
+  difficultyLabel,
+  formatDateTime,
+  isPublishableQuestionType,
+  questionTypeGap,
+  questionTypeLabel,
+} from '../../lib/format';
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
@@ -102,6 +109,11 @@ export function QuestionDetailPage() {
     : undefined;
 
   const isDraft = q.status === 'DRAFT';
+  // Publishing a question whose correct answer the contract cannot express
+  // would hand exams/practice an ungradeable item, so the action is withheld
+  // and the missing field is named instead.
+  const canPublish = isPublishableQuestionType(q.questionType);
+  const gapNotice = questionTypeGap(q.questionType);
 
   return (
     <div className="page">
@@ -110,7 +122,7 @@ export function QuestionDetailPage() {
         actions={
           <>
             <StatusBadge status={q.status} />
-            {isDraft && (
+            {isDraft && canPublish && (
               <Button
                 variant="primary"
                 disabled={publish.isPending}
@@ -122,6 +134,14 @@ export function QuestionDetailPage() {
           </>
         }
       />
+      {isDraft && !canPublish && (
+        <p className="page__note" role="note" data-testid="publish-gap-notice">
+          本题型暂不提供发布（草稿保留）：{gapNotice}
+        </p>
+      )}
+      <p className="page__note" role="note" data-testid="update-gap-notice">
+        {CONTRACT_GAP_NOTICES.QUESTION_UPDATE}
+      </p>
       {publish.isError && (
         <p className="form__error" role="alert">
           {normalizeApiError(publish.error).message}
