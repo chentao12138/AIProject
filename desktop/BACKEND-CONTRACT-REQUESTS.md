@@ -104,11 +104,33 @@ invented:
   request is documentation — confirm in the OpenAPI description that `id` is the
   note id for `NOTE` rows, same open question as C13 for `CONTENT_BLOCK`.
 
+**Root cause located in the sources (this is a mechanical fix, not a design
+question).** `common/problem/ApiErrorCodes.java` already defines
+`EXAM_ATTEMPT_NOT_IN_PROGRESS` (:28) and `EXAM_DEADLINE_EXCEEDED` (:29), and
+`common/problem/ApiException.java` already carries a `code` field
+(`ApiException(HttpStatus, String code, String detail)`). The two exam throw
+sites just do not use them:
+
+- `exam/service/ExamAttemptService.java:163-166` —
+  `new ResponseStatusException(CONFLICT, "exam attempt is not IN_PROGRESS
+  (EXAM_ATTEMPT_NOT_IN_PROGRESS): " + status)`
+- `exam/service/ExamAttemptService.java:604-607` (`assertNotExpired`) —
+  `new ResponseStatusException(CONFLICT, "exam deadline exceeded
+  (EXAM_DEADLINE_EXCEEDED)")`
+
+Because the code is interpolated into the message, the advice layer can only
+report the generic `CONFLICT`, and the frontend is left parsing English text.
+Switching these to `ApiException(HttpStatus.CONFLICT,
+ApiErrorCodes.EXAM_ATTEMPT_NOT_IN_PROGRESS, <detail>)` — and the same for
+`EXAM_DEADLINE_EXCEEDED` — is enough; no new vocabulary is needed. Please do the
+same for the C10 case (a `SUBMITTED` attempt refusing a new answer) once that
+endpoint exists.
+
+
+
 **Still unverified** — C14 (per-asset page filtering) and C15 (job visible at
 queue time): the page-listing endpoint was not found in `SourceController`, so
-these stay questions rather than claims. C12 (discriminable conflict codes) needs
-a look at the exception/advice layer, which the regeneration will show anyway.
-
+these stay open questions rather than claims.
 
 **Coordination:** asks go to the backend session one at a time, waiting for each
 reply. The one currently standing is "start the server + a desktop login
