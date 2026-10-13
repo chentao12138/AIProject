@@ -145,20 +145,51 @@ Work was built in parallel lanes (search / source lifecycle / asset-folder-RAW /
 
 ### Known-red, NOT caused by this round
 - `ModuleBoundaryTest.crossModuleMapperImportsMustNotGrow`: measured **91** vs cap **85**. At `f685ef8` (before any
-  merge in this round) it already measured **90**, so the ratchet was broken by earlier commits, not here; this round
-  added exactly one (`ingestion.job.service.ZipEntryAssetExtractor -> source.asset.mapper.SourceAssetMapper`, to be
-  routed through `SourceAssetService`). The guard now prints its offender list. Do NOT raise the cap.
+  merge in this round) it already measured **90**, so the ratchet was broken by earlier commits, not here. The guard now
+  prints its offender list. Attribution of the 6 over cap:
+  - **5** from the Notes feature (`note.service.NoteService` → `knowledge.point`, `question`, `source`, `source.content`,
+    `source.page` mappers) — commit `e829e76`.
+  - **1** from this round's merge (`admin.source.service.SourceExtractionGatewayService` / ingestion gateway seam).
+  - This round **removed** the ones its own new code would have added: `ai.knowledge` → `knowledge.source.mapper`,
+    `ai.question` → `knowledge.point`/`question` mappers (now via `KnowledgePointSourceService.linkDerivedSource` and
+    `QuestionService.createDerived`), and `ingestion.job` → `source.asset.mapper` (now via `SourceAssetService`).
+  Fixing the remaining 6 means routing those reads/writes through the owning services. Do NOT raise the cap to 91.
+
+### Verified state of this round's second half (real MySQL, `aistudy_flyway_test`)
+- Full `mvn -o test`: **1000 tests, 0 errors, 1 failure** (only the boundary item above), 2 skipped.
+- Frontend contracts now live in the regenerated `packages/api-client` (**197 paths**, `npm run typecheck` green):
+  **C-Paging** (`page`/`size` + `QuestionPageResponse`, SQL-side paging), **C06**
+  (`GET .../practice-sessions/{id}/result`, stored summary in V066, `PRACTICE_SESSION_NOT_SUBMITTED`),
+  **C10** (`ExamAnswerView.answer`/`submitted`, `AttemptQuestionView.answer`/`answered`),
+  **C11** (`GET /spaces/{spaceId}/exam-attempts` paged, `score` null until a result exists),
+  **C12** (14 exam conflict sites now throw `ApiException` with stable codes instead of writing the code inside English).
+- **F-19/F-20/F-23**: the batch generators validate the whole provider payload before any write, inside one
+  transaction, write provenance through the owning module, and book every provider call (success and failure) in
+  `ai_usage_record`; `AiGenerationProvenanceTest` (7 tests) pins it.
+- Also fixed on the way: `AiGenerationJobWorker.java` was on disk as `AiGenerationJobWorker` with class
+  `AIGenerationJobWorker`, which broke incremental compilation.
+
+### Environment recipe that cost two false reds this round
+- `DB_URL` and `FLYWAY_DB_URL` point at **different schemas for different purposes**: the `it`-profile spike tests need
+  `aistudy_spike` (its `spike_record` table is created by `deploy/local/mysql/init`, not by Flyway), while every
+  `flyway-it` test and the locally running app need `aistudy_flyway_test`. Pointing `DB_URL` at the Flyway schema makes
+  `SpikeRecordMapperIntegrationTest` fail with `Table ... spike_record does not exist`; pointing it at the spike schema
+  for a *run* makes Flyway refuse to start (`no schema history table`).
+- Never source `AISTUDY_BOOTSTRAP_ADMIN_ENABLED` into a test run: `BootstrapAdminRunner` is a `@Component` gated on it,
+  and with the `test` profile's mocked mappers it fails the context ("Bootstrap admin account was created but could not
+  be loaded"), which shows up as ~129 "ApplicationContext failure threshold exceeded" errors, not as one real bug.
 
 ### Not done yet
-- F-18 (AI structuring writes live published blocks), F-19/F-20 (generator provenance + atomicity), F-23 (usage rows
-  for the batch generators/variant), F-24 (blueprint distribution actually enforced), F-06/F-07 (ORDER/OUTLINE issue
-  producers, automatic outline suggestions), F-11 (real revision diff), F-30 (error-code sweep beyond practice).
-- C-Paging (`GET /questions` page/size envelope — SQL paging + test updates), C09 (typed ORDERING/MATCHING pairs,
-  real enums), C10 (`ExamAnswerView` payload echo), C11 (exam attempt history; shape question sent to frontend),
-  C12 (exam/practice conflicts still surface generic `CONFLICT`).
-- Variant F-16/F-17 have no test yet; C06 negative path (open session → 409) untested.
+- F-18 (AI content structuring still overwrites live published ContentBlocks; it must land in a draft revision),
+  F-24 (blueprint distribution is only a candidate filter then `subList`), F-06/F-07 (ORDER/OUTLINE low-confidence
+  issue producers, automatic outline suggestion), F-11 (real revision-to-revision diff), F-30 (error-code sweep
+  outside exam: practice/asset/folder conflicts still surface generic `CONFLICT`).
+- Frontend: C09 (typed ORDERING/MATCHING pairs, `questionType`/`status` as real enums — `orderingAnswer: number[]`
+  and `matchingAnswer: string(JSON)` already ship and grade by array order), the `explanation` hardcoded null on
+  `GET .../practice-sessions/{id}/answers`, and practice-module conflict codes.
+- The variant fixes F-16/F-17 have no dedicated test yet; C06's open-session 409 path is untested.
 - Gates not executed: T-16 real textbook E2E, T-17 OCR on Windows+Docker, T-18 real StepFun/BYOK, T-21 container E2E,
-  T-22 (worktree is clean of tracked changes but nothing is pushed).
+  T-22 (tracked worktree is clean, nothing is pushed).
 - `login.json` / `spec-live.json` sit untracked in the repo root from someone's probe — not created by this round,
   left in place; check them before any commit that includes the repo root.
 
