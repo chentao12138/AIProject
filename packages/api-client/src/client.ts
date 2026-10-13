@@ -68,6 +68,18 @@ type CreateExamRequest =
 type ExamAnswerRequest =
   components['schemas']['ExamAnswerRequest'];
 
+type UpdateExamRequest =
+  components['schemas']['UpdateExamRequest'];
+
+type UpdateQuestionRequest =
+  components['schemas']['UpdateQuestionRequest'];
+
+type NoteCreateRequest =
+  components['schemas']['NoteCreateRequest'];
+
+type NoteUpdateRequest =
+  components['schemas']['NoteUpdateRequest'];
+
 type StudyCoachRequest =
   components['schemas']['StudyCoachRequest'];
 
@@ -577,6 +589,50 @@ export function createApiClient(
     },
 
     /**
+     * PUT .../questions/{questionId} — edit a question.
+     *
+     * The contract's UpdateQuestionRequest only carries stem/explanation/
+     * difficulty, so options and the correct answer cannot be changed here.
+     */
+    async updateQuestion(
+      spaceId: number,
+      questionId: number,
+      body: UpdateQuestionRequest
+    ) {
+      return client.PUT('/api/v1/spaces/{spaceId}/questions/{questionId}', {
+        params: { path: { spaceId, questionId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST .../questions/{questionId}/archive — retire a question.
+     */
+    async archiveQuestion(spaceId: number, questionId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/questions/{questionId}/archive',
+        {
+          params: { path: { spaceId, questionId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * POST .../questions/{questionId}/restore — bring an archived question back.
+     */
+    async restoreQuestion(spaceId: number, questionId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/questions/{questionId}/restore',
+        {
+          params: { path: { spaceId, questionId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
      * GET .../practice-sessions — list my practice sessions.
      */
     async listPracticeSessions(spaceId: number) {
@@ -652,6 +708,21 @@ export function createApiClient(
     },
 
     /**
+     * GET .../practice-sessions/{sessionId}/answers — answers the server has
+     * already graded for a session. This is what makes a refreshed session
+     * resume from real state instead of an empty local cache.
+     */
+    async listPracticeAnswers(spaceId: number, sessionId: number) {
+      return client.GET(
+        '/api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/answers',
+        {
+          params: { path: { spaceId, sessionId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
      * GET .../exams — list exams in MY space.
      */
     async listExams(spaceId: number) {
@@ -688,6 +759,30 @@ export function createApiClient(
     async publishExam(spaceId: number, examId: number) {
       return client.POST(
         '/api/v1/spaces/{spaceId}/exams/{examId}/publish',
+        {
+          params: { path: { spaceId, examId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
+    /**
+     * PUT .../exams/{examId} — edit a DRAFT exam.
+     */
+    async updateExam(spaceId: number, examId: number, body: UpdateExamRequest) {
+      return client.PUT('/api/v1/spaces/{spaceId}/exams/{examId}', {
+        params: { path: { spaceId, examId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /**
+     * POST .../exams/{examId}/archive — retire an exam.
+     */
+    async archiveExam(spaceId: number, examId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/exams/{examId}/archive',
         {
           params: { path: { spaceId, examId } },
           headers: await bearerHeaders(tokenProvider),
@@ -927,7 +1022,7 @@ export function createApiClient(
         prompt?: string;
       }
     ) {
-      return (client as any).POST(
+      return client.POST(
         '/api/v1/spaces/{spaceId}/ai/generation-jobs',
         {
           params: { path: { spaceId } },
@@ -939,7 +1034,7 @@ export function createApiClient(
 
     /** GET .../ai/generation-jobs — list my generation jobs */
     async listAiGenerationJobs(spaceId: number, query?: { page?: number; size?: number }) {
-      return (client as any).GET('/api/v1/spaces/{spaceId}/ai/generation-jobs', {
+      return client.GET('/api/v1/spaces/{spaceId}/ai/generation-jobs', {
         params: { path: { spaceId }, query },
         headers: await bearerHeaders(tokenProvider),
       });
@@ -947,7 +1042,7 @@ export function createApiClient(
 
     /** GET .../ai/generation-jobs/{jobId} */
     async getAiGenerationJob(spaceId: number, jobId: number) {
-      return (client as any).GET(
+      return client.GET(
         '/api/v1/spaces/{spaceId}/ai/generation-jobs/{jobId}',
         {
           params: { path: { spaceId, jobId } },
@@ -958,7 +1053,7 @@ export function createApiClient(
 
     /** POST .../ai/generation-jobs/{jobId}/retry */
     async retryAiGenerationJob(spaceId: number, jobId: number) {
-      return (client as any).POST(
+      return client.POST(
         '/api/v1/spaces/{spaceId}/ai/generation-jobs/{jobId}/retry',
         {
           params: { path: { spaceId, jobId } },
@@ -969,7 +1064,7 @@ export function createApiClient(
 
     /** GET .../sources/{sourceId}/assets/{assetId}/content — authorized RAW download */
     async downloadSourceAssetRaw(spaceId: number, sourceId: number, assetId: number) {
-      return (client as any).GET(
+      return client.GET(
         '/api/v1/spaces/{spaceId}/sources/{sourceId}/assets/{assetId}/content',
         {
           params: { path: { spaceId, sourceId, assetId } },
@@ -980,7 +1075,7 @@ export function createApiClient(
 
     /** DELETE .../sources/{sourceId}/folder-sync/snapshot/{snapshotId} */
     async deleteFolderSyncSnapshot(spaceId: number, sourceId: number, snapshotId: number) {
-      return (client as any).DELETE(
+      return client.DELETE(
         '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}',
         {
           params: { path: { spaceId, sourceId, snapshotId } },
@@ -991,14 +1086,14 @@ export function createApiClient(
 
     /** GET /api/v1/admin/system-config/registry — ADMIN typed config registry */
     async adminSystemConfigRegistry() {
-      return (client as any).GET('/api/v1/admin/system-config/registry', {
+      return client.GET('/api/v1/admin/system-config/registry', {
         headers: await bearerHeaders(tokenProvider),
       });
     },
 
     /** PUT /api/v1/admin/system-config/{key} — ADMIN set runtime config value only */
     async adminUpsertSystemConfig(key: string, value: string) {
-      return (client as any).PUT('/api/v1/admin/system-config/{key}', {
+      return client.PUT('/api/v1/admin/system-config/{key}', {
         params: { path: { key } },
         body: { value },
         headers: await bearerHeaders(tokenProvider),
@@ -1007,7 +1102,7 @@ export function createApiClient(
 
     /** GET /api/v1/admin/sources — ADMIN source governance list */
     async adminListSources(query?: { q?: string; spaceId?: number; page?: number; size?: number }) {
-      return (client as any).GET('/api/v1/admin/sources', {
+      return client.GET('/api/v1/admin/sources', {
         query,
         headers: await bearerHeaders(tokenProvider),
       });
@@ -1015,15 +1110,71 @@ export function createApiClient(
 
     /** POST /api/v1/admin/sources/jobs/{jobId}/retry */
     async adminRetryIngestionJob(jobId: number) {
-      return (client as any).POST('/api/v1/admin/sources/jobs/{jobId}/retry', {
+      return client.POST('/api/v1/admin/sources/jobs/{jobId}/retry', {
         params: { path: { jobId } },
         headers: await bearerHeaders(tokenProvider),
       });
     },
 
+    /** GET .../notes — paged list of MY notes in the space. */
+    async listNotes(
+      spaceId: number,
+      query?: { page?: number; size?: number; keyword?: string }
+    ) {
+      return client.GET('/api/v1/spaces/{spaceId}/notes', {
+        params: { path: { spaceId }, query },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** POST .../notes — create a note. */
+    async createNote(spaceId: number, body: NoteCreateRequest) {
+      return client.POST('/api/v1/spaces/{spaceId}/notes', {
+        params: { path: { spaceId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** GET .../notes/{noteId} — one note of MY space. */
+    async getNote(spaceId: number, noteId: number) {
+      return client.GET('/api/v1/spaces/{spaceId}/notes/{noteId}', {
+        params: { path: { spaceId, noteId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** PUT .../notes/{noteId} — edit a note. */
+    async updateNote(spaceId: number, noteId: number, body: NoteUpdateRequest) {
+      return client.PUT('/api/v1/spaces/{spaceId}/notes/{noteId}', {
+        params: { path: { spaceId, noteId } },
+        body,
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** DELETE .../notes/{noteId} — remove a note. */
+    async deleteNote(spaceId: number, noteId: number) {
+      return client.DELETE('/api/v1/spaces/{spaceId}/notes/{noteId}', {
+        params: { path: { spaceId, noteId } },
+        headers: await bearerHeaders(tokenProvider),
+      });
+    },
+
+    /** POST .../notes/{noteId}/archive — retire a note instead of deleting it. */
+    async archiveNote(spaceId: number, noteId: number) {
+      return client.POST(
+        '/api/v1/spaces/{spaceId}/notes/{noteId}/archive',
+        {
+          params: { path: { spaceId, noteId } },
+          headers: await bearerHeaders(tokenProvider),
+        }
+      );
+    },
+
     /** POST .../notes/{noteId}/knowledge-points — link knowledge points to MY note */
     async addNoteKnowledgePoints(spaceId: number, noteId: number, kpIds: number[]) {
-      return (client as any).POST(
+      return client.POST(
         '/api/v1/spaces/{spaceId}/notes/{noteId}/knowledge-points',
         {
           params: { path: { spaceId, noteId } },
@@ -1035,7 +1186,7 @@ export function createApiClient(
 
     /** GET .../notes/{noteId}/knowledge-points — list knowledge points of MY note */
     async listNoteKnowledgePoints(spaceId: number, noteId: number) {
-      return (client as any).GET(
+      return client.GET(
         '/api/v1/spaces/{spaceId}/notes/{noteId}/knowledge-points',
         {
           params: { path: { spaceId, noteId } },
@@ -1046,7 +1197,7 @@ export function createApiClient(
 
     /** DELETE .../notes/{noteId}/knowledge-points/{kpId} — unlink a knowledge point from MY note */
     async removeNoteKnowledgePoint(spaceId: number, noteId: number, kpId: number) {
-      return (client as any).DELETE(
+      return client.DELETE(
         '/api/v1/spaces/{spaceId}/notes/{noteId}/knowledge-points/{kpId}',
         {
           params: { path: { spaceId, noteId, kpId } },
@@ -1057,7 +1208,7 @@ export function createApiClient(
 
     /** POST .../notes/{noteId}/source-blocks — link content blocks to MY note */
     async addNoteSourceBlocks(spaceId: number, noteId: number, blockIds: number[]) {
-      return (client as any).POST(
+      return client.POST(
         '/api/v1/spaces/{spaceId}/notes/{noteId}/source-blocks',
         {
           params: { path: { spaceId, noteId } },
@@ -1069,7 +1220,7 @@ export function createApiClient(
 
     /** GET .../notes/{noteId}/source-blocks — list content blocks of MY note */
     async listNoteSourceBlocks(spaceId: number, noteId: number) {
-      return (client as any).GET(
+      return client.GET(
         '/api/v1/spaces/{spaceId}/notes/{noteId}/source-blocks',
         {
           params: { path: { spaceId, noteId } },
@@ -1080,7 +1231,7 @@ export function createApiClient(
 
     /** DELETE .../notes/{noteId}/source-blocks/{blockId} — unlink a content block from MY note */
     async removeNoteSourceBlock(spaceId: number, noteId: number, blockId: number) {
-      return (client as any).DELETE(
+      return client.DELETE(
         '/api/v1/spaces/{spaceId}/notes/{noteId}/source-blocks/{blockId}',
         {
           params: { path: { spaceId, noteId, blockId } },
@@ -1091,7 +1242,7 @@ export function createApiClient(
 
     /** POST .../questions/{questionId}/source-blocks — link content blocks to MY question */
     async addQuestionSourceBlocks(spaceId: number, questionId: number, blockIds: number[]) {
-      return (client as any).POST(
+      return client.POST(
         '/api/v1/spaces/{spaceId}/questions/{questionId}/source-blocks',
         {
           params: { path: { spaceId, questionId } },
@@ -1103,7 +1254,7 @@ export function createApiClient(
 
     /** GET .../questions/{questionId}/source-blocks — list content blocks of MY question */
     async listQuestionSourceBlocks(spaceId: number, questionId: number) {
-      return (client as any).GET(
+      return client.GET(
         '/api/v1/spaces/{spaceId}/questions/{questionId}/source-blocks',
         {
           params: { path: { spaceId, questionId } },
@@ -1114,7 +1265,7 @@ export function createApiClient(
 
     /** DELETE .../questions/{questionId}/source-blocks/{blockId} — unlink a content block from MY question */
     async removeQuestionSourceBlock(spaceId: number, questionId: number, blockId: number) {
-      return (client as any).DELETE(
+      return client.DELETE(
         '/api/v1/spaces/{spaceId}/questions/{questionId}/source-blocks/{blockId}',
         {
           params: { path: { spaceId, questionId, blockId } },
@@ -1129,7 +1280,7 @@ export function createApiClient(
       kpId: number,
       body: { relationType: string; targetKpId: number; weight?: number; notes?: string }
     ) {
-      return (client as any).POST(
+      return client.POST(
         '/api/v1/spaces/{spaceId}/knowledge-points/{kpId}/relations',
         {
           params: { path: { spaceId, kpId } },
@@ -1141,7 +1292,7 @@ export function createApiClient(
 
     /** GET .../knowledge-points/{kpId}/relations — list relations of MY knowledge point */
     async listKnowledgePointRelations(spaceId: number, kpId: number) {
-      return (client as any).GET(
+      return client.GET(
         '/api/v1/spaces/{spaceId}/knowledge-points/{kpId}/relations',
         {
           params: { path: { spaceId, kpId } },
@@ -1152,7 +1303,7 @@ export function createApiClient(
 
     /** DELETE .../knowledge-points/{kpId}/relations/{relationId} — remove a relation */
     async removeKnowledgePointRelation(spaceId: number, kpId: number, relationId: number) {
-      return (client as any).DELETE(
+      return client.DELETE(
         '/api/v1/spaces/{spaceId}/knowledge-points/{kpId}/relations/{relationId}',
         {
           params: { path: { spaceId, kpId, relationId } },
@@ -1163,7 +1314,7 @@ export function createApiClient(
 
     /** POST .../sources/{sourceId}/folder-sync/snapshot — create a folder import snapshot */
     async createFolderSyncSnapshot(spaceId: number, sourceId: number) {
-      return (client as any).POST(
+      return client.POST(
         '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot',
         {
           params: { path: { spaceId, sourceId } },
@@ -1179,7 +1330,7 @@ export function createApiClient(
       snapshotId: number,
       entries: { relativePath: string; sha256?: string }[]
     ) {
-      return (client as any).POST(
+      return client.POST(
         '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/entries',
         {
           params: { path: { spaceId, sourceId, snapshotId } },
@@ -1191,7 +1342,7 @@ export function createApiClient(
 
     /** GET .../sources/{sourceId}/folder-sync/snapshot — list folder sync snapshots */
     async listFolderSyncSnapshots(spaceId: number, sourceId: number) {
-      return (client as any).GET(
+      return client.GET(
         '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot',
         {
           params: { path: { spaceId, sourceId } },
@@ -1202,7 +1353,7 @@ export function createApiClient(
 
     /** GET .../sources/{sourceId}/folder-sync/snapshot/{snapshotId} — get one snapshot */
     async getFolderSyncSnapshot(spaceId: number, sourceId: number, snapshotId: number) {
-      return (client as any).GET(
+      return client.GET(
         '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}',
         {
           params: { path: { spaceId, sourceId, snapshotId } },
@@ -1213,7 +1364,7 @@ export function createApiClient(
 
     /** GET .../sources/{sourceId}/folder-sync/snapshot/{snapshotId}/entries — list entries of a snapshot */
     async listFolderSyncEntries(spaceId: number, sourceId: number, snapshotId: number) {
-      return (client as any).GET(
+      return client.GET(
         '/api/v1/spaces/{spaceId}/sources/{sourceId}/folder-sync/snapshot/{snapshotId}/entries',
         {
           params: { path: { spaceId, sourceId, snapshotId } },
@@ -1228,7 +1379,7 @@ export function createApiClient(
       sourceId: number,
       body: { fromRevisionId: number; toRevisionId: number }
     ) {
-      return (client as any).POST(
+      return client.POST(
         '/api/v1/spaces/{spaceId}/sources/{sourceId}/versions/compare',
         {
           params: { path: { spaceId, sourceId } },
