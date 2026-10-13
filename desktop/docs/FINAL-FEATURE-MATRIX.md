@@ -65,10 +65,10 @@ Real command output at this commit, not a historical claim:
 | Typecheck | `npx tsc --noEmit -p tsconfig.node.json` / `-p tsconfig.web.json` | 0 errors |
 | Contract gate | `npm run api:check` | `openapi.json and api.d.ts are in sync` |
 | **Live contract gate** | `OPENAPI_URL=http://localhost:8081/v3/api-docs npm run api:live` | `committed snapshot equals http://localhost:8081/v3/api-docs`. Negative proofs: a fixture with `timeLimitMinutes` renamed to `durationMinutes` (no path change) → exit 1; a fixture with `/api/v1/spaces` removed → refused as a non-AIStudy document |
-| Unit | `npm run test:run` | 69 files / 951 tests passed |
+| Unit | `npm run test:run` | 70 files / 975 tests passed |
 | Coverage | `npm run test:coverage` | statements 91.39% (9770/10690), branches 86.34%, functions 82.95% |
 | Build | `npm run build` | main + preload 1.65 kB, renderer **889.64 kB** (+ CSS 30.31 kB) |
-| Package | `npm run dist:win` (with the two mirror variables) | `dist/AIStudy Setup 0.1.0.exe`, 111,467,968 bytes, built 2026-10-14 01:45 at this commit — installed silently (exit 0) and the installed exe launches with a window titled `AIStudy`, `productVersion 0.1.0.0`. The build log's `signing with signtool.exe` lines do **not** mean it is signed (see the signing note below). |
+| Package | `npm run dist:win` (with the two mirror variables) | `dist/AIStudy Setup 0.1.0.exe`, 111,468,074 bytes, built 2026-10-14 01:55 at this commit — installed silently (exit 0) and the installed exe launches with a window titled `AIStudy`, `productVersion 0.1.0.0`. The build log's `signing with signtool.exe` lines do **not** mean it is signed (see the signing note below). |
 | Package | `npm run dist:win` | see "what this does not prove" — the artifact is produced, and installing it is a separate gate |
 
 The previous table (2026-10-13: 65 files / 777 tests, renderer 775.91 kB) is kept
