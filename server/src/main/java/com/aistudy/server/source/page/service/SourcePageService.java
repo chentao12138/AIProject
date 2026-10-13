@@ -5,7 +5,7 @@ import com.aistudy.server.source.page.dto.ReorderPagesRequest;
 import com.aistudy.server.source.page.entity.SourcePage;
 import com.aistudy.server.source.page.mapper.SourcePageMapper;
 import com.aistudy.server.source.service.SourceService;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -100,10 +100,14 @@ public class SourcePageService {
             throw new IllegalArgumentException("count is implausibly large: " + count);
         }
         Set<Integer> used = new HashSet<>();
-        List<SourcePage> existing = sourcePageMapper.selectList(new LambdaQueryWrapper<SourcePage>()
-                .select(SourcePage::getPageOrder)
-                .eq(SourcePage::getSpaceId, spaceId)
-                .eq(SourcePage::getSourceId, sourceId));
+        // Column names rather than lambdas: the read is a plain "which orders are
+        // already taken" lookup, and it stays usable outside a MyBatis-Plus
+        // bootstrap (the lambda cache is only populated per registered mapper).
+        List<SourcePage> existing = sourcePageMapper.selectList(new QueryWrapper<SourcePage>()
+                .select("id", "page_order")
+                .eq("space_id", spaceId)
+                .eq("source_id", sourceId)
+                .orderByAsc("page_order", "id"));
         if (existing != null) {
             for (SourcePage page : existing) {
                 if (page.getPageOrder() != null && page.getPageOrder() > 0) {

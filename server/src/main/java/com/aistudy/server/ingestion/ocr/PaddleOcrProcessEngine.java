@@ -179,14 +179,6 @@ public class PaddleOcrProcessEngine implements OcrEngine {
             }
 
             int exit = safeExitValue(process);
-            if (stdout.truncated()) {
-                throw new OcrException(OcrOutcome.OUTPUT_TOO_LARGE,
-                        "OCR diagnostics exceeded the configured stdout ceiling of "
-                                + maxStdoutBytes + " bytes",
-                        OcrDiagnostics.redact(stdout.text(), maxDiagnosticsChars,
-                                List.of(imageFile.getAbsolutePath(), outputFile.getAbsolutePath())),
-                        null);
-            }
             if (exit != 0) {
                 String diagnostics = OcrDiagnostics.redact(stdout.text(), maxDiagnosticsChars,
                         List.of(imageFile.getAbsolutePath(), outputFile.getAbsolutePath()));
@@ -196,6 +188,16 @@ public class PaddleOcrProcessEngine implements OcrEngine {
                         exit, (System.nanoTime() - startNanos) / 1_000_000L, diagnostics);
                 throw new OcrException(OcrOutcome.PROCESS_FAILED,
                         "OCR failed with exit code " + exit, diagnostics, null);
+            }
+            if (stdout.truncated()) {
+                // Checked after the exit code: a crashed run is more informative
+                // than the log ceiling it happened to blow past.
+                throw new OcrException(OcrOutcome.OUTPUT_TOO_LARGE,
+                        "OCR diagnostics exceeded the configured stdout ceiling of "
+                                + maxStdoutBytes + " bytes",
+                        OcrDiagnostics.redact(stdout.text(), maxDiagnosticsChars,
+                                List.of(imageFile.getAbsolutePath(), outputFile.getAbsolutePath())),
+                        null);
             }
             if (stdout.ioError()) {
                 throw new OcrException(OcrOutcome.PROCESS_FAILED,

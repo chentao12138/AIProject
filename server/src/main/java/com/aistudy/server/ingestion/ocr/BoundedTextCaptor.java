@@ -53,7 +53,9 @@ final class BoundedTextCaptor {
             if (room > 0) {
                 buffer.write(chunk, 0, Math.min(n, room));
             }
-            if (n > 0 && buffer.size() >= maxBytes) {
+            // "Truncated" means bytes were actually dropped, so an output that
+            // lands exactly on the ceiling is still a complete, usable answer.
+            if (n > room) {
                 truncated = true;
             }
         }
