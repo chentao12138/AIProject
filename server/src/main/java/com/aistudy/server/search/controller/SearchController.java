@@ -22,6 +22,18 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * C-Search endpoint: one keyword search across every typed entity of a single
+ * LearningSpace.
+ *
+ * <p>Visibility is enforced in SQL (see {@code mapper/SearchMapper.xml}), so a
+ * client can never reach DRAFT or unreviewed content through this endpoint,
+ * and the AI tutor inherits the same guarantees by reusing SearchService.
+ *
+ * <p>FAILURE MODE: 400 on an invalid {@code q}, {@code types}, {@code page} or
+ * {@code size}; 404 when the space is absent or owned by another subject;
+ * 401 when unauthenticated.
+ */
 @RestController
 @RequestMapping(value = "/api/v1/spaces/{spaceId}/search", produces = MediaType.APPLICATION_JSON_VALUE)
 @SecurityRequirement(name = "bearerAuth")
@@ -42,9 +54,18 @@ public class SearchController {
             description = "Keyword search scoped to ONE LearningSpace. " +
                     "Search indexes safe user-visible text such as source title, " +
                     "content block text, knowledge point title/summary/content, " +
-                    "question stem and wrong-question stems. " +
-                    "Results are ranked by deterministic application score and " +
-                    "space isolation is enforced at the SQL level.",
+                    "question stem and wrong-question stems, plus the caller's own " +
+                    "note titles and bodies. " +
+                    "Only user-visible content is returned: SOURCE, CONTENT_BLOCK, " +
+                    "KNOWLEDGE_POINT and QUESTION rows must be PUBLISHED, page and " +
+                    "block rows must additionally belong to the source's current " +
+                    "extraction revision (rows predating revision ownership stay " +
+                    "visible), and NOTE / WRONG_QUESTION are scoped to the caller. " +
+                    "Ranking combines the deterministic LIKE tiers with the MySQL " +
+                    "ngram FULLTEXT relevance score, falling back to LIKE alone for " +
+                    "queries FULLTEXT cannot tokenize. " +
+                    "A NOTE hit carries noteId so the client can open it directly. " +
+                    "Space isolation is enforced at the SQL level.",
             parameters = {
                     @Parameter(name = "spaceId", in = ParameterIn.PATH, required = true,
                             schema = @Schema(type = "integer", format = "int64")),
@@ -65,6 +86,23 @@ public class SearchController {
                     @ApiResponse(responseCode = "404", description = "LearningSpace absent/not owned")
             }
     )
+    /**
+     * Handles the search request.
+     *
+     * @param spaceId        path variable, must be owned by the caller
+     * @param query          {@code q} parameter, 1..200 characters, validated
+     * @param types          optional comma-separated entity filter, validated
+     *                       against {@link #TYPE_PATTERN}
+     * @param page           zero-based page index
+     * @param size           page size, 1..100
+     * @param authentication caller principal; its name is used as BOTH the
+     *                       space-owner scope and the per-user NOTE /
+     *                       WRONG_QUESTION scope, so a caller can never widen
+     *                       the search to another subject's private rows
+     * @return ranked page of typed hits
+     * @throws ResponseStatusException 404 when the space is not owned by the
+     *                                 caller
+     */
     public SearchPageResponse search(
             @PathVariable Long spaceId,
             @RequestParam("q") @Size(min = 1, max = 200, message = "q must be 1..200 characters") String query,

@@ -1,5 +1,13 @@
 package com.aistudy.server.search.model;
 
+/**
+ * Raw UNION-ALL row produced by {@code SearchMapper.searchProjection}.
+ *
+ * <p>One row per candidate hit; {@code score} is already filtered to be
+ * greater than zero by the statement. Every entity-specific identifier column
+ * is present in all branches so the UNION stays well-formed: only the column
+ * matching {@code entityType} is non-null, the rest are SQL NULL.
+ */
 public class SearchProjection {
 
     private String entityType;
@@ -13,6 +21,8 @@ public class SearchProjection {
     private Integer pageNumber;
     private Long knowledgePointId;
     private Long questionId;
+    /** Note primary key; populated only for {@code NOTE} rows. */
+    private Long noteId;
     private String sortKey;
 
     public String getEntityType() {
@@ -101,6 +111,25 @@ public class SearchProjection {
 
     public void setQuestionId(Long questionId) {
         this.questionId = questionId;
+    }
+
+    /**
+     * Note identifier for a {@code NOTE} hit.
+     *
+     * @return note id, or {@code null} for every other entity type
+     */
+    public Long getNoteId() {
+        return noteId;
+    }
+
+    /**
+     * @param noteId note id carried by a {@code NOTE} UNION branch; {@code null}
+     *               for other branches. Failure mode: a non-null value on a
+     *               non-NOTE row would be surfaced to the client as bogus
+     *               provenance, which the mapper prevents by selecting NULL.
+     */
+    public void setNoteId(Long noteId) {
+        this.noteId = noteId;
     }
 
     public String getSortKey() {

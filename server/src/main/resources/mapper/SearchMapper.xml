@@ -2,17 +2,60 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.aistudy.server.search.mapper.SearchMapper">
 
-  <sql id="typeFilter">
-    <if test="types == null || types.isEmpty()">
-      AND 1=1
-    </if>
-    <if test="types != null and !types.isEmpty()">
-      AND entity_type IN
-      <foreach item="type" collection="types" open="(" separator="," close=")">
-        #{type}
-      </foreach>
-    </if>
-  </sql>
+  <!--
+    ============================================================================
+    SearchMapper statements — UNION ALL assembly, visibility and scoring rules.
+    This block is the SINGLE SOURCE OF TRUTH for both rules below; the two
+    statements (searchProjection / searchCount) MUST stay in lock-step or
+    totalElements will disagree with the returned page.
+
+    1) UNION ALL assembly (F-01)
+       Every type branch ENDS with `UNION ALL` and NO branch begins with one.
+       `<trim suffixOverrides="UNION ALL">` only strips a TRAILING separator,
+       so the last emitted branch is normalized and the SQL is valid for any
+       subset of `types`, including a single-type request such as types=[NOTE].
+
+    2) Visibility / publish rule (F-02) — pinned project-wide rule
+       - source:                       s.status = 'PUBLISHED'
+       - source_page / content_block:  owning source is 'PUBLISHED' AND the row
+         belongs to the current extraction revision, expressed as
+         (s.current_extraction_revision_id IS NULL
+          OR <row>.extraction_revision_id = s.current_extraction_revision_id).
+         The NULL branch is REQUIRED compatibility: rows written before V053
+         carry no extraction_revision_id and must stay visible.
+       - knowledge_point:              kp.status = 'PUBLISHED' + deleted_at IS NULL
+       - question:                     q.status  = 'PUBLISHED' + deleted_at IS NULL,
+         including the question joined inside the WRONG_QUESTION branch.
+       - note / wrong_question:        per-user scope (user_subject /
+         user_subject_id) + archived_at IS NULL; deliberately NO publish gate,
+         they are private user content.
+       WHY: search results also feed the AI tutor context (AiLearningContext
+       Service reuses SearchService), so DRAFT / unreviewed / superseded
+       material would otherwise leak into model answers. Admin review reads do
+       NOT go through this mapper (see SourceMapper#selectAdminList), so these
+       predicates never block an admin screen.
+
+    3) Scoring (F-03 / F-04)
+       - Deterministic LIKE tiers (exact / prefix / contains) are unchanged and
+         remain the ordering backbone; `score > 0` is the row filter, so a row
+         scores 0 only when it matches nothing.
+       - When `useFulltext` is true the V054 ngram indexes are consulted twice:
+         MATCH ... AGAINST(...) > 0 widens the WHERE (so a row that only the
+         index finds is still returned) and contributes a relevance boost.
+       - The boost is capped at 9, strictly below the smallest tier gap (10,
+         in the CONTENT_BLOCK ladder), so relevance refines ranking INSIDE a
+         tier and can never reorder tiers.
+       - The LIKE fallback stays in the WHERE in both modes: queries shorter
+         than ngram_token_size and queries made only of non-word characters
+         have no index entry at all (see SearchFulltextQuery), and the LIKE
+         path keeps its SearchLikeEscape-protected patterns.
+       - MATCH arguments use the RAW normalized query (`matchQuery`), never the
+         LIKE-escaped one: a backslash is a literal character for the index.
+       - source_page and content_block additionally MUST match the same score
+         ladder in both statements (KNOWLEDGE_POINT tier 60 is a CONTAINS match
+         on kp.title, not a prefix match — the count used to get this wrong).
+    ============================================================================
+  -->
 
   <select id="searchProjection" resultType="com.aistudy.server.search.model.SearchProjection">
     SELECT * FROM (
@@ -28,19 +71,28 @@
             WHEN s.title LIKE #{prefixPattern} ESCAPE '\\' THEN 80
             WHEN s.title LIKE #{containsPattern} ESCAPE '\\' THEN 60
             ELSE 0
-          END AS score,
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          AS score,
           s.id AS source_id,
           NULL AS source_asset_id,
           NULL AS source_page_id,
           NULL AS page_number,
           NULL AS knowledge_point_id,
           NULL AS question_id,
+          NULL AS note_id,
           CONCAT('SOURCE|', LPAD(s.id, 20, '0')) AS sort_key
         FROM source s
         JOIN learning_space ls ON ls.id = s.space_id
         WHERE s.space_id = #{spaceId}
           AND ls.owner_subject = #{ownerSubject}
-          AND s.title LIKE #{containsPattern} ESCAPE '\\'
+          AND s.status = 'PUBLISHED'
+          AND (
+            s.title LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+          )
         UNION ALL
       </if>
 
@@ -55,22 +107,37 @@
             WHEN cb.normalized_text LIKE #{prefixPattern} ESCAPE '\\' THEN 30
             WHEN cb.normalized_text LIKE #{containsPattern} ESCAPE '\\' THEN 20
             ELSE 0
-          END AS score,
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          AS score,
           cb.source_id AS source_id,
           sp.source_asset_id AS source_asset_id,
           cb.source_page_id AS source_page_id,
           sp.source_page_number AS page_number,
           NULL AS knowledge_point_id,
           NULL AS question_id,
+          NULL AS note_id,
           CONCAT('CONTENT_BLOCK|', LPAD(cb.id, 20, '0')) AS sort_key
         FROM content_block cb
         JOIN source_page sp ON sp.id = cb.source_page_id
           AND sp.space_id = cb.space_id
           AND sp.source_id = cb.source_id
+        JOIN source s ON s.id = cb.source_id
+          AND s.space_id = cb.space_id
         JOIN learning_space ls ON ls.id = cb.space_id
         WHERE cb.space_id = #{spaceId}
           AND ls.owner_subject = #{ownerSubject}
-          AND cb.normalized_text LIKE #{containsPattern} ESCAPE '\\'
+          AND s.status = 'PUBLISHED'
+          AND (s.current_extraction_revision_id IS NULL
+               OR cb.extraction_revision_id = s.current_extraction_revision_id)
+          AND (s.current_extraction_revision_id IS NULL
+               OR sp.extraction_revision_id = s.current_extraction_revision_id)
+          AND (
+            cb.normalized_text LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+          )
         UNION ALL
       </if>
 
@@ -91,23 +158,30 @@
             WHEN kp.summary LIKE #{containsPattern} ESCAPE '\\' THEN 40
             WHEN kp.content LIKE #{containsPattern} ESCAPE '\\' THEN 20
             ELSE 0
-          END AS score,
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          AS score,
           NULL AS source_id,
           NULL AS source_asset_id,
           NULL AS source_page_id,
           NULL AS page_number,
           kp.id AS knowledge_point_id,
           NULL AS question_id,
+          NULL AS note_id,
           CONCAT('KNOWLEDGE_POINT|', LPAD(kp.id, 20, '0')) AS sort_key
         FROM knowledge_point kp
         JOIN learning_space ls ON ls.id = kp.space_id
         WHERE kp.space_id = #{spaceId}
           AND ls.owner_subject = #{ownerSubject}
           AND kp.deleted_at IS NULL
+          AND kp.status = 'PUBLISHED'
           AND (
             kp.title LIKE #{containsPattern} ESCAPE '\\'
             OR kp.summary LIKE #{containsPattern} ESCAPE '\\'
             OR kp.content LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
         UNION ALL
       </if>
@@ -123,20 +197,29 @@
             WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
             WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
             ELSE 0
-          END AS score,
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          AS score,
           NULL AS source_id,
           NULL AS source_asset_id,
           NULL AS source_page_id,
           NULL AS page_number,
           NULL AS knowledge_point_id,
           q.id AS question_id,
+          NULL AS note_id,
           CONCAT('QUESTION|', LPAD(q.id, 20, '0')) AS sort_key
         FROM question q
         JOIN learning_space ls ON ls.id = q.space_id
         WHERE q.space_id = #{spaceId}
           AND ls.owner_subject = #{ownerSubject}
           AND q.deleted_at IS NULL
-          AND q.stem LIKE #{containsPattern} ESCAPE '\\'
+          AND q.status = 'PUBLISHED'
+          AND (
+            q.stem LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+          )
         UNION ALL
       </if>
 
@@ -151,27 +234,36 @@
             WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
             WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
             ELSE 0
-          END AS score,
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          AS score,
           NULL AS source_id,
           NULL AS source_asset_id,
           NULL AS source_page_id,
           NULL AS page_number,
           NULL AS knowledge_point_id,
           wq.question_id AS question_id,
+          NULL AS note_id,
           CONCAT('WRONG_QUESTION|', LPAD(wq.id, 20, '0')) AS sort_key
         FROM wrong_question wq
         JOIN learning_space ls ON ls.id = wq.space_id
         JOIN question q ON q.id = wq.question_id
           AND q.space_id = wq.space_id
           AND q.deleted_at IS NULL
+          AND q.status = 'PUBLISHED'
         WHERE wq.space_id = #{spaceId}
           AND wq.user_subject = #{userSubject}
           AND ls.owner_subject = #{ownerSubject}
-          AND q.stem LIKE #{containsPattern} ESCAPE '\\'
+          AND (
+            q.stem LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+          )
+        UNION ALL
       </if>
 
       <if test="types == null || types.isEmpty() || types.contains('NOTE')">
-        UNION ALL
         SELECT
           'NOTE' AS entity_type,
           n.id AS entity_id,
@@ -182,13 +274,18 @@
             WHEN n.title LIKE #{prefixPattern} ESCAPE '\\' THEN 60
             WHEN n.content LIKE #{containsPattern} ESCAPE '\\' THEN 30
             ELSE 0
-          END AS score,
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          AS score,
           NULL AS source_id,
           NULL AS source_asset_id,
           NULL AS source_page_id,
           NULL AS page_number,
           NULL AS knowledge_point_id,
           NULL AS question_id,
+          n.id AS note_id,
           CONCAT('NOTE|', LPAD(n.id, 20, '0')) AS sort_key
         FROM note n
         JOIN learning_space ls ON ls.id = n.space_id
@@ -199,7 +296,9 @@
           AND (
             n.title LIKE #{containsPattern} ESCAPE '\\'
             OR n.content LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
+        UNION ALL
       </if>
       </trim>
     ) AS results
@@ -217,13 +316,21 @@
         JOIN learning_space ls ON ls.id = s.space_id
         WHERE s.space_id = #{spaceId}
           AND ls.owner_subject = #{ownerSubject}
-          AND s.title LIKE #{containsPattern} ESCAPE '\\'
+          AND s.status = 'PUBLISHED'
+          AND (
+            s.title LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+          )
           AND CASE
             WHEN s.title = #{exactQuery} THEN 100
             WHEN s.title LIKE #{prefixPattern} ESCAPE '\\' THEN 80
             WHEN s.title LIKE #{containsPattern} ESCAPE '\\' THEN 60
             ELSE 0
-          END > 0
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          > 0
         UNION ALL
       </if>
 
@@ -233,16 +340,30 @@
         JOIN source_page sp ON sp.id = cb.source_page_id
           AND sp.space_id = cb.space_id
           AND sp.source_id = cb.source_id
+        JOIN source s ON s.id = cb.source_id
+          AND s.space_id = cb.space_id
         JOIN learning_space ls ON ls.id = cb.space_id
         WHERE cb.space_id = #{spaceId}
           AND ls.owner_subject = #{ownerSubject}
-          AND cb.normalized_text LIKE #{containsPattern} ESCAPE '\\'
+          AND s.status = 'PUBLISHED'
+          AND (s.current_extraction_revision_id IS NULL
+               OR cb.extraction_revision_id = s.current_extraction_revision_id)
+          AND (s.current_extraction_revision_id IS NULL
+               OR sp.extraction_revision_id = s.current_extraction_revision_id)
+          AND (
+            cb.normalized_text LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+          )
           AND CASE
             WHEN cb.normalized_text = #{exactQuery} THEN 40
             WHEN cb.normalized_text LIKE #{prefixPattern} ESCAPE '\\' THEN 30
             WHEN cb.normalized_text LIKE #{containsPattern} ESCAPE '\\' THEN 20
             ELSE 0
-          END > 0
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          > 0
         UNION ALL
       </if>
 
@@ -253,19 +374,25 @@
         WHERE kp.space_id = #{spaceId}
           AND ls.owner_subject = #{ownerSubject}
           AND kp.deleted_at IS NULL
+          AND kp.status = 'PUBLISHED'
           AND (
             kp.title LIKE #{containsPattern} ESCAPE '\\'
             OR kp.summary LIKE #{containsPattern} ESCAPE '\\'
             OR kp.content LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
           AND CASE
             WHEN kp.title = #{exactQuery} THEN 100
             WHEN kp.title LIKE #{prefixPattern} ESCAPE '\\' THEN 80
-            WHEN kp.title LIKE #{prefixPattern} ESCAPE '\\' THEN 60
+            WHEN kp.title LIKE #{containsPattern} ESCAPE '\\' THEN 60
             WHEN kp.summary LIKE #{containsPattern} ESCAPE '\\' THEN 40
             WHEN kp.content LIKE #{containsPattern} ESCAPE '\\' THEN 20
             ELSE 0
-          END > 0
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          > 0
         UNION ALL
       </if>
 
@@ -276,13 +403,21 @@
         WHERE q.space_id = #{spaceId}
           AND ls.owner_subject = #{ownerSubject}
           AND q.deleted_at IS NULL
-          AND q.stem LIKE #{containsPattern} ESCAPE '\\'
+          AND q.status = 'PUBLISHED'
+          AND (
+            q.stem LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+          )
           AND CASE
             WHEN q.stem = #{exactQuery} THEN 60
             WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
             WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
             ELSE 0
-          END > 0
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          > 0
         UNION ALL
       </if>
 
@@ -293,20 +428,28 @@
         JOIN question q ON q.id = wq.question_id
           AND q.space_id = wq.space_id
           AND q.deleted_at IS NULL
+          AND q.status = 'PUBLISHED'
         WHERE wq.space_id = #{spaceId}
           AND wq.user_subject = #{userSubject}
           AND ls.owner_subject = #{ownerSubject}
-          AND q.stem LIKE #{containsPattern} ESCAPE '\\'
+          AND (
+            q.stem LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
+          )
           AND CASE
             WHEN q.stem = #{exactQuery} THEN 60
             WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
             WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
             ELSE 0
-          END > 0
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          > 0
+        UNION ALL
       </if>
 
       <if test="types == null || types.isEmpty() || types.contains('NOTE')">
-        UNION ALL
         SELECT 1 AS score_alias
         FROM note n
         JOIN learning_space ls ON ls.id = n.space_id
@@ -317,13 +460,19 @@
           AND (
             n.title LIKE #{containsPattern} ESCAPE '\\'
             OR n.content LIKE #{containsPattern} ESCAPE '\\'
+            <if test="useFulltext">OR MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0</if>
           )
           AND CASE
             WHEN n.title = #{exactQuery} THEN 80
             WHEN n.title LIKE #{prefixPattern} ESCAPE '\\' THEN 60
             WHEN n.content LIKE #{containsPattern} ESCAPE '\\' THEN 30
             ELSE 0
-          END > 0
+          END
+          <if test="useFulltext">
+          + LEAST(9, ROUND(MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
+          </if>
+          > 0
+        UNION ALL
       </if>
       </trim>
     ) AS counted
