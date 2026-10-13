@@ -76,7 +76,7 @@ Real command output at this commit, not a historical claim:
 | Typecheck | `npx tsc --noEmit -p tsconfig.node.json` / `-p tsconfig.web.json` | 0 errors |
 | Contract gate | `npm run api:check` | `openapi.json and api.d.ts are in sync` |
 | **Live contract gate** | `OPENAPI_URL=http://localhost:8080/v3/api-docs npm run api:live` | `committed snapshot equals http://localhost:8080/v3/api-docs`. Negative proofs: a fixture with `timeLimitMinutes` renamed to `durationMinutes` (no path change) → exit 1; a fixture with `/api/v1/spaces` removed → refused as a non-AIStudy document |
-| Unit | `npm run test:run` | 72 files / 1054 tests passed |
+| Unit | `npm run test:run` | 73 files / 1066 tests passed |
 | Coverage | `npm run test:coverage` | statements 92.15%, branches 87.25%, functions 83.99% |
 | Build | `npm run build` | main 13.95 kB + preload 1.65 kB, renderer **923.63 kB** (+ CSS 30.31 kB) |
 | Package | `npm run dist:win` (with the two mirror variables) | `dist/AIStudy Setup 0.1.0.exe`, **111,472,382 bytes, built 2026-10-14 02:53 at this commit**. NOT yet installed: R02 (silent install → launch → shortcuts → uninstall) was run against the 01:55 artifact (111,468,074 bytes), whose renderer differs from this one by the three lanes committed since. The build log's `signing with signtool.exe` lines do **not** mean it is signed (see the signing note below). |
@@ -127,10 +127,13 @@ What this does **not** prove, and remains open A-class work:
   and `SendMessageRequest` there is still the single-`content` record the contract
   no longer shows. Those guards therefore prove the frontend is not guessing at
   vocabulary the older code declares; they do **not** prove anything about a field
-  or code the newer server added. Where a fact exists only in the backend's prose
-  (the two practice-result 409 codes, whether `score` is null or 0 for an ungraded
-  attempt) it is recorded as such in `BACKEND-CONTRACT-REQUESTS.md` instead of
-  being dressed up as a checked constant.
+  or code the newer server added. `lib/exam-error-codes-contract.test.ts` handles
+  that explicitly: it pins the exam conflict codes to `ApiErrorCodes.java`, asserts
+  every code the copy declares is handled, and holds a documented list of the seven
+  shipped codes the copy cannot see — a list that must empty itself when the copy is
+  synced, so the exemption cannot rot into a silent pass. Facts that are still only
+  in the backend's prose (the two practice-result 409 codes) are recorded as such in
+  `BACKEND-CONTRACT-REQUESTS.md` instead of being dressed up as checked constants.
 - R03 installed-app auth (login → restart → restore → logout → anonymous
   restart) and the R04/R05 end-to-end journeys are gated on that same account;
   the contract-gated rows in the Blocked table above are gated on backend fields.

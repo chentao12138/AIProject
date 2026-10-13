@@ -49,7 +49,7 @@ What that regeneration changed, with the contract evidence:
 | C02 provenance ids | **yes** | `KnowledgePointSourceResponse{id,spaceId,knowledgePointId,contentBlockId,sourceId,sourcePageId,relationType,relevanceScore,createdAt}` — `sourceId`/`sourcePageId` are on the wire, which is why the `provenanceExtras` cast is gone |
 | C03 AI context | **yes** | `SendMessageRequest{content,sourceId,sourcePageId,contentBlockId,knowledgePointId}` — the context ids are sendable, so the UI attaches them instead of prefixing prose into `content` |
 | C04 citation ids | **yes** | `ContextReference{type,id,title,snippet,locator,sourceId,sourcePageId,contentBlockId}` — the ids are structured; `locator` is still published and stays free text, so navigation reads the ids and never parses `locator` |
-| C10 exam answer read-back | **yes** | `AttemptQuestionView{examQuestionId,questionId,sortOrder,score,questionType,stem,options,answer,answered}` on `GET .../exam-attempts/{attemptId}` — the saved `answer` is an `AnswerPayloadView` and `answered` is the server's own flag. There is still no `GET .../exam-attempts/{attemptId}/answers` subresource (only POST), which is the shape we originally asked for; the read-side on the attempt is sufficient, so we adapt to it. |
+| C10 exam answer read-back | **yes** | `AttemptQuestionView{examQuestionId,questionId,sortOrder,score,questionType,stem,options,answer,answered}` on `GET .../exam-attempts/{attemptId}` — the saved `answer` is an `AnswerPayloadView` and `answered` is the server's own flag. The answer POST now echoes what it stored: `ExamAnswerView{id,examAttemptId,examQuestionId,gradingStatus,answeredAt,answer,submitted}`, so `submitted:true` is a second proof of a saved slot and a 2xx that says neither stamp nor flag is still not proof. There is no `GET .../exam-attempts/{attemptId}/answers` subresource (only POST) — the shape we originally asked for — and the attempt read is sufficient, so we adapted to it. Mid-exam reads still carry no `isCorrect`, correct answer or explanation, which is the backend's stated rule and matches the UI (nothing reveals a verdict before `result`). |
 | C11 learner attempt list | **yes** | `GET /spaces/{spaceId}/exam-attempts?examId=&status=&page=&size=` → `AttemptPageResponse{items,page,pageSize,totalItems,totalPages}` of `AttemptSummaryView{id,examId,status,startedAt,submittedAt,score,maxScore}`. One space-level list with an optional `examId` filter covers both shapes we discussed (a paper's attempts, and recent attempts across papers), so we asked them NOT to add `/exams/{examId}/attempts`. Open question: whether `score`/`maxScore` are null or 0 for an attempt that is not graded yet — the UI distinguishes "no score yet" from "0 points" and never computes either (ADR-031). |
 | C-Paging question list | **yes** | `QuestionPageResponse{items,page,pageSize,totalItems,totalPages}` and `GET /questions` takes `page`/`size`; the list page reads its page from `?page=` instead of faking a gap |
 | FILL_BLANK per-blank grading | **no** (accepted) | `textAnswer` is one `string` (`maxLength:4000`) and `QuestionAnswerEvaluator.gradeFillBlank` does whole-string `trim().equals`, so a multi-blank answer is only correct if it matches the reference's exact punctuation. The UI copy says so instead of promising per-blank marking. |
@@ -449,6 +449,10 @@ The frontend `QuestionDetailPage.tsx` is ready to accept an additional `delete` 
 is in the committed snapshot and `api:live` is green against the running server, returning
 `PracticeResultView{sessionId,status,questionCount,answeredCount,correctCount,score,maxScore}`.
 The gap text below is kept as the record of why the score was never derived client-side.
+The two 409 branches are wired (`PRACTICE_SESSION_NOT_SUBMITTED`,
+`PRACTICE_RESULT_NOT_RECORDED`) and neither renders a score, because a score the server
+never stored is not 0. Per-question review stays on `GET .../answers`, which the backend
+deliberately kept out of `result` so the two reads cannot drift apart.
 
 **Checklist:** A5.3 (Completion)
 **Current gap:** `POST /practice-sessions/{sessionId}/finish` returns
@@ -498,11 +502,28 @@ mutation, re-register the route and link it from `QuestionDetailPage`.
 
 ## C11 Exam attempt history (audit W07)
 
-**Status (2026-10-14): delivered, in a better shape than asked.**
+**Status (2026-10-14): delivered, in a better shape than asked, and built.**
 `GET /spaces/{spaceId}/exam-attempts?examId=&status=&page=&size=` returns
 `AttemptPageResponse` of `AttemptSummaryView{id,examId,status,startedAt,submittedAt,score,maxScore}`
 — one space-level paged list covers both a single paper's history and recent attempts across
 papers, so we told the backend not to add `/exams/{examId}/attempts` on top of it.
+
+**Score semantics, as the backend stated them (and what the UI therefore does):**
+an attempt with no result yet has `score: null`, **not 0**, so `—` + 等待评分 is the
+correct rendering and a real `0` prints as `0`. A score is present whenever a result
+row exists, **including `PARTIALLY_GRADED`** for subjective answers. In reply to the
+backend's offer to only send a score for `SUBMITTED` + fully graded attempts: **keep
+it as it is.** Suppressing a legitimately partial score would lose information, and
+the UI cannot say "partially graded" from the fields it is given anyway. What the
+frontend needs instead is the attempt's existing `gradingStatus`
+(`GRADED` / `UNGRADED` / `NEEDS_REVIEW` / `PARTIALLY_GRADED`) on `AttemptSummaryView`
+— then the row labels itself and never has to infer a state from "did a number
+arrive". `features/exams/exam-attempt-history.ts` is the single place that switches.
+
+**Also noted from the backend:** a caller who is not a member of the space gets a
+**404 on this path** from `SpaceScopeInterceptor`, not an empty page. The history view
+renders that as "资源不存在或当前不可访问" with a retry and never as 还没有作答记录
+(pinned by `ExamDetailPage.test.tsx`).
 
 **Checklist:** A6.1, A6.3
 **Verified gap (2026-10-13):** `ExamResponse` has no attempts field, and there is
@@ -517,6 +538,31 @@ reached again from the UI.
 The frontend will not substitute "create another attempt" for history.
 
 ## C12 Discriminable conflict codes
+
+**Status (2026-10-14): delivered for the exam module, and built.** The ten codes
+below are what `features/exams/exam-error.ts` now branches on, replacing the English
+`detail` matching it had to do while every exam conflict was `code:"CONFLICT"`:
+`EXAM_NOT_AVAILABLE`, `EXAM_ACTIVE_ATTEMPT_EXISTS`, `EXAM_ATTEMPT_NOT_IN_PROGRESS`
+(including "answers refused after SUBMITTED"), `EXAM_ATTEMPT_ALREADY_SUBMITTED`,
+`EXAM_RESULT_NOT_AVAILABLE`, `EXAM_RESULT_MISSING`, `EXAM_ANSWER_NOT_GRADABLE`,
+`EXAM_ATTEMPT_STALE`, `EXAM_ANSWER_STALE`, `EXAM_DEADLINE_EXCEEDED`.
+Each maps to its own Chinese copy and a recovery the page can actually honour
+(`reload` where the server's state is the missing truth, `none` where repeating the
+request can only fail again), and a 409 whose code we do not know keeps the generic
+conflict copy instead of guessing. `src/renderer/src/lib/exam-error-codes-contract.test.ts`
+pins the list to the backend's own `ApiErrorCodes` declarations — including a
+documented exemption for the **seven codes this workspace's `server/` copy does not
+declare yet** (it is at V057 while the instance is at V066), which must be emptied
+when the copy is synced rather than silently kept.
+
+**Still open under C12:**
+1. the practice module's conflicts are still bare `code:"CONFLICT"` — the two
+   practice-result codes (`PRACTICE_SESSION_NOT_SUBMITTED`,
+   `PRACTICE_RESULT_NOT_RECORDED`) are the exception and are branched on already;
+2. no code is published **in the OpenAPI document** (springdoc emits no
+   `ProblemDetail` schema per response), so the frontend's only source-read pin is
+   Java. An `enum` of codes on the error response would move this from "we read your
+   source" to "the contract says so".
 
 **Checklist:** A6.2, A9.3
 **Verified gap:** exam conflicts all come back as `code: "CONFLICT"`; whether the

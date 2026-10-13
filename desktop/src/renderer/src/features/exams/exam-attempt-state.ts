@@ -55,38 +55,45 @@ export type QuestionSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 /**
  * What the server states about ONE slot, in the single shape the page's maps
- * hold. Each read contributes its own field, which is why both are optional:
+ * hold. Each read contributes its own field, which is why all three are optional:
  *  - `answeredAt` — the stamp on the `ExamAnswerView` the answer POST returned;
+ *  - `submitted` — the same POST's echo flag (C10), which says the server took
+ *    this payload without necessarily stamping it;
  *  - `answered` — the attempt read's own flag (`AttemptQuestionView.answered`).
  */
 export interface ServerAnswerState {
   answeredAt?: string;
+  submitted?: boolean;
   answered?: boolean;
 }
 
 /**
- * W04 + A6.2: "this slot has an answer" is the SERVER's statement, in either
- * of its two shapes. An `answered` flag decides on its own (so `answered:
- * false` is unanswered even next to a stored stamp); without a flag, the
- * presence of `answeredAt` is what counts.
+ * W04 + A6.2 / C10: "this slot has an answer" is the SERVER's statement, in any
+ * of its shapes. An explicit `false` from either flag decides on its own (so a
+ * row that says `answered:false` / `submitted:false` is unanswered even next to a
+ * stored stamp); without a flag, the presence of `answeredAt` is what counts.
  */
 export function isSavedOnServer(
   state: ServerAnswerState | undefined
 ): boolean {
   if (state == null) return false;
-  if (state.answered === true) return true;
-  if (state.answered === false) return false;
+  if (state.answered === false || state.submitted === false) return false;
+  if (state.answered === true || state.submitted === true) return true;
   return (
     typeof state.answeredAt === 'string' && state.answeredAt.trim() !== ''
   );
 }
 
-/** The POST's `ExamAnswerView` read as per-slot state (`answeredAt` is its proof). */
+/**
+ * The POST's `ExamAnswerView` read as per-slot state. C10 made it echo the
+ * payload it stored plus a `submitted` flag, so a 2xx that says `submitted:true`
+ * is proof even without a stamp — and one that says neither is still not.
+ */
 export function serverStateOfRecord(
   record: ExamAnswerRecord | undefined
 ): ServerAnswerState | undefined {
   if (record == null) return undefined;
-  return { answeredAt: record.answeredAt };
+  return { answeredAt: record.answeredAt, submitted: record.submitted };
 }
 
 /**

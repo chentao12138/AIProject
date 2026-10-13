@@ -47,8 +47,13 @@ const QUESTION_2 = {
 };
 
 const ok = (data: unknown) => ({ data, response: { status: 200 } });
-const fail = (status: number, detail: string) => ({
-  error: { code: 'CONFLICT', detail },
+/**
+ * A failed call carrying one of the C12 conflict codes. The `detail` is
+ * deliberately English and unrelated to the code: the mapping may read the code
+ * and must never read this text.
+ */
+const fail = (status: number, code: string) => ({
+  error: { code, detail: 'exam attempt is not IN_PROGRESS (EXAM_ATTEMPT_NOT_IN_PROGRESS): SUBMITTED' },
   response: { status },
 });
 
@@ -431,7 +436,7 @@ describe('ExamAttemptPage', () => {
       })
     );
     const startExamAttempt = vi.fn(async () =>
-      fail(409, 'exam attempt is not IN_PROGRESS (EXAM_ATTEMPT_NOT_IN_PROGRESS): SUBMITTED')
+      fail(409, 'EXAM_ATTEMPT_NOT_IN_PROGRESS')
     );
 
     renderAttempt({ getExamAttempt, startExamAttempt });
@@ -495,7 +500,8 @@ describe('ExamAttemptPage', () => {
     );
   });
 
-  // W05: the retry offered has to be one that can work.
+  // W05 / C12: the retry offered has to be one that can work, and the reason has
+  // to come from the code — the server's English detail is unrelated text here.
   it('re-runs a submit that failed transiently', async () => {
     const user = userEvent.setup();
     const submitExamAttempt = vi
@@ -525,7 +531,7 @@ describe('ExamAttemptPage', () => {
       })
     );
     const submitExamAttempt = vi.fn(async () =>
-      fail(409, 'only IN_PROGRESS attempts can be submitted: SUBMITTED')
+      fail(409, 'EXAM_ATTEMPT_ALREADY_SUBMITTED')
     );
 
     renderAttempt({ getExamAttempt, submitExamAttempt });
@@ -533,7 +539,7 @@ describe('ExamAttemptPage', () => {
     await user.click(await screen.findByRole('button', { name: '交卷' }));
 
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('本次考试状态已变更');
+    expect(alert).toHaveTextContent('本次作答已经交卷');
 
     // Re-submitting can never succeed here, so "重试" refreshes the server
     // state instead — the result view is where an already submitted attempt
@@ -547,7 +553,7 @@ describe('ExamAttemptPage', () => {
     const user = userEvent.setup();
     const submitExamAnswer = vi.fn(async (_s: number, _a: number, body: { examQuestionId: number }) =>
       body.examQuestionId === 11
-        ? fail(409, 'exam deadline exceeded (EXAM_DEADLINE_EXCEEDED)')
+        ? fail(409, 'EXAM_DEADLINE_EXCEEDED')
         : ok(answerRecord(body.examQuestionId))
     );
     renderAttempt({ submitExamAnswer });

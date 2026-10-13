@@ -15,6 +15,7 @@ import {
   mergeAttemptResume,
   questionSaveStatus,
   resumeFromAttempt,
+  serverStateOfRecord,
   QUESTION_SAVE_LABELS,
   type ExamAnswerPayload,
   type ExamAnswerRecord,
@@ -81,8 +82,36 @@ describe('isSavedOnServer (W04 + A6.2: server truth, not memory)', () => {
     // not a statement about the slot.
     expect(isSavedOnServer({})).toBe(false);
   });
-});
 
+  // C10 made the answer POST echo a `submitted` flag next to its payload.
+  it("accepts the POST's `submitted` echo as proof, and its `false` as refusal", () => {
+    expect(isSavedOnServer({ submitted: true })).toBe(true);
+    // Explicitly not stored outranks a stamp that may have arrived with it.
+    expect(isSavedOnServer({ submitted: false, answeredAt: '2026-10-13T10:00:00' })).toBe(
+      false
+    );
+    // A 2xx that says nothing at all is still not proof of a stored answer.
+    expect(isSavedOnServer({ answeredAt: undefined, submitted: undefined })).toBe(
+      false
+    );
+  });
+
+  it('carries the submitted flag out of the POST response', () => {
+    const echoed: ExamAnswerRecord = {
+      id: 901,
+      examAttemptId: 5,
+      examQuestionId: 12,
+      gradingStatus: 'UNGRADED',
+      submitted: true,
+      answer: { selectedOptionKeys: ['A'] },
+    };
+    expect(serverStateOfRecord(echoed)).toEqual({
+      answeredAt: undefined,
+      submitted: true,
+    });
+    expect(isSavedOnServer(serverStateOfRecord(echoed))).toBe(true);
+  });
+});
 describe('resumeFromAttempt (A6.2: rebuild the paper from the server read)', () => {
   it('restores each question type from its own answer field', () => {
     const matchingWire = JSON.stringify([

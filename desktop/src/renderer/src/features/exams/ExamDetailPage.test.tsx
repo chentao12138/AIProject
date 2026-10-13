@@ -158,8 +158,8 @@ describe('ExamDetailPage', () => {
     const user = userEvent.setup();
     const createExamAttempt = vi.fn(async () => ({
       error: {
-        code: 'CONFLICT',
-        detail: 'exam is not available (EXAM_NOT_AVAILABLE): DRAFT',
+        code: 'EXAM_NOT_AVAILABLE',
+        detail: 'exam is not available: DRAFT',
       },
       response: { status: 409 },
     }));
@@ -355,6 +355,27 @@ describe('ExamDetailPage', () => {
 
     await user.click(within(section).getByRole('button', { name: '重试' }));
     expect(await within(section).findByRole('row', { name: /#5/ })).toBeInTheDocument();
+  });
+
+  // The backend scopes this path: a non-member gets 404 from
+  // `SpaceScopeInterceptor`, NOT an empty page — and 404 copy must not be
+  // rendered as "you have no attempts".
+  it('reads a 404 on the history path as inaccessible, not as an empty list', async () => {
+    renderExam(
+      { ...EXAM, status: 'PUBLISHED' },
+      {
+        listExamAttempts: vi.fn(async () => ({
+          error: { code: 'NOT_FOUND', detail: 'space not visible' },
+          response: { status: 404 },
+        })),
+      }
+    );
+
+    const section = await screen.findByRole('region', { name: '作答历史' });
+    expect(within(section).getByRole('alert')).toHaveTextContent(
+      '资源不存在或当前不可访问'
+    );
+    expect(within(section).queryByText('还没有作答记录')).not.toBeInTheDocument();
   });
 
   it('shows an empty state for a paper that was never attempted', async () => {
