@@ -18,7 +18,6 @@ import {
   unwrap,
 } from '../../lib/api-error';
 import { queryKeys } from '../../lib/query-keys';
-import { entityQuery, spaceQuery } from '../../lib/queries';
 import { useSpaceId } from '../../lib/space-scope';
 import { formatDateTime } from '../../lib/format';
 import { isPositiveId, parsePositiveIdParam } from '../../lib/ids';
@@ -28,6 +27,67 @@ import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
 import type { AiMessagePage } from '../../lib/types';
+
+/** Message row as the contract reports it, derived from the paged response. */
+type MessageItem = NonNullable<NonNullable<AiMessagePage>['content']>[number];
+
+/** Server-side page sizes; both endpoints paginate (see openapi conversation/message pages). */
+const CONVERSATION_PAGE_SIZE = 20;
+const MESSAGE_PAGE_SIZE = 50;
+/** A server that keeps claiming more items must not spin us in a loop. */
+const MAX_PAGES_PER_LOAD = 20;
+
+interface PageLike<T> {
+  content?: T[];
+  size?: number;
+  totalElements?: number;
+}
+
+/** What the cache holds for a paged list: the accumulated rows plus the server total. */
+interface PagedCache<T> {
+  content: T[];
+  totalElements: number | null;
+}
+
+/**
+ * Fetch pages 0..pageCount-1 and concatenate them.
+ *
+ * The server reports `page`/`size`/`totalElements`, so "how much exists" is
+ * always server truth — the UI never guesses a total from what it happened to
+ * receive, and it never asks the backend for everything at once.
+ */
+async function collectPages<T>(
+  fetchPage: (page: number) => Promise<PageLike<T> | undefined>,
+  pageCount: number
+): Promise<PagedCache<T>> {
+  const content: T[] = [];
+  const seen = new Set<string>();
+  let totalElements: number | null = null;
+
+  for (let index = 0; index < Math.min(pageCount, MAX_PAGES_PER_LOAD); index += 1) {
+    const data = await fetchPage(index);
+    const batch = data?.content ?? [];
+    if (typeof data?.totalElements === 'number') {
+      totalElements = data.totalElements;
+    }
+    batch.forEach((item, position) => {
+      const id = (item as { id?: number }).id;
+      const dedupeKey =
+        typeof id === 'number' ? `id:${id}` : `row:${index}:${position}`;
+      if (seen.has(dedupeKey)) {
+        return;
+      }
+      seen.add(dedupeKey);
+      content.push(item);
+    });
+    if (batch.length === 0) break;
+    // A short page is the last page even when the server omits its total.
+    if (typeof data?.size === 'number' && batch.length < data.size) break;
+    if (totalElements !== null && content.length >= totalElements) break;
+  }
+
+  return { content, totalElements };
+}
 
 export function AiChatPage() {
   const api = useApiClient();
@@ -48,18 +108,55 @@ export function AiChatPage() {
   const providerReady =
     settings?.enabled === true && settings?.apiKeyConfigured === true;
 
-  return (
-    <div className="page ai-workspace">
-      <PageHeader title="AI 辅导" />
+  // An unconfigured provider cannot answer, so no workspace is rendered: a
+  // warning beside a live composer only lets the user discover the failure
+  // after the message is already gone.
+  if (settingsQuery.isPending) {
+    return (
+      <div className="page ai-workspace">
+        <PageHeader title="AI 辅导" />
+        <LoadingState text="检查 AI 配置…" />
+      </div>
+    );
+  }
 
-      {settingsQuery.isSuccess && !providerReady && (
-        <div className="form__error" role="alert" data-testid="provider-not-ready">
-          AI Provider 尚未配置或未启用。
+  if (settingsQuery.isError) {
+    return (
+      <div className="page ai-workspace">
+        <PageHeader title="AI 辅导" />
+        <ErrorState
+          message={normalizeApiError(settingsQuery.error).message}
+          onRetry={() => void settingsQuery.refetch()}
+        />
+      </div>
+    );
+  }
+
+  if (!providerReady) {
+    return (
+      <div className="page ai-workspace">
+        <PageHeader title="AI 辅导" />
+        <div
+          className="form__error"
+          role="alert"
+          data-testid="provider-not-ready"
+        >
+          AI Provider 尚未配置或未启用，无法开始对话。
           <Link to="/settings/ai" className="nav-link">
             前往 AI Settings 配置
           </Link>
         </div>
-      )}
+        <EmptyState
+          title="AI 辅导未就绪"
+          description="在 AI Settings 中启用 Provider 并保存密钥后，此处会自动恢复对话入口。"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="page ai-workspace">
+      <PageHeader title="AI 辅导" />
 
       <div className="ai-layout">
         <ConversationList spaceId={spaceId} activeId={conversationId} />
@@ -94,14 +191,28 @@ function ConversationList({
   const api = useApiClient();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [pagesToLoad, setPagesToLoad] = useState(1);
 
-  const listQuery = useQuery(
-    spaceQuery(
-      spaceId,
-      queryKeys.aiConversations(spaceId),
-      (id) => api.listConversations(id)
-    )
-  );
+  const listKey = [
+    ...queryKeys.aiConversations(spaceId),
+    'pages',
+    pagesToLoad,
+  ] as const;
+
+  const listQuery = useQuery({
+    queryKey: listKey,
+    queryFn: () =>
+      collectPages(
+        (page) =>
+          api
+            .listConversations(spaceId, {
+              page,
+              size: CONVERSATION_PAGE_SIZE,
+            })
+            .then(unwrap),
+        pagesToLoad
+      ),
+  });
 
   const create = useMutation({
     mutationFn: () => api.createConversation(spaceId, {}).then(unwrap),
@@ -129,6 +240,8 @@ function ConversationList({
   });
 
   const conversations = listQuery.data?.content ?? [];
+  const total = listQuery.data?.totalElements ?? null;
+  const hasMore = total !== null && conversations.length < total;
 
   return (
     <aside className="ai-sidebar" aria-label="会话列表">
@@ -182,12 +295,27 @@ function ConversationList({
           );
         })}
       </ul>
+
+      {listQuery.isSuccess && total !== null && (
+        <p className="muted" data-testid="ai-conversation-count">
+          已显示 {conversations.length} / {total}
+        </p>
+      )}
+      {hasMore && (
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setPagesToLoad((count) => count + 1)}
+          disabled={listQuery.isFetching}
+        >
+          加载更多对话
+        </Button>
+      )}
     </aside>
   );
 }
 
 /* ─────────────── Chat panel ─────────────── */
-
 
 function ChatPanel({
   spaceId,
@@ -200,16 +328,28 @@ function ChatPanel({
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
+  const [pagesToLoad, setPagesToLoad] = useState(1);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const messagesKey = queryKeys.aiMessages(spaceId, conversationId);
+  const messagesKey = queryKeys.aiMessages(spaceId, conversationId, pagesToLoad);
 
-  const messagesQuery = useQuery(
-    entityQuery(spaceId, conversationId, messagesKey, (id, convId) =>
-      api.listMessages(id, convId)
-    )
-  );
+  const messagesQuery = useQuery({
+    queryKey: messagesKey,
+    queryFn: () =>
+      collectPages(
+        (page) =>
+          api
+            .listMessages(spaceId, conversationId, {
+              page,
+              size: MESSAGE_PAGE_SIZE,
+            })
+            .then(unwrap),
+        pagesToLoad
+      ),
+  });
   const messages = messagesQuery.data?.content ?? [];
+  const total = messagesQuery.data?.totalElements ?? null;
+  const hasMoreMessages = total !== null && messages.length < total;
 
   const send = useMutation({
     mutationFn: (content: string) =>
@@ -217,8 +357,8 @@ function ChatPanel({
     onMutate: async (content: string) => {
       setSendError(null);
       const previous =
-        queryClient.getQueryData<AiMessagePage>(messagesKey);
-      queryClient.setQueryData<AiMessagePage>(messagesKey, (current) => ({
+        queryClient.getQueryData<PagedCache<MessageItem>>(messagesKey);
+      queryClient.setQueryData<PagedCache<MessageItem>>(messagesKey, (current) => ({
         ...current,
         content: [
           ...(current?.content ?? []),
@@ -229,6 +369,7 @@ function ChatPanel({
             createdAt: new Date().toISOString(),
           },
         ],
+        totalElements: current?.totalElements ?? null,
       }));
       setPrompt('');
       return { previous };
@@ -238,7 +379,7 @@ function ChatPanel({
       if (userMessage && assistantMessage) {
         // The response carries the persisted pair, so writing it into the
         // cache IS the resync — a refetch here would race this update.
-        queryClient.setQueryData<AiMessagePage>(
+        queryClient.setQueryData<PagedCache<MessageItem>>(
           messagesKey,
           (current) => ({
             ...current,
@@ -247,14 +388,16 @@ function ChatPanel({
               userMessage,
               assistantMessage,
             ],
+            totalElements: current?.totalElements ?? null,
           })
         );
       } else if (assistantMessage) {
-        queryClient.setQueryData<AiMessagePage>(
+        queryClient.setQueryData<PagedCache<MessageItem>>(
           messagesKey,
           (current) => ({
             ...current,
             content: [...(current?.content ?? []), assistantMessage],
+            totalElements: current?.totalElements ?? null,
           })
         );
       } else {
@@ -268,7 +411,7 @@ function ChatPanel({
     },
     onError: (error, _content, context) => {
       if (context?.previous) {
-        queryClient.setQueryData<AiMessagePage>(
+        queryClient.setQueryData<PagedCache<MessageItem>>(
           messagesKey,
           context.previous
         );
@@ -309,6 +452,21 @@ function ChatPanel({
             message={normalizeApiError(messagesQuery.error).message}
             onRetry={() => void messagesQuery.refetch()}
           />
+        )}
+        {hasMoreMessages && (
+          <div className="ai-history-load">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setPagesToLoad((count) => count + 1)}
+              disabled={messagesQuery.isFetching}
+            >
+              加载更早的消息
+            </Button>
+            <p className="muted" data-testid="ai-message-count">
+              已加载 {messages.length} / {total}
+            </p>
+          </div>
         )}
         {messages.length === 0 && !messagesQuery.isPending && !messagesQuery.isError && !busy && (
           <p className="muted">发送第一条消息开始对话。</p>
