@@ -10,6 +10,8 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.dao.DataAccessException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * BUSINESS-026 first-admin bootstrap runner.
@@ -32,6 +34,8 @@ import org.springframework.dao.DataAccessException;
 @Component
 @Order(1)
 public class BootstrapAdminRunner implements ApplicationRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(BootstrapAdminRunner.class);
 
     private static final String ROLE_USER = "USER";
     private static final String ROLE_ADMIN = "ADMIN";
@@ -70,6 +74,12 @@ public class BootstrapAdminRunner implements ApplicationRunner {
         }
 
         if (userRoleService.countActiveAdminAccounts() > 0) {
+            if (userAccountMapper.selectByUsername(username.trim()) == null) {
+                // Counts admins, not this username: one unrelated ACTIVE ADMIN row
+                // (a leftover fixture, for instance) is enough to block provisioning.
+                log.warn("Bootstrap admin \"{}\" was not created because the schema "
+                        + "already holds at least one ACTIVE ADMIN account", username.trim());
+            }
             return;
         }
 

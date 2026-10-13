@@ -96,6 +96,9 @@ class FlywayMigrationIntegrationTest {
      */
     private static final String EXPECTED_SCHEMA = "aistudy_flyway_test";
 
+    /** Identity of the FK-parent rows the CHECK-contract probes insert. */
+    private static final String PROBE_SUBJECT = "batch-b-subject-probe";
+
     @Autowired
     private Environment env;
 
@@ -121,6 +124,27 @@ class FlywayMigrationIntegrationTest {
         // back at latest is what keeps V031+ columns visible to them.
         assertSchemaIsFlywayTest();
         flyway().migrate();
+        removeProbeAdminAccount();
+    }
+
+    /**
+     * The role/CHECK-contract probes insert an ACTIVE account carrying the ADMIN
+     * role, and {@code BootstrapAdminRunner} no-ops while ANY active admin
+     * exists — so a probe left behind here silently removes the login from every
+     * later local/dev start of this schema. Delete only the probe's own rows.
+     */
+    private void removeProbeAdminAccount() {
+        assertSchemaIsFlywayTest();
+        jdbc.update("DELETE FROM auth_refresh_session WHERE user_account_id IN "
+                + "(SELECT id FROM user_account WHERE subject = ?)", PROBE_SUBJECT);
+        jdbc.update("DELETE FROM user_account_role WHERE user_account_id IN "
+                + "(SELECT id FROM user_account WHERE subject = ?)", PROBE_SUBJECT);
+        jdbc.update("DELETE FROM user_account WHERE subject = ?", PROBE_SUBJECT);
+        Integer remaining = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM user_account WHERE subject = ?", Integer.class, PROBE_SUBJECT);
+        assertEquals(0, remaining,
+                "this class must not leave its probe ADMIN behind: it silently blocks "
+                        + "BootstrapAdminRunner for every later start of this schema");
     }
 
     // ==================== TEST A ====================
@@ -1762,7 +1786,7 @@ class FlywayMigrationIntegrationTest {
             jdbc.update("INSERT INTO user_account "
                             + "(id, subject, username, password_hash, status, created_at, updated_at) "
                             + "VALUES (1, ?, ?, ?, 'ACTIVE', NOW(6), NOW(6))",
-                    "batch-b-subject-probe",
+                    PROBE_SUBJECT,
                     "batch-b-user-probe",
                     "not-a-real-password-hash");
         }
@@ -1808,7 +1832,7 @@ class FlywayMigrationIntegrationTest {
             jdbc.update("INSERT INTO user_account "
                             + "(id, subject, username, password_hash, status, created_at, updated_at) "
                             + "VALUES (1, ?, ?, ?, 'ACTIVE', NOW(6), NOW(6))",
-                    "batch-b-subject-probe",
+                    PROBE_SUBJECT,
                     "batch-b-user-probe",
                     "not-a-real-password-hash");
         }
