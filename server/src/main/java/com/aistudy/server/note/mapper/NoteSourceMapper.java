@@ -34,4 +34,8 @@ public interface NoteSourceMapper extends BaseMapper<NoteSource> {
     @Delete("DELETE FROM note_source WHERE note_id = #{noteId} AND content_block_id = #{blockId}")
     int deleteByNoteIdAndBlockId(@Param("noteId") Long noteId,
                                  @Param("blockId") Long blockId);
+
+    /** Clears every extra link before a note row is hard-deleted. */
+    @Delete("DELETE FROM note_source WHERE note_id = #{noteId}")
+    int deleteAllByNoteId(@Param("noteId") Long noteId);
 }
