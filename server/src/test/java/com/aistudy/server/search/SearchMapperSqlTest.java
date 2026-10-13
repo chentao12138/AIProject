@@ -152,9 +152,11 @@ class SearchMapperSqlTest {
     // ==================== F-04: projection / count parity ===================
 
     /**
-     * The count is derived from the very same score ladder as the page: the
-     * bound parameter sequence of each single-type statement must be the same
-     * multiset, otherwise totalElements disagrees with the returned page.
+     * The count is derived from the very same score ladder as the page: every
+     * parameter that decides WHICH rows score must be bound identically,
+     * otherwise totalElements disagrees with the returned page. The one
+     * sanctioned difference is the projection's ordering relevance
+     * ({@code ft_relevance}), which the count has no reason to evaluate.
      */
     @Test
     void projectionAndCountBindTheSameParameters() {
@@ -162,10 +164,20 @@ class SearchMapperSqlTest {
             for (boolean fulltext : List.of(true, false)) {
                 List<String> page = scoringParams("searchProjection", List.of(type), fulltext);
                 List<String> count = scoringParams("searchCount", List.of(type), fulltext);
-                assertEquals(page, count,
+                assertEquals(withoutMatchQuery(page), withoutMatchQuery(count),
                         type + " (useFulltext=" + fulltext + ") must score and count with the same patterns");
+                assertEquals(occurrencesIn(count, "matchQuery") + (fulltext ? 1 : 0),
+                        occurrencesIn(page, "matchQuery"),
+                        type + " may only out-bind the count with the ordering relevance: " + page);
             }
         }
+    }
+
+    /** The sanctioned ordering binding, removed so the ladders can be compared. */
+    private static List<String> withoutMatchQuery(List<String> params) {
+        List<String> copy = new ArrayList<>(params);
+        copy.removeIf("matchQuery"::equals);
+        return copy;
     }
 
     /**
@@ -251,8 +263,10 @@ class SearchMapperSqlTest {
     // ==================== F-03: FULLTEXT wiring ====================
 
     /**
-     * Each indexed column is matched in natural language mode, twice per
-     * branch: once to widen the row set and once as the relevance boost.
+     * Each indexed column is matched in natural language mode three times per
+     * projection branch: to widen the row set, to decide the FULLTEXT tier and
+     * to order rows inside a tier. The count has no ordering to serve, so it
+     * evaluates the same MATCH twice.
      */
     @Test
     void everyIndexedColumnIsMatchableWhenFulltextIsUsable() {
@@ -262,7 +276,7 @@ class SearchMapperSqlTest {
         assertTrue(page.contains("match(kp.title, kp.summary, kp.content) against (? in natural language mode)"), page);
         assertTrue(page.contains("match(q.stem) against (? in natural language mode)"), page);
         assertTrue(page.contains("match(n.title, n.content) against (? in natural language mode)"), page);
-        assertEquals(ALL_TYPES.size() * 2, occurrences(page, "natural language mode"), page);
+        assertEquals(ALL_TYPES.size() * 3, occurrences(page, "natural language mode"), page);
         assertEquals(ALL_TYPES.size() * 2,
                 occurrences(countSql(ALL_TYPES, true), "natural language mode"));
     }
@@ -277,26 +291,46 @@ class SearchMapperSqlTest {
     void punctuatedQueryIsRankedButNeverSelectedByFulltext() {
         String widening = sqlWith("searchProjection", ALL_TYPES, true, true, true);
         String rankingOnly = sqlWith("searchProjection", ALL_TYPES, true, false, true);
-        assertEquals(ALL_TYPES.size() * 2, occurrences(widening, "natural language mode"), widening);
+        assertEquals(ALL_TYPES.size() * 3, occurrences(widening, "natural language mode"), widening);
         assertEquals(ALL_TYPES.size(), occurrences(rankingOnly, "natural language mode"),
-                "MATCH may only contribute the boost when the query carries punctuation");
-        assertEquals(ALL_TYPES.size(),
-                occurrences(rankingOnly, "end + least(9, round(match("), rankingOnly);
+                "MATCH may only contribute the ordering relevance when the query carries punctuation");
+        assertEquals(0, occurrences(rankingOnly, "when match("),
+                "a punctuated query must not gain a FULLTEXT tier either: " + rankingOnly);
+        assertEquals(ALL_TYPES.size(), occurrences(widening, "when match("), widening);
         assertEquals(occurrences(widening, ESCAPE), occurrences(rankingOnly, ESCAPE),
                 "the escaped LIKE ladder must be identical in both modes");
     }
 
     /**
-     * The boost is capped below the smallest tier gap (10) so relevance can
-     * only ever refine ranking INSIDE a tier, and the LIKE ladder keeps its
-     * escape handling in both modes.
+     * A FULLTEXT-only hit must be the LOWEST tier of its own branch: the row is
+     * already admitted by the WHERE, and `score > 0` is the row filter, so any
+     * tier above a literal LIKE match would let ngram overlap outrank an exact
+     * or prefix hit. The removed `ROUND(relevance * 5)` boost could not express
+     * this — measured InnoDB relevance for a two-token Chinese overlap is about
+     * 1.9e-8, so it rounded to 0 for every row and dropped the hit entirely.
      */
     @Test
-    void fulltextBoostCannotReorderTheDeterministicTiers() {
-        for (String sql : List.of(projectionSql(ALL_TYPES, true), countSql(ALL_TYPES, true))) {
-            assertEquals(ALL_TYPES.size(), occurrences(sql, "end + least(9, round(match("), sql);
-            assertEquals(0, occurrences(sql, "least(10"), sql);
+    void fulltextTierIsTheLowestTierOfItsBranch() {
+        for (String type : ALL_TYPES) {
+            String sql = projectionSql(List.of(type), true);
+            Matcher fulltext = Pattern
+                    .compile("when match\\([^)]*\\) against \\(\\? in natural language mode\\) > 0 then (\\d+)")
+                    .matcher(sql);
+            assertTrue(fulltext.find(),
+                    type + " must give a FULLTEXT-only match its own tier, or `score > 0` discards it: " + sql);
+            int fulltextTier = Integer.parseInt(fulltext.group(1));
+            assertFalse(fulltext.find(), type + " must declare exactly one FULLTEXT tier: " + sql);
+
+            Matcher tiers = Pattern.compile("then (\\d+)").matcher(sql);
+            int lowest = Integer.MAX_VALUE;
+            while (tiers.find()) {
+                lowest = Math.min(lowest, Integer.parseInt(tiers.group(1)));
+            }
+            assertEquals(lowest, fulltextTier,
+                    type + ": the FULLTEXT tier must sit below every literal LIKE tier");
         }
+        assertEquals(0, occurrences(projectionSql(ALL_TYPES, true), "least(9"),
+                "the scale-broken relevance multiplier must not come back");
         // LIKE path stays intact whichever mode is active.
         assertEquals(occurrences(projectionSql(ALL_TYPES, false), ESCAPE),
                 occurrences(projectionSql(ALL_TYPES, true), ESCAPE),
@@ -315,13 +349,15 @@ class SearchMapperSqlTest {
 
     /**
      * {@code score > 0} remains the row filter and the ordering stays
-     * score-then-sort-key, so a page and its count cannot diverge.
+     * score, then relevance, then sort key: the deterministic tier decides the
+     * band, FULLTEXT only orders inside it, and the sort key keeps the result
+     * stable for paging, so a page and its count cannot diverge.
      */
     @Test
     void scoreRemainsTheRowFilterAndSortKeyTiesRanks() {
         String page = projectionSql(ALL_TYPES, true);
         assertTrue(page.contains("where score > 0"), page);
-        assertTrue(page.contains("order by score desc, sort_key asc"), page);
+        assertTrue(page.contains("order by score desc, ft_relevance desc, sort_key asc"), page);
         assertTrue(page.contains("limit ? offset ?"), page);
         assertTrue(countSql(ALL_TYPES, false).replaceAll("[^>]", "").contains(">"),
                 "count keeps the > 0 predicate");
@@ -357,7 +393,8 @@ class SearchMapperSqlTest {
             }
             assertEquals(expected, columns, type + " branch must keep the shared projection width: " + sql);
         }
-        assertEquals(13, expected, "entity/id/title/text/score + 7 provenance ids + sort_key");
+        assertEquals(14, expected,
+                "entity/id/title/text/score + 7 provenance ids + ft_relevance + sort_key");
     }
 
     /**

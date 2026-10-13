@@ -51,9 +51,20 @@
        Deterministic LIKE tiers (exact, prefix, contains) are unchanged and
        remain the ordering backbone; `score > 0` is the row filter, so a row
        scores 0 only when it matches nothing.
-       The MATCH boost is capped at 9, strictly below the smallest tier gap
-       (10, in the CONTENT_BLOCK ladder), so relevance refines ranking INSIDE a
-       tier and can never reorder tiers.
+       A FULLTEXT-only hit gets its OWN tier, below every LIKE tier of that
+       entity (SOURCE 50, CONTENT_BLOCK 10, KNOWLEDGE_POINT 10, QUESTION 10,
+       WRONG_QUESTION 10, NOTE 20). This is required, not cosmetic: the row is
+       already admitted by the WHERE, but without a tier its CASE falls to 0 and
+       `score > 0` throws the only kind of result Chinese search can produce —
+       ngram overlap that no literal substring expresses.
+       Relevance refines ordering through `ft_relevance`, a separate ORDER BY
+       key, and is deliberately NOT added into `score`. An earlier design used
+       `ROUND(MATCH(...) * 5)`; measured on a real ngram corpus InnoDB returns
+       relevance around 1.9e-8 for a two-token overlap, so that product rounded
+       to 0 for every row and the tier was silently dropped again. InnoDB
+       natural-language relevance is corpus-scaled (TF-IDF over the whole
+       table), so no constant can map it into a fixed 0..9 band; only its ORDER
+       is stable, and that is all this path uses.
        The escaped LIKE predicate stays in the WHERE in every mode: it is the
        sole row filter for punctuation-bearing queries, because ngram ignores
        percent and underscore as delimiters and would otherwise match the title
@@ -79,11 +90,11 @@
             WHEN s.title = #{exactQuery} THEN 100
             WHEN s.title LIKE #{prefixPattern} ESCAPE '\\' THEN 80
             WHEN s.title LIKE #{containsPattern} ESCAPE '\\' THEN 60
+            <if test="fulltextSelects">
+            WHEN MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 50
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           AS score,
           s.id AS source_id,
           NULL AS source_asset_id,
@@ -92,6 +103,11 @@
           NULL AS knowledge_point_id,
           NULL AS question_id,
           NULL AS note_id,
+          <choose>
+            <when test="useFulltext">MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE)</when>
+            <otherwise>0</otherwise>
+          </choose>
+          AS ft_relevance,
           CONCAT('SOURCE|', LPAD(s.id, 20, '0')) AS sort_key
         FROM source s
         JOIN learning_space ls ON ls.id = s.space_id
@@ -115,11 +131,11 @@
             WHEN cb.normalized_text = #{exactQuery} THEN 40
             WHEN cb.normalized_text LIKE #{prefixPattern} ESCAPE '\\' THEN 30
             WHEN cb.normalized_text LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            <if test="fulltextSelects">
+            WHEN MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 10
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           AS score,
           cb.source_id AS source_id,
           sp.source_asset_id AS source_asset_id,
@@ -128,6 +144,11 @@
           NULL AS knowledge_point_id,
           NULL AS question_id,
           NULL AS note_id,
+          <choose>
+            <when test="useFulltext">MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE)</when>
+            <otherwise>0</otherwise>
+          </choose>
+          AS ft_relevance,
           CONCAT('CONTENT_BLOCK|', LPAD(cb.id, 20, '0')) AS sort_key
         FROM content_block cb
         JOIN source_page sp ON sp.id = cb.source_page_id
@@ -164,11 +185,11 @@
             WHEN kp.title LIKE #{containsPattern} ESCAPE '\\' THEN 60
             WHEN kp.summary LIKE #{containsPattern} ESCAPE '\\' THEN 40
             WHEN kp.content LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            <if test="fulltextSelects">
+            WHEN MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 10
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           AS score,
           NULL AS source_id,
           NULL AS source_asset_id,
@@ -177,6 +198,11 @@
           kp.id AS knowledge_point_id,
           NULL AS question_id,
           NULL AS note_id,
+          <choose>
+            <when test="useFulltext">MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE)</when>
+            <otherwise>0</otherwise>
+          </choose>
+          AS ft_relevance,
           CONCAT('KNOWLEDGE_POINT|', LPAD(kp.id, 20, '0')) AS sort_key
         FROM knowledge_point kp
         JOIN learning_space ls ON ls.id = kp.space_id
@@ -203,11 +229,11 @@
             WHEN q.stem = #{exactQuery} THEN 60
             WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
             WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            <if test="fulltextSelects">
+            WHEN MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 10
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           AS score,
           NULL AS source_id,
           NULL AS source_asset_id,
@@ -216,6 +242,11 @@
           NULL AS knowledge_point_id,
           q.id AS question_id,
           NULL AS note_id,
+          <choose>
+            <when test="useFulltext">MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE)</when>
+            <otherwise>0</otherwise>
+          </choose>
+          AS ft_relevance,
           CONCAT('QUESTION|', LPAD(q.id, 20, '0')) AS sort_key
         FROM question q
         JOIN learning_space ls ON ls.id = q.space_id
@@ -240,11 +271,11 @@
             WHEN q.stem = #{exactQuery} THEN 60
             WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
             WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            <if test="fulltextSelects">
+            WHEN MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 10
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           AS score,
           NULL AS source_id,
           NULL AS source_asset_id,
@@ -253,6 +284,11 @@
           NULL AS knowledge_point_id,
           wq.question_id AS question_id,
           NULL AS note_id,
+          <choose>
+            <when test="useFulltext">MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE)</when>
+            <otherwise>0</otherwise>
+          </choose>
+          AS ft_relevance,
           CONCAT('WRONG_QUESTION|', LPAD(wq.id, 20, '0')) AS sort_key
         FROM wrong_question wq
         JOIN learning_space ls ON ls.id = wq.space_id
@@ -280,11 +316,11 @@
             WHEN n.title = #{exactQuery} THEN 80
             WHEN n.title LIKE #{prefixPattern} ESCAPE '\\' THEN 60
             WHEN n.content LIKE #{containsPattern} ESCAPE '\\' THEN 30
+            <if test="fulltextSelects">
+            WHEN MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 20
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           AS score,
           NULL AS source_id,
           NULL AS source_asset_id,
@@ -293,6 +329,11 @@
           NULL AS knowledge_point_id,
           NULL AS question_id,
           n.id AS note_id,
+          <choose>
+            <when test="useFulltext">MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE)</when>
+            <otherwise>0</otherwise>
+          </choose>
+          AS ft_relevance,
           CONCAT('NOTE|', LPAD(n.id, 20, '0')) AS sort_key
         FROM note n
         JOIN learning_space ls ON ls.id = n.space_id
@@ -310,7 +351,7 @@
       </trim>
     ) AS results
     WHERE score > 0
-    ORDER BY score DESC, sort_key ASC
+    ORDER BY score DESC, ft_relevance DESC, sort_key ASC
     LIMIT #{limit} OFFSET #{offset}
   </select>
 
@@ -332,11 +373,11 @@
             WHEN s.title = #{exactQuery} THEN 100
             WHEN s.title LIKE #{prefixPattern} ESCAPE '\\' THEN 80
             WHEN s.title LIKE #{containsPattern} ESCAPE '\\' THEN 60
+            <if test="fulltextSelects">
+            WHEN MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 50
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(s.title) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           > 0
         UNION ALL
       </if>
@@ -363,11 +404,11 @@
             WHEN cb.normalized_text = #{exactQuery} THEN 40
             WHEN cb.normalized_text LIKE #{prefixPattern} ESCAPE '\\' THEN 30
             WHEN cb.normalized_text LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            <if test="fulltextSelects">
+            WHEN MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 10
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(cb.normalized_text) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           > 0
         UNION ALL
       </if>
@@ -392,11 +433,11 @@
             WHEN kp.title LIKE #{containsPattern} ESCAPE '\\' THEN 60
             WHEN kp.summary LIKE #{containsPattern} ESCAPE '\\' THEN 40
             WHEN kp.content LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            <if test="fulltextSelects">
+            WHEN MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 10
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(kp.title, kp.summary, kp.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           > 0
         UNION ALL
       </if>
@@ -417,11 +458,11 @@
             WHEN q.stem = #{exactQuery} THEN 60
             WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
             WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            <if test="fulltextSelects">
+            WHEN MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 10
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           > 0
         UNION ALL
       </if>
@@ -445,11 +486,11 @@
             WHEN q.stem = #{exactQuery} THEN 60
             WHEN q.stem LIKE #{prefixPattern} ESCAPE '\\' THEN 40
             WHEN q.stem LIKE #{containsPattern} ESCAPE '\\' THEN 20
+            <if test="fulltextSelects">
+            WHEN MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 10
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(q.stem) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           > 0
         UNION ALL
       </if>
@@ -471,11 +512,11 @@
             WHEN n.title = #{exactQuery} THEN 80
             WHEN n.title LIKE #{prefixPattern} ESCAPE '\\' THEN 60
             WHEN n.content LIKE #{containsPattern} ESCAPE '\\' THEN 30
+            <if test="fulltextSelects">
+            WHEN MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) &gt; 0 THEN 20
+            </if>
             ELSE 0
           END
-          <if test="useFulltext">
-          + LEAST(9, ROUND(MATCH(n.title, n.content) AGAINST (#{matchQuery} IN NATURAL LANGUAGE MODE) * 5))
-          </if>
           > 0
         UNION ALL
       </if>
