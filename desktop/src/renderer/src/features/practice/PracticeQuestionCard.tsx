@@ -21,7 +21,6 @@
  * mutation flag is what made an exam button stick at "已保存" (audit G03).
  */
 
-import { type KeyboardEvent } from 'react';
 import { Button } from '../../components/Button';
 import { QuestionRenderer, type QuestionPayload } from '../../components/QuestionRenderer';
 import { formatDateTime, questionTypeLabel } from '../../lib/format';
@@ -83,15 +82,6 @@ export function PracticeQuestionCard({
         : '提交';
   const submitDisabled = !canAnswer || Boolean(submitted) || pending || !payload.ok;
 
-  // QuestionRenderer's own textarea submits on Enter; the FILL_BLANK control
-  // this card owns keeps the same keyboard behaviour.
-  function handleTextKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === 'Enter' && !event.shiftKey && !submitDisabled) {
-      event.preventDefault();
-      onSubmit();
-    }
-  }
-
   return (
     <div className="practice-question-card">
       <p className="practice-question-card__position">
@@ -110,37 +100,15 @@ export function PracticeQuestionCard({
         onBooleanAnswerChange={
           editable ? (value) => onDraftChange({ booleanAnswer: value }) : undefined
         }
-        // FILL_BLANK has no renderer control, so this card renders its own
-        // textarea and must not wire the same callback twice.
+        // SHORT_ANSWER and FILL_BLANK are both the shared text control: the
+        // renderer owns the placeholder, the length limit and the Enter-to-send
+        // behaviour, so this card must not keep a second copy of it.
         onTextAnswerChange={
-          type === 'SHORT_ANSWER' && editable
-            ? (value) => onDraftChange({ textAnswer: value })
-            : undefined
+          editable ? (value) => onDraftChange({ textAnswer: value }) : undefined
         }
+        onTextEnterSubmit={onSubmit}
         disabled={!editable}
       />
-
-      {type === 'FILL_BLANK' && (
-        <div className="practice-question-card__fill">
-          <label
-            className="form__label"
-            htmlFor={`practice-fill-${slot.practiceSessionQuestionId}`}
-          >
-            填空作答
-          </label>
-          <textarea
-            id={`practice-fill-${slot.practiceSessionQuestionId}`}
-            className="textarea"
-            rows={2}
-            aria-label="填空作答"
-            placeholder="输入填空内容，多个空用英文逗号分隔…"
-            value={draft?.textAnswer ?? ''}
-            disabled={!editable}
-            onChange={(event) => onDraftChange({ textAnswer: event.target.value })}
-            onKeyDown={handleTextKeyDown}
-          />
-        </div>
-      )}
 
       {unanswerable && (
         <p className="page__note" data-testid="unsupported-question-type">

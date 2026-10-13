@@ -65,6 +65,13 @@ interface QuestionRendererProps {
   onBooleanAnswerChange?: (value: boolean) => void;
   onTextAnswerChange?: (value: string) => void;
   onSubmit?: () => void;
+  /**
+   * Keyboard-only submit for pages that render their own submit button.
+   * `onSubmit` also draws a button, so a host with its own control (the
+   * practice card, whose button carries per-question saving/error labels)
+   * passes this instead — Enter still sends, no second button appears.
+   */
+  onTextEnterSubmit?: () => void;
   submitLabel?: string;
   disabled?: boolean;
 }
@@ -80,6 +87,7 @@ export function QuestionRenderer({
   onBooleanAnswerChange,
   onTextAnswerChange,
   onSubmit,
+  onTextEnterSubmit,
   submitLabel = '提交',
   disabled = false,
 }: QuestionRendererProps) {
@@ -136,9 +144,10 @@ export function QuestionRenderer({
   };
 
   const handleTextKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && onSubmit && !disabled) {
+    const submit = onSubmit ?? onTextEnterSubmit;
+    if (e.key === 'Enter' && !e.shiftKey && submit && !disabled) {
       e.preventDefault();
-      onSubmit();
+      submit();
     }
   };
 
@@ -217,7 +226,7 @@ export function QuestionRenderer({
           onKeyDown={handleTextKeyDown}
           placeholder={
             isFillBlank
-              ? '填写空里的答案…'
+              ? '输入填空内容，多个空用英文逗号分隔…'
               : '输入你的答案…'
           }
           rows={3}

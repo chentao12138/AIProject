@@ -579,7 +579,14 @@ describe('PracticeSessionPage', () => {
       createTestQueryClient()
     );
 
-    const box = await screen.findByRole('textbox', { name: '填空作答' });
+    // The shared renderer owns the text control now, so the fill-blank
+    // affordance is identified by the comma rule it states, not by a
+    // page-local copy of the textarea.
+    const box = await screen.findByRole('textbox', { name: '作答' });
+    expect(box).toHaveAttribute(
+      'placeholder',
+      '输入填空内容，多个空用英文逗号分隔…'
+    );
     expect(screen.getByRole('button', { name: '提交' })).toBeDisabled();
     await user.type(box, 'alpha,beta');
     await user.click(screen.getByRole('button', { name: '提交' }));

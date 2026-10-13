@@ -152,6 +152,32 @@ describe('QuestionRenderer — FILL_BLANK (G02)', () => {
   });
 });
 
+describe('QuestionRenderer — keyboard submit without a second button', () => {
+  it('lets a host that owns the submit control still receive Enter', async () => {
+    const user = userEvent.setup();
+    const onTextEnterSubmit = vi.fn();
+
+    render(
+      <QuestionRenderer
+        question={{ questionType: 'SHORT_ANSWER', stem: '简答题干' }}
+        mode="answer"
+        onTextAnswerChange={() => {}}
+        onTextEnterSubmit={onTextEnterSubmit}
+      />
+    );
+
+    // `onSubmit` would draw a button; the practice card already renders its own
+    // per-question submit with saving/error labels, so this path must not add a
+    // second one while still keeping Enter-to-send.
+    expect(
+      screen.queryByRole('button', { name: '提交' })
+    ).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox', { name: '作答' }), '{Enter}');
+    expect(onTextEnterSubmit).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('QuestionRenderer — ORDERING (G02)', () => {
   it('renders the items as a keyboard-operable ordered list', () => {
     const onSelectedOptionKeysChange = vi.fn();
