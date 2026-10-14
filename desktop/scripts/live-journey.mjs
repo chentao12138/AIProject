@@ -279,16 +279,201 @@ if (attemptId) {
   const submittedRow = (historyAfter.data?.items ?? []).find(
     (r) => r.id === attemptId
   );
+  // An all-objective paper is graded at submit time, so the row must say GRADED
+  // and carry a number — 0 is that learner's real score, not "ungraded".
   check(
-    'submitted attempt shows gradingStatus + null score while ungraded',
+    'submitted all-objective attempt is GRADED with a numeric score',
     submitted.status === 200 &&
-      String(submittedRow?.gradingStatus ?? '').toUpperCase() === 'UNGRADED' &&
-      (submittedRow?.score === null || submittedRow?.score === undefined),
+      String(submittedRow?.gradingStatus).toUpperCase() === 'GRADED' &&
+      typeof submittedRow?.score === 'number',
     `submit=${submitted.status} gradingStatus=${JSON.stringify(
       submittedRow?.gradingStatus ?? null
-    )} score=${JSON.stringify(submittedRow?.score ?? null)}`
+    )} score=${JSON.stringify(submittedRow?.score ?? null)}/${JSON.stringify(
+      submittedRow?.maxScore ?? null
+    )}`
   );
 }
+
+// The subjective path, which is what makes PARTIALLY_GRADED observable at all:
+// a paper with one objective and one short-answer item, submitted, then the
+// human grade applied. This is the chain the backend says it fixed (grading
+// status written at submit, gradeAnswer's mapper arguments, idempotent diagnosis
+// rebuild) — measured rather than accepted.
+const shortQuestion = await call('POST', `/api/v1/spaces/${spaceId}/questions`, {
+  questionType: 'SHORT_ANSWER',
+  stem: '法国的首都是哪里？',
+  difficulty: 'EASY',
+  referenceAnswer: '巴黎',
+});
+const shortId = shortQuestion.data?.id;
+check('SHORT_ANSWER created', Boolean(shortId), `HTTP ${shortQuestion.status} id=${shortId}`);
+await call('POST', `/api/v1/spaces/${spaceId}/questions/${shortId}/publish`, {});
+
+const mixed = await call('POST', `/api/v1/spaces/${spaceId}/exams`, {
+  title: '混合题型卷',
+  description: 'PARTIALLY_GRADED live check',
+  timeLimitMinutes: 30,
+  questions: [
+    { questionId: orderingId, score: 3, sortOrder: 0 },
+    { questionId: shortId, score: 5, sortOrder: 1 },
+  ],
+});
+const mixedId = mixed.data?.id;
+await call('POST', `/api/v1/spaces/${spaceId}/exams/${mixedId}/publish`, {});
+
+const mixedAttempt = await call(
+  'POST',
+  `/api/v1/spaces/${spaceId}/exams/${mixedId}/sessions`,
+  {}
+);
+const mixedAttemptId = mixedAttempt.data?.id;
+await call('POST', `/api/v1/spaces/${spaceId}/exam-attempts/${mixedAttemptId}/start`, {});
+const mixedRead = await call(
+  'GET',
+  `/api/v1/spaces/${spaceId}/exam-attempts/${mixedAttemptId}`
+);
+const mixedQuestions = mixedRead.data?.questions ?? [];
+check('mixed paper exposes both slots', mixedQuestions.length === 2, `slots=${mixedQuestions.length}`);
+
+const objectiveRow = mixedQuestions.find((q) => q.questionType === 'ORDERING');
+const subjectiveRow = mixedQuestions.find((q) => q.questionType === 'SHORT_ANSWER');
+const objectiveAnswer = await call(
+  'POST',
+  `/api/v1/spaces/${spaceId}/exam-attempts/${mixedAttemptId}/answers`,
+  { examQuestionId: objectiveRow?.examQuestionId, answer: { orderingAnswer: [1, 2, 3] } }
+);
+// Backend defect (BACKEND-CONTRACT-REQUESTS, 2026-10-14): the exam path answers 200
+// while storing an all-null payload, so the learner's ordering selection is lost and
+// the attempt then cannot be submitted (400). Asserting the echo here is what turns
+// that into a named failure of this run instead of a silently wrong PASS later.
+check(
+  'exam ORDERING answer echoes the positions it was sent',
+  JSON.stringify(objectiveAnswer.data?.answer?.orderingAnswer ?? null) === '[1,2,3]',
+  `echo=${JSON.stringify(objectiveAnswer.data?.answer ?? null)}`
+);
+const subjectiveAnswer = await call(
+  'POST',
+  `/api/v1/spaces/${spaceId}/exam-attempts/${mixedAttemptId}/answers`,
+  { examQuestionId: subjectiveRow?.examQuestionId, answer: { textAnswer: '巴黎' } }
+);
+const answerId = subjectiveAnswer.data?.id;
+check(
+  'both answers stored, subjective echo carries the payload (C10)',
+  objectiveAnswer.status === 200 && subjectiveAnswer.status === 200 && Boolean(answerId),
+  `objective=${objectiveAnswer.status} subjective=${subjectiveAnswer.status} answerId=${answerId} echo=${JSON.stringify(
+    subjectiveAnswer.data?.answer ?? null
+  )} submitted=${JSON.stringify(subjectiveAnswer.data?.submitted ?? null)}`
+);
+
+const mixedSubmit = await call(
+  'POST',
+  `/api/v1/spaces/${spaceId}/exam-attempts/${mixedAttemptId}/submit`,
+  {}
+);
+const mixedHistory = await call(
+  'GET',
+  `/api/v1/spaces/${spaceId}/exam-attempts?examId=${mixedId}&page=0&size=10`
+);
+const mixedRow = (mixedHistory.data?.items ?? []).find((r) => r.id === mixedAttemptId);
+check(
+  'after submit the mixed paper is PARTIALLY_GRADED with the objective score only',
+  mixedSubmit.status === 200 &&
+    String(mixedRow?.gradingStatus).toUpperCase() === 'PARTIALLY_GRADED',
+  `submit=${mixedSubmit.status} code=${String(mixedSubmit.data?.code ?? '-')} detail=${String(
+    mixedSubmit.data?.detail ?? ''
+  ).slice(0, 100)} gradingStatus=${JSON.stringify(
+    mixedRow?.gradingStatus ?? null
+  )} score=${JSON.stringify(mixedRow?.score ?? null)}/${JSON.stringify(
+    mixedRow?.maxScore ?? null
+  )}`
+);
+
+const graded = await call(
+  'PUT',
+  `/api/v1/spaces/${spaceId}/exam-attempts/${mixedAttemptId}/answers/${answerId}/grade`,
+  { score: 5, feedback: '正确。' }
+);
+check('admin grading is reachable (was 404 for every answer)', graded.status === 200, `HTTP ${graded.status} ${String(JSON.stringify(graded.data ?? graded.error ?? ''))}`);
+
+const gradedHistory = await call(
+  'GET',
+  `/api/v1/spaces/${spaceId}/exam-attempts?examId=${mixedId}&page=0&size=10`
+);
+const gradedRow = (gradedHistory.data?.items ?? []).find((r) => r.id === mixedAttemptId);
+check(
+  'after grading the row is GRADED and the score grew by the human points',
+  String(gradedRow?.gradingStatus).toUpperCase() === 'GRADED' &&
+    (gradedRow?.score ?? 0) > (mixedRow?.score ?? 0),
+  `gradingStatus=${JSON.stringify(gradedRow?.gradingStatus ?? null)} score=${JSON.stringify(
+    gradedRow?.score ?? null
+  )}/${JSON.stringify(gradedRow?.maxScore ?? null)} (was ${JSON.stringify(mixedRow?.score ?? null)})`
+);
+
+// Re-running the grade must not 500 on a duplicate diagnosis row (the bug the
+// backend says it fixed), and the totals must stay the server's own.
+const regraded = await call(
+  'PUT',
+  `/api/v1/spaces/${spaceId}/exam-attempts/${mixedAttemptId}/answers/${answerId}/grade`,
+  { score: 4, feedback: '改判。' }
+);
+const regradedRow = (
+  (
+    await call(
+      'GET',
+      `/api/v1/spaces/${spaceId}/exam-attempts?examId=${mixedId}&page=0&size=10`
+    )
+  ).data?.items ?? []
+).find((r) => r.id === mixedAttemptId);
+check(
+  're-grading is idempotent and moves the score',
+  regraded.status === 200 && (regradedRow?.score ?? 0) === (gradedRow?.score ?? 0) - 1,
+  `regrade=${regraded.status} score=${JSON.stringify(regradedRow?.score ?? null)} (was ${JSON.stringify(gradedRow?.score ?? null)})`
+);
+
+// Notes: the archived list and the restore verb, both wired this round.
+const note = await call('POST', `/api/v1/spaces/${spaceId}/notes`, {
+  title: '归档与恢复实测',
+  content: '这是一条用于验证归档可见性的笔记。',
+  contentFormat: 'PLAIN_TEXT',
+});
+const noteId = note.data?.id;
+await call('POST', `/api/v1/spaces/${spaceId}/notes/${noteId}/archive`, {});
+const archivedList = await call(
+  'GET',
+  `/api/v1/spaces/${spaceId}/notes?archived=true&page=0&size=20`
+);
+const archivedRow = (archivedList.data?.items ?? []).find((n) => n.id === noteId);
+const defaultList = await call(
+  'GET',
+  `/api/v1/spaces/${spaceId}/notes?page=0&size=20`
+);
+check(
+  'archived=true shows the archived row with archivedAt; the default list hides it',
+  archivedList.status === 200 &&
+    Boolean(archivedRow?.archivedAt) &&
+    !(defaultList.data?.items ?? []).some((n) => n.id === noteId),
+  `archived=${JSON.stringify(archivedRow?.archivedAt ?? null)} defaultHasIt=${(
+    defaultList.data?.items ?? []
+  ).some((n) => n.id === noteId)}`
+);
+
+const noteRestored = await call(
+  'POST',
+  `/api/v1/spaces/${spaceId}/notes/${noteId}/restore`,
+  {}
+);
+const afterRestore = await call(
+  'GET',
+  `/api/v1/spaces/${spaceId}/notes?page=0&size=20`
+);
+check(
+  'restore returns 204 and the note is back in the default list',
+  noteRestored.status === 204 &&
+    (afterRestore.data?.items ?? []).some((n) => n.id === noteId),
+  `restore=${noteRestored.status} backInList=${(afterRestore.data?.items ?? []).some(
+    (n) => n.id === noteId
+  )}`
+);
 
 const failed = rows.filter((r) => !r.pass).length;
 console.log(`\nSUMMARY: ${rows.length - failed}/${rows.length} passed`);

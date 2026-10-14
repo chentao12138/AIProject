@@ -701,3 +701,67 @@ Once each item is reflected in `packages/api-client/src/generated/api.d.ts` and
 typecheck passes, the frontend implements the matching UI in the same pass — no
 item is deferred to a later version, and none is closed on the strength of a unit
 test alone.
+
+## Exam ORDERING answers are stored empty, and the attempt then cannot be submitted (blocker, measured 2026-10-14 on :8081)
+
+Reproduced by the `mixed paper` phase of `scripts/live-journey.mjs` (which asserts the
+echo, so this defect shows up as a named failure of that run) and again in isolation on
+space 29 / attempt 6 / examQuestionId 8 (a two-option ORDERING whose `correctOrder`
+is `[1,2]`):
+
+1. `POST /spaces/29/exam-attempts/6/answers` with `{examQuestionId: 8, answer: {orderingAnswer: [1, 2]}}`
+   → **200**, but the response's `answer.orderingAnswer` is `null` — every payload field null.
+2. `GET /spaces/29/exam-attempts/6` → that question says `answered: true` and `answer` is still all-null.
+   So the server acknowledges the item was answered while having lost its content.
+3. `POST /spaces/29/exam-attempts/6/submit` → **400** `{code: "VALIDATION_ERROR", detail: "请求包含无法处理的参数。"}`,
+   and the attempt stays `IN_PROGRESS`.
+
+Controls, from the same run: a SHORT_ANSWER-only attempt submits fine and yields
+`gradingStatus: PARTIALLY_GRADED` with the objective-only score; an unanswered
+SHORT_ANSWER attempt yields `GRADED`; and the identical `orderingAnswer` payload on the
+**practice** path grades (`isCorrect: true`). So the defect is the exam write /
+frozen-snapshot branch, not the payload shape — it blocks A6.2/A6.3 end to end, since
+any paper containing an ORDERING item cannot be handed in.
+
+Asked for: the fix, plus a specific code for that 400. `请求包含无法处理的参数` is not
+locatable, and the UI can only render 校验未通过 + that sentence, which tells the learner
+nothing about which item lost its answer.
+
+## Result view cannot say "this score is partial" (new ask, 2026-10-14)
+
+`ExamResultView` and `ExamAttemptView` carry no `gradingStatus`, so a learner who reaches
+the result page of a `PARTIALLY_GRADED` attempt sees `score` / `maxScore` and an item with
+`isCorrect: null`, and nothing states that the number is not final. The attempt **history
+row** can say it (that is where `gradingStatus` landed), which makes the inconsistency real
+rather than theoretical. Requested: `gradingStatus` on the result read, ideally with
+`pendingGradeCount`, so the score page can read 当前为部分成绩，N 题待人工评分 instead of
+presenting a partial as a verdict.
+
+## `ExamAnswerView.submitted` is undefined and is deliberately not used (2026-10-14)
+
+A stored answer arrives with `submitted: false` next to its `id`, `answeredAt` and payload,
+and the contract gives the field no description. Treating `false` as "not saved" would
+re-show a learner's own saved answer as 未作答 after a reload, which is the exact bug class
+W04 was raised for, so `isSavedOnServer` reads `answered` / `answeredAt` only and the field
+decides nothing until its meaning is written down. A previous commit wired it as a second
+proof — the live measurement falsified that, and the code now says so in its comment and in
+a test that asserts the flag changes the answer-state decision in neither direction.
+
+## Admin grading endpoints (E-04 / E-07) are deliberately not wired in this app
+
+`GET /admin/exams/{examId}/attempts/{attemptId}/answers`, the two `.../grade` paths and
+`.../grading-suggestion` all require `ROLE_ADMIN`, and the desktop has no admin surface
+(none in the audit either) — they belong to `admin-web`. Consequently the codes that only
+those paths emit (`EXAM_GRADING_INCOMPLETE`, `EXAM_ANSWER_NOT_SUBJECTIVE`,
+`EXAM_ANSWER_NOT_FOUND`, `EXAM_GRADE_SCORE_OUT_OF_RANGE`, `AI_GRADING_SUGGESTION_NOT_AVAILABLE`)
+are **not** added to `features/exams/exam-error.ts`: branching on a code a learner route can
+never return is dead code that also weakens the guard's "every declared code is handled"
+claim. Recorded here so the omission is a decision, not an oversight.
+
+Answers given to the backend's three questions: the grading queue needs **no paging**
+(`maxItems: 100` on the paper caps it, so return all rows ordered by `examQuestionId`);
+the queue **should** carry `referenceAnswer` and `explanation` as explicit admin-only fields,
+because a grader who sees only stem + answer + maxScore is guessing, and reusing the result
+view would leak the reference answer into a learner-visible shape; and the AI suggestion
+belongs on the **individual answer** with no batch endpoint, keeping `finalScore: false` and
+`clamped` as the contract that a suggestion is never a grade until a human posts one.

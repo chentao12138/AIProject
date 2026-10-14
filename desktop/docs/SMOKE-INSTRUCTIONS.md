@@ -243,6 +243,36 @@ checked. A step is evidence, not a checkbox.
 
 ---
 
+## Live journey re-run on the fifth backend delivery — 29/33, four failures are one backend defect
+
+Backend restarted on **`:8081`** with E-04/E-07 (admin grading) and wiped
+`aistudy_flyway_test` again, so the harness created its own space (id 29) and all its
+own data. `OPENAPI_URL=http://localhost:8081/v3/api-docs npm run api:live` is green after
+regenerating the snapshot (198 → **201 paths**); frontend `tsc` stayed at 0 errors.
+
+New assertions that **passed live**:
+
+| Step | Server's own answer |
+|------|---------------------|
+| History row carries `gradingStatus` | `null` while the attempt is open — so `—` + 等待评分 is right and my UI switched to reading it |
+| Submitted all-objective attempt | `gradingStatus:"GRADED"`, `score:0 / 3` — a real 0, printed as 0 |
+| Notes `?archived=true` | the archived row appears with `archivedAt`, and the default list still hides it |
+| `POST /notes/{id}/restore` | **204**, and the note is back in the default list |
+| Practice grading (re-run on the fresh schema) | 409 `PRACTICE_SESSION_NOT_SUBMITTED` before, 200 with score after; `deadlineAt` present again |
+
+The four failures are **one backend defect**, not four: an exam `ORDERING` answer is
+accepted with 200 while its payload is stored empty (`orderingAnswer: null`, and the
+attempt read says `answered: true` beside an all-null answer), and any attempt containing
+one then returns **400 `VALIDATION_ERROR` "请求包含无法处理的参数"** at `submit`. In the
+isolated reproduction a SHORT_ANSWER-only attempt submitted fine and landed
+`gradingStatus:"PARTIALLY_GRADED"` with `score:0 / 5` — that is how the label itself was
+verified — but the harness's *mixed* paper (ORDERING + SHORT_ANSWER) could not be
+submitted at all, so the chain after it (`grade` → `GRADED`, and re-grade idempotency)
+could **not** be measured. Reported with the reproduction, and asked for a specific 400
+code, in `BACKEND-CONTRACT-REQUESTS.md`. Not claimed as passed: the full
+`PARTIALLY_GRADED → 人工评分 → GRADED` chain, the AI suggestion endpoint (admin-web scope),
+and packaged R03–R05.
+
 ## Live API journey, 2026-10-14 (real server, real token — not a GUI run)
 
 With the account restored, the A-class flows were exercised against

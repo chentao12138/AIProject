@@ -83,31 +83,32 @@ describe('isSavedOnServer (W04 + A6.2: server truth, not memory)', () => {
     expect(isSavedOnServer({})).toBe(false);
   });
 
-  // C10 made the answer POST echo a `submitted` flag next to its payload.
-  it("accepts the POST's `submitted` echo as proof, and its `false` as refusal", () => {
-    expect(isSavedOnServer({ submitted: true })).toBe(true);
-    // Explicitly not stored outranks a stamp that may have arrived with it.
-    expect(isSavedOnServer({ submitted: false, answeredAt: '2026-10-13T10:00:00' })).toBe(
-      false
-    );
-    // A 2xx that says nothing at all is still not proof of a stored answer.
-    expect(isSavedOnServer({ answeredAt: undefined, submitted: undefined })).toBe(
-      false
-    );
+  // Measured live: a STORED answer came back with `submitted:false` next to its
+  // id, stamp and payload, and the contract describes the field not at all. So
+  // the flag decides nothing here — treating it as "not saved" would re-show a
+  // learner's own answer as 未作答 after a reload.
+  it('ignores the undefined `submitted` echo flag in both directions', () => {
+    expect(isSavedOnServer({ submitted: true })).toBe(false);
+    expect(
+      isSavedOnServer({ submitted: false, answeredAt: '2026-10-13T10:00:00' })
+    ).toBe(true);
+    expect(
+      isSavedOnServer({ submitted: true, answeredAt: '2026-10-13T10:00:00' })
+    ).toBe(true);
   });
 
-  it('carries the submitted flag out of the POST response', () => {
+  it('derives the slot state from the stamp alone, not from the echo flag', () => {
     const echoed: ExamAnswerRecord = {
       id: 901,
       examAttemptId: 5,
       examQuestionId: 12,
       gradingStatus: 'UNGRADED',
-      submitted: true,
-      answer: { selectedOptionKeys: ['A'] },
+      answeredAt: '2026-10-13T10:00:00',
+      submitted: false,
+      answer: { textAnswer: '巴黎' },
     };
     expect(serverStateOfRecord(echoed)).toEqual({
-      answeredAt: undefined,
-      submitted: true,
+      answeredAt: '2026-10-13T10:00:00',
     });
     expect(isSavedOnServer(serverStateOfRecord(echoed))).toBe(true);
   });

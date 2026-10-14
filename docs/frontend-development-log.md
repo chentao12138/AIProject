@@ -895,3 +895,37 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
 - 门禁（实跑）：lint 0 warnings / `tsc` node+web 0 / **73 files 1078 tests 全绿** /
   coverage statements 92.22% / build renderer **929.24 kB**。制品仍是 02:53 那个包，
   本轮改动之后未重构建，也从未安装过 R03–R05 需要的那一版。
+
+## 2026-10-14（第七轮）：第五批交付接上，但 live 打回一个后端静默丢数据的缺陷
+
+- 后端重启到 **`:8081`** 并发了 E-04（ADMIN 人工改分闭环）/ E-07（AI 评分建议），再次清空 `aistudy_flyway_test`。
+  按锚点判身份不看端口：`api:live` 对 8081 报出 **+3 条 admin path（198 → 201）**，重生成后
+  `api:check` 与 `api:live` 均绿、前端 `tsc` 0 error。
+- **这三个 admin 端点 desktop 故意不接**：本应用没有 Admin 屏、审计里也没有，它们归 `admin-web`。
+  随之而来的新错误码（`EXAM_GRADING_INCOMPLETE` / `EXAM_ANSWER_NOT_SUBJECTIVE` /
+  `EXAM_ANSWER_NOT_FOUND` / `EXAM_GRADE_SCORE_OUT_OF_RANGE` / `AI_GRADING_SUGGESTION_NOT_AVAILABLE`）
+  我也**不往 learner 的 exam-error 表里加**——learner 路由不可能返回它们，加了就是为不会发生的场景写分支，
+  并且会稀释"每个已声明码都被处理"这条守卫的意义。答复了他们的三个问题：改分队列**不需要分页**
+  （契约里题位 `maxItems:100`，全量有序即可）；队列**应该**显式带 `referenceAnswer`/`explanation`
+  （只有题干+作答+满分就打分等于猜），且只给 ADMIN；AI 建议放**单题按钮**，不要 batch。
+- **实测把一个阻塞缺陷钉住了**：考试里答 ORDERING，`POST …/exam-attempts/{id}/answers`
+  带 `{orderingAnswer:[1,2,3]}` 返回 **200**，但响应与随后 `GET …/{attemptId}` 里的 `answer`
+  **所有字段都是 null**，而 `answered:true` ——服务端承认答了、内容丢了；接着 `submit` 一律
+  **400 `VALIDATION_ERROR`「请求包含无法处理的参数」**。对照组：`SHORT_ANSWER` 单独成卷能交卷并得
+  `PARTIALLY_GRADED + score 0/5`；同一个 ordering 载荷走练习链路能正常判分。所以缺陷在 exam 写入/
+  冻结快照分支。已把重现步骤、复现 id 与"这个 400 需要专属码"发给后端，并在矩阵里把
+  **考试 ORDERING 作答的 live 闭环标成被阻塞**（代码与单测都在，但没有 E2E 就不说 E2E 过了）。
+  harness 里新增了一条断言（echo 必须带回原 orderingAnswer），这个缺陷以后每次跑都会点名它。
+- **上一轮我自己接错的一处被实测纠正**：`ExamAnswerView.submitted` 我按"第二个已保存凭据"用了，
+  而 live 显示**存下的 answer 带的是 `submitted:false` + `answeredAt`**，契约又完全没写这个字段的含义。
+  照那个规则，重载后学习者自己已存的答案会被显示成"未作答"——正是 W04 那类错误。现在 `isSavedOnServer`
+  只看 `answered` / `answeredAt`，注释与测试都固定住"`submitted` 两个方向都不改变判定"，
+  并把它作为待后端定义的字段记进 `BACKEND-CONTRACT-REQUESTS.md`。
+  这也是本轮唯一需要**回滚我自己已提交逻辑**的地方（`c31a3c0` 那条 commit 的说明里声称它是第二凭据）。
+- Notes 那半边接完并 live 验证过：`?archived=true` 返回归档行且带 `archivedAt`（默认列表仍不含它），
+  `POST /notes/{id}/restore` → **204** 后笔记回到默认列表。
+- 新提的 learner 侧缺口：`ExamResultView` / `ExamAttemptView` 都没有 `gradingStatus`，所以历史行能说
+  "客观题已判分，主观题待人工"，一进成绩页就只剩一个分数——**部分成绩会被当成最终成绩读**。
+  已请求在 result 上加 `gradingStatus`（最好带 `pendingGradeCount`）。
+- 门禁：lint 0 / `tsc` node+web 0 / **73 files 1078 tests**（未改测试数量之外的口径）；
+  live harness 29/33，四个 FAIL 全部归因上面那一个后端缺陷，未当作通过。
