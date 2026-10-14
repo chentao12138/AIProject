@@ -347,6 +347,7 @@ class ExamOpenApiContractTest {
                 "EXAM_NOT_FOUND",
                 "EXAM_GRADING_INCOMPLETE",
                 "EXAM_GRADE_SCORE_OUT_OF_RANGE",
+                "EXAM_ANSWER_PAYLOAD_INVALID",
                 "AI_GRADING_SUGGESTION_NOT_AVAILABLE",
                 "EXAM_DEADLINE_EXCEEDED",
                 "EXAM_RESULT_NOT_AVAILABLE",

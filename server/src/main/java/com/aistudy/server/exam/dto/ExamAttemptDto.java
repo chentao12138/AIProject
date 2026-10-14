@@ -204,6 +204,12 @@ public final class ExamAttemptDto {
             String gradingStatus,
             LocalDateTime answeredAt,
             ExamAnswerRequest.AnswerPayloadView answer,
+            @io.swagger.v3.oas.annotations.media.Schema(
+                    description = "Whether the OWNING ATTEMPT is already submitted, i.e. whether this"
+                        + " stored answer is now read-only instead of re-writable. It says nothing"
+                        + " about whether the answer itself was saved — a stored answer always comes"
+                        + " back with the payload it persisted, and false here means the learner can"
+                        + " still change it.")
             boolean submitted
     ) {
         public static ExamAnswerView from(ExamAnswer answer) {
@@ -230,10 +236,26 @@ public final class ExamAttemptDto {
         }
     }
 
-    /** Result after submit — correctness revealed here only. */
+    /**
+     * Result after submit — correctness revealed here only.
+     *
+     * <p>{@code gradingStatus} and {@code pendingGradeCount} travel with the
+     * score because a partially graded paper is not a final one: without them the
+     * result page showed "5 / 6" with no way to say that a subjective answer was
+     * still awaiting a human grade, so a provisional number read as the verdict.
+     */
     public record ExamResultView(
             Long attemptId,
             String status,
+            @io.swagger.v3.oas.annotations.media.Schema(
+                    description = "GRADED is final. PARTIALLY_GRADED means the objective part is"
+                        + " scored and pendingGradeCount subjective answers still await a human grade,"
+                        + " so the score is provisional.")
+            String gradingStatus,
+            @io.swagger.v3.oas.annotations.media.Schema(
+                    description = "Stored subjective answers still awaiting a human grade. More than"
+                        + " zero means score is provisional; gradingStatus is PARTIALLY_GRADED.")
+            int pendingGradeCount,
             Integer score,
             Integer maxScore,
             Integer correctCount,
@@ -242,16 +264,16 @@ public final class ExamAttemptDto {
             Integer durationMs,
             List<ExamResultItemView> items
     ) {
-        public static ExamResultView from(ExamResult result, List<ExamResultItemView> items) {
+        public static ExamResultView from(ExamResult result, List<ExamResultItemView> items,
+                                          String gradingStatus, int pendingGradeCount) {
             return new ExamResultView(
-                    result.getExamAttemptId(), "SUBMITTED",
+                    result.getExamAttemptId(), "SUBMITTED", gradingStatus, pendingGradeCount,
                     result.getScore(), result.getMaxScore(),
                     result.getCorrectCount(), result.getWrongCount(),
                     result.getUnansweredCount(), result.getDurationMs(),
                     items);
         }
     }
-
     /** Per-question result detail (post-submit only). */
     public record ExamResultItemView(
             Long examQuestionId,
@@ -276,10 +298,16 @@ public final class ExamAttemptDto {
     }
 
     /**
-     * One answer as the grading reviewer sees it. Carries the stored text, the
-     * slot's question type and max score next to the score and the audit trail,
-     * so the reviewer can grade — and correct a grade — without parsing
-     * snapshots or guessing the upper bound.
+     * One answer as the grading reviewer sees it, and only as the grading reviewer
+     * sees it: {@code referenceAnswer} and {@code explanation} are the rubric the
+     * grade is supposed to be against, and both stay on this ADMIN surface — the
+     * learner's result view has its own reveal rules and is not built from here.
+     * Without them a grader would read the stem and the candidate's text and
+     * judge from intuition, which is barely better than the blind status flip this
+     * endpoint replaces.
+     *
+     * <p>{@code previousScore}/{@code previousFeedback} are the first written
+     * grade, kept when a grade is corrected, so a regrade is auditable.
      */
     public record ExamAnswerGradingView(
             Long id,
@@ -288,12 +316,22 @@ public final class ExamAttemptDto {
             String questionType,
             String stem,
             Integer maxScore,
+            @io.swagger.v3.oas.annotations.media.Schema(
+                    description = "ADMIN-only: the answer the frozen snapshot carries, shown so a"
+                        + " human grade can be against a rubric rather than a guess. Never returned to"
+                        + " the examinee.")
+            String referenceAnswer,
+            @io.swagger.v3.oas.annotations.media.Schema(description = "ADMIN-only explanation of the"
+                    + " frozen snapshot.")
+            String explanation,
             String answerText,
             String gradingStatus,
             LocalDateTime answeredAt,
             Integer score,
             Boolean isCorrect,
             String feedback,
+            Integer previousScore,
+            String previousFeedback,
             String gradedBy,
             LocalDateTime gradedAt
     ) {
@@ -305,10 +343,14 @@ public final class ExamAttemptDto {
                     snapshot == null ? null : snapshot.questionType(),
                     snapshot == null ? null : snapshot.stem(),
                     slot == null ? null : slot.getScore(),
+                    snapshot == null || snapshot.answerData() == null
+                            ? null : snapshot.answerData().referenceAnswer(),
+                    snapshot == null ? null : snapshot.explanation(),
                     AnswerDataCodec.parseAnswerPayload(answer.getAnswerDataJson()).textAnswer(),
                     answer.getGradingStatus(), answer.getAnsweredAt(),
                     answer.getScore(), answer.getIsCorrect(),
                     answer.getFeedback(),
+                    answer.getPreviousScore(), answer.getPreviousFeedback(),
                     answer.getGradedBy(), answer.getGradedAt());
         }
     }

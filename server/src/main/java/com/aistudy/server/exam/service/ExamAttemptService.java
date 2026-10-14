@@ -238,8 +238,13 @@ public class ExamAttemptService {
                 snapshot.questionType(), snapshot.answerData(), payload);
 
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+        // All five payload fields must be stored. The three-field overload used
+        // here dropped orderingAnswer/matchingAnswer, so an ORDERING or MATCHING
+        // answer was accepted (200) and echoed back as empty, and the attempt then
+        // failed at submit against a payload that had lost its content.
         String answerJson = AnswerDataCodec.buildAnswerPayloadJson(
-                payload.selectedOptionKeys(), payload.booleanAnswer(), payload.textAnswer());
+                payload.selectedOptionKeys(), payload.booleanAnswer(), payload.textAnswer(),
+                payload.orderingAnswer(), payload.matchingAnswer());
         boolean objective = !"SHORT_ANSWER".equals(snapshot.questionType());
         String gradingStatus = objective ? GRADING_GRADED : GRADING_UNGRADED;
 
@@ -337,7 +342,13 @@ public class ExamAttemptService {
                                     answer.getScore(), correctAnswerSummary(snapshot)),
                     answer != null));
         }
-        return ExamResultView.from(result, items);
+        // A partial score has to say it is partial (contract ask from the frontend):
+        // the result page used to show only score/maxScore plus an isCorrect:null row,
+        // so "objective part scored, a human still owes a grade" read as final.
+        ExamAttempt current = getMine(ownerSubject, spaceId, attemptId);
+        return ExamResultView.from(result, items,
+                current == null ? attempt.getGradingStatus() : current.getGradingStatus(),
+                countPendingGrading(new SlotAnswers(slots, answersBySlot)));
     }
 
     /**
@@ -508,6 +519,37 @@ public class ExamAttemptService {
     }
 
     private record SlotAnswers(List<ExamQuestion> slots, Map<Long, ExamAnswer> answers) {
+    }
+
+    /**
+     * Grades one stored answer against its frozen snapshot, turning the
+     * evaluator's shape complaint into a code that names the question. Left to
+     * itself an {@code IllegalArgumentException} reached the client as
+     * {@code VALIDATION_ERROR / 请求包含无法处理的参数} on submit, which told a learner
+     * nothing about which of ten questions had to be answered again — and a
+     * submit that fails must say, because the attempt stays IN_PROGRESS and the
+     * answer can be re-posted.
+     */
+    private GradeResult gradeSlotOrExplain(SnapshotView snapshot, ExamQuestion slot,
+                                           AnswerDataCodec.AnswerPayloadView stored) {
+        try {
+            return QuestionAnswerEvaluator.grade(
+                    snapshot.questionType(), snapshot.answerData(),
+                    AnswerPayload.of(stored.selectedOptionKeys(),
+                            stored.booleanAnswer(),
+                            stored.textAnswer(),
+                            stored.orderingAnswer(),
+                            stored.matchingAnswer()));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            // Named by id as well as position: sortOrder is exposed as stored, and a
+            // prose "question 1" that disagrees with the client's own numbering is
+            // worse than no message at all.
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    ApiErrorCodes.EXAM_ANSWER_PAYLOAD_INVALID,
+                    "examQuestionId=" + slot.getId() + ", sortOrder="
+                            + slot.getSortOrder() + ", type=" + snapshot.questionType()
+                            + " cannot be graded from the stored answer: " + e.getMessage(), e);
+        }
     }
 
     private SlotAnswers slotsAndAnswers(ExamAttempt attempt, Long spaceId) {
@@ -693,13 +735,7 @@ public class ExamAttemptService {
             }
             AnswerDataCodec.AnswerPayloadView storedPayload =
                     AnswerDataCodec.parseAnswerPayload(answer.getAnswerDataJson());
-            GradeResult grade = QuestionAnswerEvaluator.grade(
-                    snapshot.questionType(), snapshot.answerData(),
-                    AnswerPayload.of(storedPayload.selectedOptionKeys(),
-                            storedPayload.booleanAnswer(),
-                            storedPayload.textAnswer(),
-                            storedPayload.orderingAnswer(),
-                            storedPayload.matchingAnswer()));
+            GradeResult grade = gradeSlotOrExplain(snapshot, slot, storedPayload);
             boolean correct = Boolean.TRUE.equals(grade.isCorrect());
             int itemScore = correct ? slot.getScore() : 0;
             score += itemScore;
@@ -712,7 +748,7 @@ public class ExamAttemptService {
             items.add(itemView(slot, snapshot, grade, true));
         }
 
-        boolean hasSubjectivePending = false;
+        int subjectivePending = 0;
         for (ExamQuestion slot : slots) {
             SnapshotView snap = AnswerDataCodec.parseSnapshot(slot.getQuestionSnapshotJson());
             if (!"SHORT_ANSWER".equals(snap.questionType())) {
@@ -720,9 +756,10 @@ public class ExamAttemptService {
             }
             ExamAnswer a = answersBySlot.get(slot.getId());
             if (a != null && !GRADING_GRADED.equals(a.getGradingStatus())) {
-                hasSubjectivePending = true;
+                subjectivePending++;
             }
         }
+        String submittedGrading = subjectivePending > 0 ? GRADING_PARTIALLY_GRADED : GRADING_GRADED;
 
         int durationMs = (int) Duration.between(attempt.getStartedAt(), now).toMillis();
 
@@ -753,7 +790,7 @@ public class ExamAttemptService {
         // all-objective submission kept grading_status = null and a swallowed
         // failure was invisible.
         examAttemptMapper.updateGradingStatusByIdAndSpace(attempt.getId(), spaceId,
-                hasSubjectivePending ? GRADING_PARTIALLY_GRADED : GRADING_GRADED, now);
+                submittedGrading, now);
 
         masteryService.recomputeForQuestions(ownerSubject, spaceId,
                 slots.stream().map(ExamQuestion::getQuestionId).toList());
@@ -763,7 +800,7 @@ public class ExamAttemptService {
 
         wrongQuestionReviewService.recordExamResults(ownerSubject, spaceId, wrongQuestionIds);
 
-        return ExamResultView.from(result, items);
+        return ExamResultView.from(result, items, submittedGrading, subjectivePending);
     }
 
     // ==================== internals ====================

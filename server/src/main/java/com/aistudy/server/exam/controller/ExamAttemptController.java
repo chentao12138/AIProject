@@ -129,7 +129,7 @@ public class ExamAttemptController {
     }
 
     @Operation(
-            description = "Submits and grades in one transaction. 409 `code: EXAM_ATTEMPT_ALREADY_SUBMITTED` on a second submit, `code: EXAM_RESULT_NOT_AVAILABLE` when grading produced no result row.",
+            description = "Submits and grades in one transaction. 409 `code: EXAM_ATTEMPT_ALREADY_SUBMITTED` on a second submit, `code: EXAM_RESULT_NOT_AVAILABLE` when grading produced no result row. 400 `code: EXAM_ANSWER_PAYLOAD_INVALID` when a stored answer cannot be graded against its frozen snapshot — the detail names the question, and the attempt stays IN_PROGRESS so that answer can be re-posted.",
             responses = {
                     @ApiResponse(responseCode = "200", description = "result of this submission"),
                     @ApiResponse(responseCode = "409", description = "conflict with a stable `code`")
@@ -144,7 +144,7 @@ public class ExamAttemptController {
     }
 
     @Operation(
-            description = "Reads the stored result. 409 `code: EXAM_RESULT_NOT_AVAILABLE` while the attempt is not submitted, `code: EXAM_RESULT_MISSING` when a submitted attempt has no result row to show.",
+            description = "Reads the stored result. 409 `code: EXAM_RESULT_NOT_AVAILABLE` while the attempt is not submitted, `code: EXAM_RESULT_MISSING` when a submitted attempt has no result row to show. `gradingStatus` + `pendingGradeCount` travel with the score: PARTIALLY_GRADED with a positive pendingGradeCount means the number shown is not final.",
             responses = {
                     @ApiResponse(responseCode = "200", description = "graded result"),
                     @ApiResponse(responseCode = "409", description = "conflict with a stable `code`")

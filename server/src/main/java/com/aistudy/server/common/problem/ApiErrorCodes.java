@@ -95,6 +95,13 @@ public final class ApiErrorCodes {
     public static final String EXAM_ATTEMPT_NOT_FOUND = "EXAM_ATTEMPT_NOT_FOUND";
     /** A manual score outside {@code 0..slot maxScore}; a client can bound the input. */
     public static final String EXAM_GRADE_SCORE_OUT_OF_RANGE = "EXAM_GRADE_SCORE_OUT_OF_RANGE";
+    /**
+     * A stored answer cannot be graded against its frozen snapshot. Normally a
+     * client bug, but also the state an attempt is left in when an older build
+     * stored a partial payload — so the code names the question rather than
+     * answering a generic validation error.
+     */
+    public static final String EXAM_ANSWER_PAYLOAD_INVALID = "EXAM_ANSWER_PAYLOAD_INVALID";
     /** Another request moved the attempt on between read and write. */
     public static final String EXAM_ATTEMPT_STALE = "EXAM_ATTEMPT_STALE";
     /** Another request moved the answer on between read and write. */
