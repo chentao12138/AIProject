@@ -42,8 +42,12 @@ cannot silently drift from the links.
 | `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | `ExamAttemptPage` | Active exam attempt + result |
 | `/spaces/:spaceId/search` | `SearchPage` | Global/space search |
 
-There is no question *edit* route: the contract has no update verb, so
-`QuestionForm` is create-only (see `BACKEND-CONTRACT-REQUESTS.md` A4.5).
+Question *edit* is wired: `/spaces/:spaceId/questions/:questionId/edit`
+renders `QuestionEditPage`, backed by `PUT .../questions/{questionId}`. The
+contract's `UpdateQuestionRequest` only carries `stem` / `explanation` /
+`difficulty` (options and the correct answer cannot be changed once created),
+so the edit form is limited to those three fields — not create-only. See
+`BACKEND-CONTRACT-REQUESTS.md` C05.
 
 ## Catch-all
 

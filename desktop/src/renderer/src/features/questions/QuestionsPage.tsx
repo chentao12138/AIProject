@@ -5,11 +5,14 @@
  *
  * Server-driven filters, URL as the only holder of them: the query key and
  * the request read the same `searchParams`, so what you see in the address
- * bar is what was asked for. The contract's `GET /questions` accepts exactly
- * `status`, `questionType` and `knowledgePointId` — so those are the three
- * controls, and there is no pager: `page`/`size` do not exist in the contract
- * (C-Paging), and faking one by fetching everything and slicing locally is
- * forbidden. The gap is stated in the UI instead of being papered over.
+ * bar is what was asked for. The contract's `GET /questions` (per the
+ * generated api-client + OpenAPI) accepts `status`, `questionType`,
+ * `knowledgePointId`, `page` and `size` — so a real, server-side pager is
+ * rendered and `page` is a first-class filter. Difficulty and keyword are NOT
+ * in the contract's query params, so no difficulty/keyword control is shown
+ * and faking one by fetching everything and slicing locally is forbidden;
+ * those two filters remain a backend contract gap (C-Paging / C-filter), not
+ * a missing UI we papered over.
  */
 
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';

@@ -1265,7 +1265,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Submits and grades in one transaction. 409 `code: EXAM_ATTEMPT_ALREADY_SUBMITTED` on a second submit, `code: EXAM_RESULT_NOT_AVAILABLE` when grading produced no result row. */
+        /** @description Submits and grades in one transaction. 409 `code: EXAM_ATTEMPT_ALREADY_SUBMITTED` on a second submit, `code: EXAM_RESULT_NOT_AVAILABLE` when grading produced no result row. 400 `code: EXAM_ANSWER_PAYLOAD_INVALID` when a stored answer cannot be graded against its frozen snapshot — the detail names the question, and the attempt stays IN_PROGRESS so that answer can be re-posted. */
         post: operations["submit"];
         delete?: never;
         options?: never;
@@ -2707,7 +2707,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Reads the stored result. 409 `code: EXAM_RESULT_NOT_AVAILABLE` while the attempt is not submitted, `code: EXAM_RESULT_MISSING` when a submitted attempt has no result row to show. */
+        /** @description Reads the stored result. 409 `code: EXAM_RESULT_NOT_AVAILABLE` while the attempt is not submitted, `code: EXAM_RESULT_MISSING` when a submitted attempt has no result row to show. `gradingStatus` + `pendingGradeCount` travel with the score: PARTIALLY_GRADED with a positive pendingGradeCount means the number shown is not final. */
         get: operations["result_1"];
         put?: never;
         post?: never;
@@ -3597,6 +3597,10 @@ export interface components {
             stem?: string;
             /** Format: int32 */
             maxScore?: number;
+            /** @description ADMIN-only: the answer the frozen snapshot carries, shown so a human grade can be against a rubric rather than a guess. Never returned to the examinee. */
+            referenceAnswer?: string;
+            /** @description ADMIN-only explanation of the frozen snapshot. */
+            explanation?: string;
             answerText?: string;
             gradingStatus?: string;
             /** Format: date-time */
@@ -3605,6 +3609,9 @@ export interface components {
             score?: number;
             isCorrect?: boolean;
             feedback?: string;
+            /** Format: int32 */
+            previousScore?: number;
+            previousFeedback?: string;
             gradedBy?: string;
             /** Format: date-time */
             gradedAt?: string;
@@ -4275,6 +4282,13 @@ export interface components {
             /** Format: int64 */
             attemptId?: number;
             status?: string;
+            /** @description GRADED is final. PARTIALLY_GRADED means the objective part is scored and pendingGradeCount subjective answers still await a human grade, so the score is provisional. */
+            gradingStatus?: string;
+            /**
+             * Format: int32
+             * @description Stored subjective answers still awaiting a human grade. More than zero means score is provisional; gradingStatus is PARTIALLY_GRADED.
+             */
+            pendingGradeCount?: number;
             /** Format: int32 */
             score?: number;
             /** Format: int32 */
@@ -4305,6 +4319,7 @@ export interface components {
             /** Format: date-time */
             answeredAt?: string;
             answer?: components["schemas"]["AnswerPayloadView"];
+            /** @description Whether the OWNING ATTEMPT is already submitted, i.e. whether this stored answer is now read-only instead of re-writable. It says nothing about whether the answer itself was saved — a stored answer always comes back with the payload it persisted, and false here means the learner can still change it. */
             submitted?: boolean;
         };
         StudyCoachRequest: {
@@ -5077,6 +5092,11 @@ export interface components {
             startedAt?: string;
             /** Format: date-time */
             submittedAt?: string;
+            /**
+             * Format: date-time
+             * @description When this attempt's time limit expires (startedAt + exam timeLimitMinutes). Null before the attempt has started. A history row uses this to display expiry, which it could not before this field.
+             */
+            deadlineAt?: string;
             /** Format: int32 */
             score?: number;
             /** Format: int32 */

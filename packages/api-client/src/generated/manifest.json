@@ -1,12 +1,12 @@
 {
   "generatedFrom": {
-    "url": "http://localhost:8081/v3/api-docs",
+    "url": "http://127.0.0.1:8081/v3/api-docs",
     "openapi": "3.1.0",
     "infoVersion": "v0"
   },
-  "recordedAt": "2026-10-14T01:59:39.074Z",
+  "recordedAt": "2026-10-14T11:26:39.365Z",
   "files": {
-    "openapi.json": "sha256-edbbb608c70ef43f22cf7e751e6193212b635e72ce49de93ca59e524ebda4f23",
-    "api.d.ts": "sha256-501e7774d3b4e659d00d0b4ec807a242e44bb0d27cdf10c9f404be5cd2b1dfff"
+    "openapi.json": "sha256-a8a77b340b615c75afe4a99c81a3a281b779da45eae210f8fdfb6a7e58b068dd",
+    "api.d.ts": "sha256-553ec53737a98bd651329db80844090b52335f2a104eed4707ddefc14746aefa"
   }
 }
