@@ -246,5 +246,57 @@ Converted the remaining ~30 untyped 409 sites, emptied the `ErrorCodeRatchetTest
 Two AI tests that asserted the old exception type now assert `ApiException` plus the code. Frontend informed and the
 verification window re-opened (the shared schema was wiped by the final suite run, so data must be recreated).
 
+## Round 2026-10-14 (fifth) — E-04 ADMIN grading chain, E-07 AI grading suggestion
+Full suite on real MySQL: **1073 tests / 0 failures / 0 errors / 2 skipped**; `:8081` restarted on this code and
+`packages/api-client` regenerated.
+
+Audit E-04 said "ADMIN 人工改分、regrade、审计、更新总成绩/Diagnosis/Mastery 的幂等闭环". Reading the actual code
+showed the chain was not merely unverified but unreachable, and fixing it exposed a scoring bug:
+
+- **An ADMIN could not grade any learner.** Manual grading resolved the attempt with `user_subject = <caller>`, so the
+  one role allowed to grade (`hasRole('ADMIN')` on `PUT .../answers/{answerId}/grade`) got 404 for every attempt that
+  was not its own. Added `ExamAttemptMapper.selectByIdAndSpace` and `gradeAnswerAsAdmin`, which resolves the attempt by
+  space and pins it to the exam when the caller came through `/admin/exams/{examId}/...` (an attempt of another exam in
+  the same space is still 404). `applyGrade` derives the space from the resolved attempt, never from the URL.
+- **`POST /admin/exams/{examId}/attempts/{attemptId}/grade` fabricated a verdict.** It wrote `grading_status='GRADED'`
+  with no score, no result recompute, and ignored `examId` ownership, then returned a bare `String`. It now
+  `finalizeGradingAsAdmin`: recomputes from the answer rows and **refuses with 409 `EXAM_GRADING_INCOMPLETE` while a
+  stored subjective answer still awaits a score**, returning a typed `AdminGradingView` with the real score.
+- **A grade did not make the answer correct.** `gradeUpdate` wrote `score` but not `is_correct`, so a full-marks essay
+  kept counting as wrong in `exam_result.correct_count/wrong_count` — and in the diagnosis the same recompute writes.
+  The grade now writes `is_correct = score >= slot.score`.
+- **The post-grading recompute lost marks.** `recomputeResultAfterGrade` summed the stored answer scores, but an
+  objective answer's stored score is the evaluator's `1/0` marker, not the paper's points (submit uses the slot score).
+  A paper worth 6 came back as 5 after any manual grade. Objective slots now contribute the slot score when correct,
+  subjective slots the human score. Caught by the new IT, not by inspection.
+- **Manual grading is restricted to subjective slots** (`409 EXAM_ANSWER_NOT_SUBJECTIVE`) and now **accepts a
+  regrade** (`GRADED` → new score), with `previous_score/previous_feedback` keeping the first decision auditable and
+  `graded_by` the human. Out-of-range scores answer `400 EXAM_GRADE_SCORE_OUT_OF_RANGE`.
+- New ADMIN read: `GET /admin/exams/{examId}/attempts/{attemptId}/answers`, the grading queue. `ExamAnswerGradingView`
+  gained `questionType`/`stem`/`maxScore`/`answerText`/`isCorrect` — a grader previously had neither the text nor the
+  bound. All six endpoints are typed and their codes are published in the OpenAPI document
+  (`conflictCodesArePublishedInTheContract` now covers 7 new codes).
+- **E-07**: `ai/grading/AiGradingSuggestionService` + `POST .../answers/{answerId}/grading-suggestion`. Read-only by
+  construction — it holds no write path, `finalScore` is always false, an out-of-range model score is clamped and
+  flagged `clamped: true`, an unparseable response is a 409 (never a silent zero), the provider failure is a 502
+  `AI_PROVIDER_UNAVAILABLE`, and every attempt is booked in `ai_usage_record` under the new purpose
+  `GRADING_SUGGESTION`. The score only exists when an ADMIN posts it.
+- `ExamVerticalSliceIntegrationTest` and the new `ExamAdminGradingIntegrationTest` (13 cases) cover this on real MySQL:
+  cross-user grading, finalize refusal, full-marks correctness, regrade audit, objective rejection, bounds, suggestion
+  advisory-only/clamping/unusable-response/objective refusal, and the learner 403.
+- **Test-harness root cause fixed**: every distinct IT context caches its own ApplicationContext with a Hikari pool of
+  10, so the suite exceeded MySQL's `max_connections=151` and failed unrelated classes with "Too many connections".
+  `application-flyway-it.yml` now sets `maximum-pool-size: 3`; that is what took the run from 7 errors to 0. This was
+  the environment trap noted in earlier rounds, and it is now a code fix rather than a procedure.
+
+### Not done yet
+- Gates that need external conditions: T-16 真实教材 E2E (needs the 数据库系统工程师教程 ZIP), T-17 OCR on Windows +
+  Docker (needs the Paddle runtime + real scanned pages), T-18 real StepFun/BYOK (needs a live key), T-21 container E2E.
+  T-22 push is the user's action.
+- Frontend: C09 typed ORDERING/MATCHING pair structures and `questionType`/`status` enums on their side; the new ADMIN
+  grading surface has no client wrapper yet (they own `client.ts` reconciliation, C-02).
+- `login.json` / `spec-live.json` still sit untracked in the repo root from someone's probe — not this round's files,
+  left in place; check them before any commit that includes the repo root.
+
 ## Git
 User owns all git writes.

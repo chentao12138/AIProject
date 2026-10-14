@@ -61,10 +61,17 @@ public interface ExamAnswerMapper extends BaseMapper<ExamAnswer> {
                            @Param("gradingStatus") String gradingStatus,
                            @Param("updatedAt") LocalDateTime updatedAt);
 
-    /** Manual grade update with audit trail (previous score/feedback snapshot). */
+    /**
+     * Manual grade with audit trail: {@code previous_score}/{@code previous_feedback}
+     * keep the first written values so a regrade stays traceable, and
+     * {@code is_correct} is written with the score — otherwise a full-marks
+     * subjective answer keeps counting as wrong in the result, the diagnosis and
+     * the mastery evidence.
+     */
     @Update("UPDATE exam_answer SET "
             + "previous_score = COALESCE(previous_score, score), "
             + "score = #{score}, "
+            + "is_correct = #{isCorrect}, "
             + "grading_status = #{gradingStatus}, "
             + "previous_feedback = COALESCE(previous_feedback, feedback), "
             + "feedback = #{feedback}, "
@@ -75,6 +82,7 @@ public interface ExamAnswerMapper extends BaseMapper<ExamAnswer> {
     int gradeUpdate(@Param("id") Long id,
                     @Param("spaceId") Long spaceId,
                     @Param("score") Integer score,
+                    @Param("isCorrect") Boolean isCorrect,
                     @Param("gradingStatus") String gradingStatus,
                     @Param("feedback") String feedback,
                     @Param("gradedBy") String gradedBy,

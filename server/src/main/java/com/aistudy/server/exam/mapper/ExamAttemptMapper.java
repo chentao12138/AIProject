@@ -117,6 +117,16 @@ public interface ExamAttemptMapper extends BaseMapper<ExamAttempt> {
             + "ORDER BY ea.created_at DESC, ea.id DESC")
     List<ExamAttempt> selectByExamId(@Param("examId") Long examId);
 
+    /**
+     * ADMIN read of one attempt in a space. Grading is governance over someone
+     * else's paper, so the examinee binding {@link #selectByIdSpaceOwnerUser}
+     * requires cannot apply here — that lookup made every attempt of a real
+     * learner invisible to the admin who is supposed to grade it.
+     */
+    @Select("SELECT * FROM exam_attempt WHERE id = #{attemptId} AND space_id = #{spaceId} LIMIT 1")
+    ExamAttempt selectByIdAndSpace(@Param("attemptId") Long attemptId,
+                                   @Param("spaceId") Long spaceId);
+
     @Update("UPDATE exam_attempt SET grading_status = #{gradingStatus}, updated_at = #{updatedAt} "
             + "WHERE id = #{attemptId} AND space_id = #{spaceId}")
     int updateGradingStatusByIdAndSpace(@Param("attemptId") Long attemptId,

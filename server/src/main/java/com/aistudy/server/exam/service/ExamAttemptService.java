@@ -341,29 +341,123 @@ public class ExamAttemptService {
     }
 
     /**
-     * Manual subjective grading (ADMIN only at controller).
-     * Validates score bounds, records audit, recomputes result +
-     * diagnosis + mastery when all subjective slots are graded.
+     * ADMIN grading of another learner's answer (audit E-04).
+     *
+     * <p>{@link #getMine} binds {@code user_subject} to the caller, which is
+     * exactly what made the grade endpoint unusable by an admin: every attempt of
+     * a real learner answered 404 for the one role allowed to grade it.
+     * Governance therefore resolves the attempt by space alone, and pins it to
+     * the exam when the caller came in through
+     * {@code /admin/exams/{examId}/...}.
+     *
+     * @param examId expected owning exam, or {@code null} to skip that check
      */
     @Transactional
-    public ExamAnswerGradingView gradeAnswer(String ownerSubject, Long spaceId, Long attemptId,
-                                             Long answerId, ExamAttemptDto.GradeAnswerRequest request) {
-        ExamAttempt attempt = getMine(ownerSubject, spaceId, attemptId);
-        if (attempt == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ExamAttempt not found");
+    public ExamAnswerGradingView gradeAnswerAsAdmin(String adminSubject, Long spaceId, Long examId,
+                                                   Long attemptId, Long answerId,
+                                                   ExamAttemptDto.GradeAnswerRequest request) {
+        return applyGrade(adminSubject, adminAttempt(spaceId, examId, attemptId), answerId, request);
+    }
+
+    /**
+     * The grading queue: every stored answer of an attempt with its slot's
+     * question type and max score plus the text the learner wrote. An ADMIN
+     * cannot grade what they cannot read, and the learner's own result view is
+     * not reachable across users.
+     */
+    public List<ExamAnswerGradingView> gradingQueue(Long spaceId, Long examId, Long attemptId) {
+        ExamAttempt attempt = adminAttempt(spaceId, examId, attemptId);
+        Map<Long, ExamQuestion> slotsById = new HashMap<>();
+        for (ExamQuestion slot : questionsOf(attempt)) {
+            slotsById.put(slot.getId(), slot);
         }
+        List<ExamAnswerGradingView> views = new ArrayList<>();
+        for (ExamAnswer answer : examAnswerMapper.selectByAttemptId(spaceId, attempt.getId())) {
+            views.add(ExamAnswerGradingView.from(answer, slotsById.get(answer.getExamQuestionId())));
+        }
+        return views;
+    }
+
+    /**
+     * Finalizes ADMIN grading (audit E-04): recomputes the result from the answer
+     * rows as they now stand and reports the verdict the attempt actually earned.
+     *
+     * <p>It refuses to call an attempt final while a stored subjective answer
+     * still awaits a score. The endpoint this replaces wrote
+     * {@code grading_status = 'GRADED'} without grading anything, so an ungraded
+     * paper looked final to the learner, to the diagnosis and to mastery.
+     */
+    @Transactional
+    public ExamAttemptDto.AdminGradingView finalizeGradingAsAdmin(String adminSubject, Long spaceId,
+                                                                 Long examId, Long attemptId) {
+        ExamAttempt attempt = adminAttempt(spaceId, examId, attemptId);
+        if (!STATUS_SUBMITTED.equals(attempt.getStatus())) {
+            throw ApiException.conflict(ApiErrorCodes.EXAM_RESULT_NOT_AVAILABLE,
+                    "grading is only available after submit: " + attempt.getStatus());
+        }
+        SlotAnswers data = slotsAndAnswers(attempt, spaceId);
+        int pending = countPendingGrading(data);
+        if (pending > 0) {
+            throw ApiException.conflict(ApiErrorCodes.EXAM_GRADING_INCOMPLETE,
+                    pending + " answer(s) still await a grade");
+        }
+        recomputeResultAfterGrade(adminSubject, spaceId, attempt, data);
+
+        ExamResult result = examResultMapper.selectByAttemptId(spaceId, attemptId);
+        ExamAttempt fresh = examAttemptMapper.selectByIdAndSpace(attemptId, spaceId);
+        return new ExamAttemptDto.AdminGradingView(
+                attemptId, attempt.getExamId(),
+                fresh == null ? attempt.getStatus() : fresh.getStatus(),
+                fresh == null ? null : fresh.getGradingStatus(),
+                result == null ? null : result.getScore(),
+                result == null ? null : result.getMaxScore(),
+                0);
+    }
+
+    private ExamAttempt adminAttempt(Long spaceId, Long examId, Long attemptId) {
+        ExamAttempt attempt = examAttemptMapper.selectByIdAndSpace(attemptId, spaceId);
+        if (attempt == null || (examId != null && !examId.equals(attempt.getExamId()))) {
+            throw ApiException.notFound(ApiErrorCodes.EXAM_ATTEMPT_NOT_FOUND,
+                    "attempt is not in this space" + (examId == null ? "" : " or not of this exam"));
+        }
+        return attempt;
+    }
+
+    /** Answers a human still owes a score on. */
+    private int countPendingGrading(SlotAnswers data) {
+        int pending = 0;
+        for (ExamAnswer answer : data.answers().values()) {
+            if (GRADING_UNGRADED.equals(answer.getGradingStatus())
+                    || GRADING_NEEDS_REVIEW.equals(answer.getGradingStatus())) {
+                pending++;
+            }
+        }
+        return pending;
+    }
+
+    /**
+     * Shared grading path behind the owner-scoped and ADMIN-scoped entry points.
+     * The space always comes off the resolved attempt, never off the caller's
+     * URL, so a mismatched {@code /spaces/{spaceId}} prefix cannot move a grade
+     * onto another space's rows.
+     */
+    private ExamAnswerGradingView applyGrade(String graderSubject, ExamAttempt attempt, Long answerId,
+                                            ExamAttemptDto.GradeAnswerRequest request) {
+        Long spaceId = attempt.getSpaceId();
         if (!STATUS_SUBMITTED.equals(attempt.getStatus())) {
             throw ApiException.conflict(ApiErrorCodes.EXAM_RESULT_NOT_AVAILABLE,
                     "grading is only available after submit: " + attempt.getStatus());
         }
         ExamAnswer answer = examAnswerMapper.selectByIdAndSpace(answerId, spaceId);
         if (answer == null || !attempt.getId().equals(answer.getExamAttemptId())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ExamAnswer not found");
+            throw ApiException.notFound(ApiErrorCodes.EXAM_ANSWER_NOT_FOUND,
+                    "answer is not part of this attempt");
         }
-        if (!GRADING_UNGRADED.equals(answer.getGradingStatus())
-                && !GRADING_NEEDS_REVIEW.equals(answer.getGradingStatus())) {
+        String gradingState = answer.getGradingStatus();
+        if (!GRADING_UNGRADED.equals(gradingState) && !GRADING_NEEDS_REVIEW.equals(gradingState)
+                && !GRADING_GRADED.equals(gradingState)) {
             throw ApiException.conflict(ApiErrorCodes.EXAM_ANSWER_NOT_GRADABLE,
-                    "answer is not in a gradable state: " + answer.getGradingStatus());
+                    "answer is not in a gradable state: " + gradingState);
         }
         // selectByIdAndSpace takes (spaceId, examQuestionId). Passing them in
         // the call's own order made every manual grade look for
@@ -374,31 +468,43 @@ public class ExamAttemptService {
         if (slot == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "ExamQuestion not found");
         }
+        SnapshotView slotSnapshot = AnswerDataCodec.parseSnapshot(slot.getQuestionSnapshotJson());
+        if (!"SHORT_ANSWER".equals(slotSnapshot.questionType())) {
+            // Objective slots are scored from the frozen snapshot. A hand-written
+            // score there would end up disagreeing with is_correct, which the
+            // result, the diagnosis and the mastery evidence all read.
+            throw ApiException.conflict(ApiErrorCodes.EXAM_ANSWER_NOT_SUBJECTIVE,
+                    "only subjective answers take a human score: " + slotSnapshot.questionType());
+        }
         if (request.score() == null
                 || request.score() < 0
                 || (slot.getScore() != null && request.score() > slot.getScore())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "score must be between 0 and slot maxScore");
+            throw new ApiException(HttpStatus.BAD_REQUEST, ApiErrorCodes.EXAM_GRADE_SCORE_OUT_OF_RANGE,
+                    "score must be between 0 and " + (slot.getScore() == null ? "the slot max"
+                            : slot.getScore()));
         }
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
-        Integer previousScore = answer.getScore();
-        String previousFeedback = answer.getFeedback();
+        // A GRADED answer is accepted too: correcting a grade is the other half of
+        // manual grading, and gradeUpdate keeps the first written score and
+        // feedback in the previous_* columns so the correction stays auditable.
+        boolean correct = slot.getScore() == null || request.score() >= slot.getScore();
         int updated = examAnswerMapper.gradeUpdate(
                 answer.getId(), spaceId,
-                request.score(), GRADING_GRADED, request.feedback(),
-                ownerSubject, now, now);
+                request.score(), correct, GRADING_GRADED, request.feedback(),
+                graderSubject, now, now);
         if (updated == 0) {
             throw ApiException.conflict(ApiErrorCodes.EXAM_ANSWER_STALE,
                     "answer state changed concurrently");
         }
         answer.setScore(request.score());
+        answer.setIsCorrect(correct);
         answer.setGradingStatus(GRADING_GRADED);
         answer.setFeedback(request.feedback());
-        answer.setGradedBy(ownerSubject);
+        answer.setGradedBy(graderSubject);
         answer.setGradedAt(now);
 
-        recomputeResultAfterGrade(ownerSubject, spaceId, attempt, slotsAndAnswers(attempt, spaceId));
-        return ExamAnswerGradingView.from(answer);
+        recomputeResultAfterGrade(graderSubject, spaceId, attempt, slotsAndAnswers(attempt, spaceId));
+        return ExamAnswerGradingView.from(answer, slot);
     }
 
     private record SlotAnswers(List<ExamQuestion> slots, Map<Long, ExamAnswer> answers) {
@@ -434,10 +540,11 @@ public class ExamAttemptService {
         int wrongCount = 0;
         int unansweredCount = 0;
         int ungraded = 0;
-        List<Long> wrongQuestionIds = new ArrayList<>();
 
         for (ExamQuestion slot : slots) {
-            maxScore += slot.getScore() == null ? 0 : slot.getScore();
+            int slotScore = slot.getScore() == null ? 0 : slot.getScore();
+            // ALL slots count toward paper maxScore (C-08.3).
+            maxScore += slotScore;
             ExamAnswer answer = answersBySlot.get(slot.getId());
             if (answer == null) {
                 unansweredCount++;
@@ -448,16 +555,19 @@ public class ExamAttemptService {
                 ungraded++;
                 continue;
             }
-            if (answer.getScore() != null) {
-                score += answer.getScore();
-            }
-            if (Boolean.TRUE.equals(answer.getIsCorrect())) {
+            boolean correct = Boolean.TRUE.equals(answer.getIsCorrect());
+            boolean subjective = "SHORT_ANSWER".equals(
+                    AnswerDataCodec.parseSnapshot(slot.getQuestionSnapshotJson()).questionType());
+            // An objective item is worth the slot's points, exactly as at submit:
+            // the stored answer score is the evaluator's 1/0 marker, not paper
+            // points, so summing it made a post-grading recompute lose marks.
+            // A subjective item is worth whatever the grader wrote.
+            score += subjective ? (answer.getScore() == null ? 0 : answer.getScore())
+                    : (correct ? slotScore : 0);
+            if (correct) {
                 correctCount++;
             } else {
                 wrongCount++;
-                if (slot.getQuestionId() != null) {
-                    wrongQuestionIds.add(slot.getQuestionId());
-                }
             }
         }
 

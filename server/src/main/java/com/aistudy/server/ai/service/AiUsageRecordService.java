@@ -41,6 +41,11 @@ public class AiUsageRecordService {
     public static final String PURPOSE_QUESTION_GENERATION = "QUESTION_GENERATION";
     public static final String PURPOSE_CONTENT_STRUCTURE = "CONTENT_STRUCTURE";
     public static final String PURPOSE_VARIANT = "VARIANT";
+    /**
+     * The read-only ADMIN grading aid (audit E-07). Booked like every other
+     * purpose because it spends tokens, even though it writes no score.
+     */
+    public static final String PURPOSE_GRADING_SUGGESTION = "GRADING_SUGGESTION";
 
     /**
      * Records one provider call made by a generator or the variant service

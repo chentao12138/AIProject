@@ -87,10 +87,26 @@ public final class ApiErrorCodes {
     public static final String EXAM_GRADING_NOT_AVAILABLE = "EXAM_GRADING_NOT_AVAILABLE";
     /** This answer cannot be graded (e.g. already graded or not stored). */
     public static final String EXAM_ANSWER_NOT_GRADABLE = "EXAM_ANSWER_NOT_GRADABLE";
+    /** The answer is not stored at all, or not part of the addressed attempt. */
+    public static final String EXAM_ANSWER_NOT_FOUND = "EXAM_ANSWER_NOT_FOUND";
+    /** The addressed exam does not exist. */
+    public static final String EXAM_NOT_FOUND = "EXAM_NOT_FOUND";
+    /** The addressed attempt does not exist in the addressed space/exam. */
+    public static final String EXAM_ATTEMPT_NOT_FOUND = "EXAM_ATTEMPT_NOT_FOUND";
+    /** A manual score outside {@code 0..slot maxScore}; a client can bound the input. */
+    public static final String EXAM_GRADE_SCORE_OUT_OF_RANGE = "EXAM_GRADE_SCORE_OUT_OF_RANGE";
     /** Another request moved the attempt on between read and write. */
     public static final String EXAM_ATTEMPT_STALE = "EXAM_ATTEMPT_STALE";
     /** Another request moved the answer on between read and write. */
     public static final String EXAM_ANSWER_STALE = "EXAM_ANSWER_STALE";
+    /**
+     * Manual grading only takes a human score on a subjective slot. Objective
+     * slots are scored from the frozen snapshot, and letting a human overwrite
+     * that score would desync {@code score} from {@code is_correct}.
+     */
+    public static final String EXAM_ANSWER_NOT_SUBJECTIVE = "EXAM_ANSWER_NOT_SUBJECTIVE";
+    /** Grading was finalized while subjective answers still awaited a score. */
+    public static final String EXAM_GRADING_INCOMPLETE = "EXAM_GRADING_INCOMPLETE";
     /**
      * Learner-facing conflict codes for the paths audit F-30 had left generic
      * (contract request C12): each of these used to answer {@code code:
@@ -98,6 +114,13 @@ public final class ApiErrorCodes {
      * cannot branch on.
      */
     public static final String AI_EXPLANATION_NOT_READY = "AI_EXPLANATION_NOT_READY";
+    /**
+     * No AI grading suggestion could be produced. Read-only by contract: the
+     * suggestion never becomes a score, so a caller that gets this code still has
+     * to grade the answer itself.
+     */
+    public static final String AI_GRADING_SUGGESTION_NOT_AVAILABLE =
+            "AI_GRADING_SUGGESTION_NOT_AVAILABLE";
     public static final String AI_CONVERSATION_NOT_ACTIVE = "AI_CONVERSATION_NOT_ACTIVE";
     public static final String CONFIG_KEY_NOT_MODIFIABLE = "CONFIG_KEY_NOT_MODIFIABLE";
     public static final String EXAM_DIAGNOSIS_NOT_AVAILABLE = "EXAM_DIAGNOSIS_NOT_AVAILABLE";

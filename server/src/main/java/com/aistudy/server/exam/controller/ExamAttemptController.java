@@ -162,6 +162,20 @@ public class ExamAttemptController {
      * Manual subjective grading. Product rule: only ROLE_ADMIN may grade.
      * Ordinary examinees must never grade their own answers.
      */
+    @Operation(description = "ADMIN grade of one subjective (SHORT_ANSWER) answer of any learner in"
+            + " this space. The score is stored and result/diagnosis/mastery are recomputed from"
+            + " it; grading the same answer again corrects it, and the first score and feedback stay"
+            + " in previousScore/previousFeedback.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "answer graded"),
+                    @ApiResponse(responseCode = "400", description = "`code:"
+                            + " EXAM_GRADE_SCORE_OUT_OF_RANGE`"),
+                    @ApiResponse(responseCode = "404", description = "`code:"
+                            + " EXAM_ATTEMPT_NOT_FOUND` or `code: EXAM_ANSWER_NOT_FOUND`"),
+                    @ApiResponse(responseCode = "409", description = "`code:"
+                            + " EXAM_ANSWER_NOT_SUBJECTIVE`, `code: EXAM_ANSWER_NOT_GRADABLE`,"
+                            + " `code: EXAM_ANSWER_STALE` or `code: EXAM_RESULT_NOT_AVAILABLE`")
+            })
     @PutMapping(value = "/exam-attempts/{attemptId}/answers/{answerId}/grade",
             produces = MediaType.APPLICATION_JSON_VALUE,
             consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -177,8 +191,8 @@ public class ExamAttemptController {
             throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.FORBIDDEN, "ADMIN role required");
         }
-        return examAttemptService.gradeAnswer(
-                authentication.getName(), spaceId, attemptId, answerId, request);
+        return examAttemptService.gradeAnswerAsAdmin(
+                authentication.getName(), spaceId, null, attemptId, answerId, request);
     }
 
     /**

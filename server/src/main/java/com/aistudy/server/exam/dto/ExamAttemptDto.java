@@ -275,24 +275,58 @@ public final class ExamAttemptDto {
     ) {
     }
 
-    /** Response after manual grading (includes score + audit trail). */
+    /**
+     * One answer as the grading reviewer sees it. Carries the stored text, the
+     * slot's question type and max score next to the score and the audit trail,
+     * so the reviewer can grade — and correct a grade — without parsing
+     * snapshots or guessing the upper bound.
+     */
     public record ExamAnswerGradingView(
             Long id,
             Long examAttemptId,
             Long examQuestionId,
+            String questionType,
+            String stem,
+            Integer maxScore,
+            String answerText,
             String gradingStatus,
             LocalDateTime answeredAt,
             Integer score,
+            Boolean isCorrect,
             String feedback,
             String gradedBy,
             LocalDateTime gradedAt
     ) {
-        public static ExamAnswerGradingView from(ExamAnswer answer) {
+        public static ExamAnswerGradingView from(ExamAnswer answer, ExamQuestion slot) {
+            SnapshotView snapshot = slot == null ? null
+                    : AnswerDataCodec.parseSnapshot(slot.getQuestionSnapshotJson());
             return new ExamAnswerGradingView(
                     answer.getId(), answer.getExamAttemptId(), answer.getExamQuestionId(),
+                    snapshot == null ? null : snapshot.questionType(),
+                    snapshot == null ? null : snapshot.stem(),
+                    slot == null ? null : slot.getScore(),
+                    AnswerDataCodec.parseAnswerPayload(answer.getAnswerDataJson()).textAnswer(),
                     answer.getGradingStatus(), answer.getAnsweredAt(),
-                    answer.getScore(), answer.getFeedback(),
+                    answer.getScore(), answer.getIsCorrect(),
+                    answer.getFeedback(),
                     answer.getGradedBy(), answer.getGradedAt());
         }
+    }
+
+    /**
+     * What an attempt scores once ADMIN grading is finalized. Reported from the
+     * answer rows, not from a status flip: {@code gradingStatus} is GRADED only
+     * when no stored subjective answer still awaits a score, and
+     * {@code pendingGradeCount} is what stood in the way when it does not.
+     */
+    public record AdminGradingView(
+            Long attemptId,
+            Long examId,
+            String status,
+            String gradingStatus,
+            Integer score,
+            Integer maxScore,
+            int pendingGradeCount
+    ) {
     }
 }
