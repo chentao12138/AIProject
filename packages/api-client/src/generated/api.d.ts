@@ -174,6 +174,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        /** @description ADMIN grade of one subjective (SHORT_ANSWER) answer of any learner in this space. The score is stored and result/diagnosis/mastery are recomputed from it; grading the same answer again corrects it, and the first score and feedback stay in previousScore/previousFeedback. */
         put: operations["grade"];
         post?: never;
         delete?: never;
@@ -241,6 +242,23 @@ export interface paths {
         };
         get: operations["get_6"];
         put: operations["upsert"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/exams/{examId}/attempts/{attemptId}/answers/{answerId}/grade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description ADMIN manual grade of one subjective answer. The score is stored and result/diagnosis/mastery are recomputed from it, and grading_status only reaches GRADED once no stored subjective answer awaits a score. 400 when the score is outside 0..slot maxScore; 404 `code: EXAM_ANSWER_NOT_FOUND`; 409 `code: EXAM_ANSWER_NOT_SUBJECTIVE` for an objective slot, `code: EXAM_GRADING_INCOMPLETE`/`code: EXAM_RESULT_NOT_AVAILABLE` for the attempt state. */
+        put: operations["gradeAnswer"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1900,7 +1918,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["grade_1"];
+        /** @description Recomputes the attempt result from the stored grades and returns the verdict. 409 `code: EXAM_GRADING_INCOMPLETE` while a subjective answer still awaits a score; `code: EXAM_RESULT_NOT_AVAILABLE` before submit. */
+        post: operations["finalizeGrading"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/exams/{examId}/attempts/{attemptId}/answers/{answerId}/grading-suggestion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Suggested score and rationale for one subjective answer, produced by the configured AI provider. Advisory only: nothing is written, final_score is always false, and a score outside 0..maxScore is clamped with clamped=true. 404 `code: EXAM_ANSWER_NOT_FOUND`; 409 `code: AI_GRADING_SUGGESTION_NOT_AVAILABLE` for a non-subjective slot or an unusable model response; 502 `code: AI_PROVIDER_UNAVAILABLE`. */
+        post: operations["gradingSuggestion"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3099,6 +3135,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/exams/{examId}/attempts/{attemptId}/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Answers of one attempt as a grader sees them. 404 `code: EXAM_NOT_FOUND` when the exam is unknown, `code: EXAM_ANSWER_NOT_FOUND` for an attempt that is not part of it. */
+        get: operations["gradingQueue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/ai/jobs": {
         parameters: {
             query?: never;
@@ -3540,11 +3593,17 @@ export interface components {
             examAttemptId?: number;
             /** Format: int64 */
             examQuestionId?: number;
+            questionType?: string;
+            stem?: string;
+            /** Format: int32 */
+            maxScore?: number;
+            answerText?: string;
             gradingStatus?: string;
             /** Format: date-time */
             answeredAt?: string;
             /** Format: int32 */
             score?: number;
+            isCorrect?: boolean;
             feedback?: string;
             gradedBy?: string;
             /** Format: date-time */
@@ -4583,6 +4642,39 @@ export interface components {
             publishedAt?: string;
             /** Format: date-time */
             archivedAt?: string;
+        };
+        AdminGradingView: {
+            /** Format: int64 */
+            attemptId?: number;
+            /** Format: int64 */
+            examId?: number;
+            status?: string;
+            gradingStatus?: string;
+            /** Format: int32 */
+            score?: number;
+            /** Format: int32 */
+            maxScore?: number;
+            /** Format: int32 */
+            pendingGradeCount?: number;
+        };
+        GradingSuggestionView: {
+            /** Format: int64 */
+            attemptId?: number;
+            /** Format: int64 */
+            answerId?: number;
+            /** Format: int64 */
+            examQuestionId?: number;
+            questionType?: string;
+            /** Format: int32 */
+            suggestedScore?: number;
+            /** Format: int32 */
+            maxScore?: number;
+            rationale?: string;
+            clamped?: boolean;
+            provider?: string;
+            model?: string;
+            /** @description Always false: this is advice. The score is only stored once an ADMIN posts it to the grading endpoint. */
+            finalScore?: boolean;
         };
         AdminAiJobView: {
             /** Format: int64 */
@@ -5669,8 +5761,35 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description answer graded */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAnswerGradingView"];
+                };
+            };
+            /** @description `code: EXAM_GRADE_SCORE_OUT_OF_RANGE` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAnswerGradingView"];
+                };
+            };
+            /** @description `code: EXAM_ATTEMPT_NOT_FOUND` or `code: EXAM_ANSWER_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAnswerGradingView"];
+                };
+            };
+            /** @description `code: EXAM_ANSWER_NOT_SUBJECTIVE`, `code: EXAM_ANSWER_NOT_GRADABLE`, `code: EXAM_ANSWER_STALE` or `code: EXAM_RESULT_NOT_AVAILABLE` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5814,6 +5933,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DescriptorView"];
+                };
+            };
+        };
+    };
+    gradeAnswer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                examId: number;
+                attemptId: number;
+                answerId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GradeAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description answer graded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAnswerGradingView"];
+                };
+            };
+            /** @description `code: EXAM_ANSWER_NOT_SUBJECTIVE` or `code: EXAM_ANSWER_STALE` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAnswerGradingView"];
                 };
             };
         };
@@ -8963,7 +9119,7 @@ export interface operations {
             };
         };
     };
-    grade_1: {
+    finalizeGrading: {
         parameters: {
             query?: never;
             header?: never;
@@ -8975,13 +9131,55 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description grading finalized */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": string;
+                    "application/json": components["schemas"]["AdminGradingView"];
+                };
+            };
+            /** @description `code: EXAM_GRADING_INCOMPLETE` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGradingView"];
+                };
+            };
+        };
+    };
+    gradingSuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                examId: number;
+                attemptId: number;
+                answerId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description suggestion produced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GradingSuggestionView"];
+                };
+            };
+            /** @description `code: AI_GRADING_SUGGESTION_NOT_AVAILABLE` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GradingSuggestionView"];
                 };
             };
         };
@@ -10765,6 +10963,29 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ExamAttempt"][];
+                };
+            };
+        };
+    };
+    gradingQueue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                examId: number;
+                attemptId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamAnswerGradingView"][];
                 };
             };
         };
