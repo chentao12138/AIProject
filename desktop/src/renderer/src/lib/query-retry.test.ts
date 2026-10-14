@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ApiRequestError } from './api-error';
+import { ApiRequestError, NetworkUnavailableError } from './api-error';
 import {
   QUERY_RETRY_MAX_ATTEMPTS,
   shouldRetryQuery,
@@ -29,9 +29,20 @@ describe('shouldRetryQuery', () => {
   });
 
   it('retries network errors with a hard bound', () => {
-    expect(shouldRetryQuery(0, new TypeError('fetch failed'))).toBe(true);
-    expect(shouldRetryQuery(1, new TypeError('fetch failed'))).toBe(true);
-    expect(shouldRetryQuery(QUERY_RETRY_MAX_ATTEMPTS, new TypeError('fetch failed'))).toBe(false);
+    expect(shouldRetryQuery(0, new NetworkUnavailableError())).toBe(true);
+    expect(shouldRetryQuery(1, new NetworkUnavailableError())).toBe(true);
+    expect(shouldRetryQuery(QUERY_RETRY_MAX_ATTEMPTS, new NetworkUnavailableError())).toBe(false);
+  });
+
+  // Retrying `api.x is not a function` just delays the error state by the
+  // whole backoff schedule, which is what made pages look like they hung.
+  it('never retries a call-site TypeError', () => {
+    expect(shouldRetryQuery(0, new TypeError('api.listExams is not a function'))).toBe(false);
+  });
+
+  // 502 is "the provider refused this configuration" — retrying cannot help.
+  it('never retries an upstream rejection', () => {
+    expect(shouldRetryQuery(0, new ApiRequestError(502))).toBe(false);
   });
 
   it('retries 5xx with a hard bound', () => {

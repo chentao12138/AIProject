@@ -7,6 +7,9 @@
  *  - network errors and 5xx: transient — small bounded retry
  *    (QUERY_RETRY_MAX_ATTEMPTS extra attempts, exponential backoff
  *    from TanStack's default retryDelay).
+ *  - 502: our server reached an upstream that refused us (bad AI key,
+ *    unknown model). Retrying cannot fix the configuration, so the
+ *    actionable message should appear on the first failure.
  *  - anything else (4xx, unknown): not retried.
  *
  * Mutations never auto-replay: unsafe writes are not replayed unless
@@ -26,7 +29,12 @@ export function shouldRetryQuery(
     return false;
   }
   const kind = normalizeApiError(error).kind;
-  if (kind === 'unauthorized' || kind === 'forbidden' || kind === 'not-found') {
+  if (
+    kind === 'unauthorized' ||
+    kind === 'forbidden' ||
+    kind === 'not-found' ||
+    kind === 'upstream'
+  ) {
     return false;
   }
   return kind === 'network' || kind === 'server';

@@ -7,6 +7,9 @@
   "main": "src/index.ts",
   "scripts": {
     "api:generate": "node scripts/generate-api.mjs",
+    "api:check": "node scripts/check-api.mjs",
+    "api:record": "node scripts/check-api.mjs --record",
+    "api:live": "node scripts/check-api.mjs --live",
     "typecheck": "tsc --noEmit",
     "typecheck:generated": "tsc --noEmit --skipLibCheck false"
   },

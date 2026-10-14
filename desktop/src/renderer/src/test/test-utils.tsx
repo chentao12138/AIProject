@@ -16,6 +16,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ApiClient } from '@aistudy/api-client';
 import { ApiClientProvider } from '../lib/api-context';
+import { AuthProvider, type AuthStatus } from '../lib/auth-context';
 
 /**
  * Test QueryClient (FE-001.5 PHASE 22): fresh per test, retries off so
@@ -58,6 +59,78 @@ export function createMockApiClient(): ApiClient {
     listKnowledgePoints: vi.fn(async () => noData),
     getKnowledgePoint: vi.fn(async () => noData),
     publishKnowledgePoint: vi.fn(async () => noData),
+    // FE-AI-001
+    getAiSettings: vi.fn(async () => noData),
+    putAiSettings: vi.fn(async () => noData),
+    testAiConnection: vi.fn(async () => noData),
+    deleteAiApiKey: vi.fn(async () => noData),
+    listConversations: vi.fn(async () => noData),
+    createConversation: vi.fn(async () => noData),
+    getConversation: vi.fn(async () => noData),
+    sendMessage: vi.fn(async () => noData),
+    archiveConversation: vi.fn(async () => noData),
+    listMessages: vi.fn(async () => noData),
+    // FE-ADMIN-001
+    login: vi.fn(async () => noData),
+    refresh: vi.fn(async () => noData),
+    logout: vi.fn(async () => noData),
+    getCurrentUser: vi.fn(async () => noData),
+    // FE-ADMIN-001
+    adminListUsers: vi.fn(async () => noData),
+    adminGetUser: vi.fn(async () => noData),
+    adminUpdateRoles: vi.fn(async () => noData),
+    adminUpdateStatus: vi.fn(async () => noData),
+    adminReconcileStorage: vi.fn(async () => noData),
+    // Questions
+    listQuestions: vi.fn(async () => noData),
+    getQuestion: vi.fn(async () => noData),
+    createQuestion: vi.fn(async () => noData),
+    publishQuestion: vi.fn(async () => noData),
+    updateQuestion: vi.fn(async () => noData),
+    archiveQuestion: vi.fn(async () => noData),
+    restoreQuestion: vi.fn(async () => noData),
+    // Practice
+    listPracticeSessions: vi.fn(async () => noData),
+    createPracticeSession: vi.fn(async () => noData),
+    getPracticeSession: vi.fn(async () => noData),
+    startPracticeSession: vi.fn(async () => noData),
+    finishPracticeSession: vi.fn(async () => noData),
+    submitPracticeAnswer: vi.fn(async () => noData),
+    listPracticeAnswers: vi.fn(async () => noData),
+    getPracticeResult: vi.fn(async () => noData),
+    listExamAttempts: vi.fn(async () => noData),
+    // Exams
+    listExams: vi.fn(async () => noData),
+    createExam: vi.fn(async () => noData),
+    getExam: vi.fn(async () => noData),
+    publishExam: vi.fn(async () => noData),
+    createExamAttempt: vi.fn(async () => noData),
+    startExamAttempt: vi.fn(async () => noData),
+    getExamAttempt: vi.fn(async () => noData),
+    submitExamAttempt: vi.fn(async () => noData),
+    getExamResult: vi.fn(async () => noData),
+    getExamDiagnosis: vi.fn(async () => noData),
+    submitExamAnswer: vi.fn(async () => noData),
+    // Search
+    search: vi.fn(async () => noData),
+    // Study Coach
+    studyCoach: vi.fn(async () => noData),
+    explainPracticeAnswer: vi.fn(async () => noData),
+    explainExamAnswer: vi.fn(async () => noData),
+    // Notes (G01)
+    listNotes: vi.fn(async () => noData),
+    createNote: vi.fn(async () => noData),
+    getNote: vi.fn(async () => noData),
+    updateNote: vi.fn(async () => noData),
+    deleteNote: vi.fn(async () => noData),
+    archiveNote: vi.fn(async () => noData),
+    restoreNote: vi.fn(async () => noData),
+    addNoteKnowledgePoints: vi.fn(async () => noData),
+    listNoteKnowledgePoints: vi.fn(async () => noData),
+    removeNoteKnowledgePoint: vi.fn(async () => noData),
+    addNoteSourceBlocks: vi.fn(async () => noData),
+    listNoteSourceBlocks: vi.fn(async () => noData),
+    removeNoteSourceBlock: vi.fn(async () => noData),
   } as unknown as ApiClient;
 }
 
@@ -80,6 +153,11 @@ interface RenderOptions {
   initialEntries?: string[];
   /** When set, the UI element is rendered under <Route path=...>. */
   routePath?: string;
+  /** AuthProvider start status (defaults to anonymous; bootstrap-flow
+   *  tests pass 'bootstrapping'). */
+  authInitialStatus?: AuthStatus;
+  /** Whether AuthProvider restores a persisted session on mount. */
+  authAutoBootstrap?: boolean;
 }
 
 export function renderWithProviders(
@@ -89,22 +167,30 @@ export function renderWithProviders(
     queryClient = createTestQueryClient(),
     initialEntries = ['/'],
     routePath,
+    authInitialStatus = 'anonymous',
+    authAutoBootstrap = false,
   }: RenderOptions = {}
 ) {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <ApiClientProvider client={apiClient}>
-          <MemoryRouter initialEntries={initialEntries}>
-            {routePath ? (
-              <Routes>
-                <Route path={routePath} element={children} />
-              </Routes>
-            ) : (
-              children
-            )}
-          </MemoryRouter>
-        </ApiClientProvider>
+        <AuthProvider
+          client={apiClient}
+          initialStatus={authInitialStatus}
+          autoBootstrap={authAutoBootstrap}
+        >
+          <ApiClientProvider client={apiClient}>
+            <MemoryRouter initialEntries={initialEntries}>
+              {routePath ? (
+                <Routes>
+                  <Route path={routePath} element={children} />
+                </Routes>
+              ) : (
+                children
+              )}
+            </MemoryRouter>
+          </ApiClientProvider>
+        </AuthProvider>
       </QueryClientProvider>
     );
   }

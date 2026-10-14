@@ -8,3 +8,4 @@
 
 export { createApiClient } from './client.js';
 export type { ApiClient, TokenProvider } from './client.js';
+export type * from './generated/api.js';

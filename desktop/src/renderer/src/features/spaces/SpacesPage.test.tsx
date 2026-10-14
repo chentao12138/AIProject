@@ -13,6 +13,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SpacesPage } from './SpacesPage';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
+import { NetworkUnavailableError } from '../../lib/api-error';
 
 describe('SpacesPage', () => {
   it('shows empty state when there are no spaces (K1.4)', async () => {
@@ -26,11 +27,11 @@ describe('SpacesPage', () => {
     renderWithProviders(<SpacesPage />, { apiClient });
 
     expect(
-      await screen.findByText('No learning spaces yet')
+      await screen.findByText('还没有学习空间')
     ).toBeInTheDocument();
     // header button + empty-state CTA share the same label
     expect(
-      screen.getAllByRole('button', { name: 'Create Learning Space' }).length
+      screen.getAllByRole('button', { name: '创建学习空间' }).length
     ).toBeGreaterThanOrEqual(1);
   });
 
@@ -79,15 +80,15 @@ describe('SpacesPage', () => {
     renderWithProviders(<SpacesPage />, { apiClient });
 
     const createButtons = await screen.findAllByRole('button', {
-      name: 'Create Learning Space',
+      name: '创建学习空间',
     });
     await user.click(createButtons[0]);
 
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText('Name'), 'Math 101');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(screen.getByLabelText('名称'), 'Math 101');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     await waitFor(() => {
       expect(createLearningSpace).toHaveBeenCalledWith({
@@ -113,7 +114,7 @@ describe('SpacesPage', () => {
     renderWithProviders(<SpacesPage />, { apiClient });
 
     expect(
-      await screen.findByText(/当前开发会话未认证或令牌已失效/)
+      await screen.findByText(/登录状态已失效，请重新登录/)
     ).toBeInTheDocument();
   });
 
@@ -178,15 +179,15 @@ describe('SpacesPage', () => {
     renderWithProviders(<SpacesPage />, { apiClient });
 
     const createButtons = await screen.findAllByRole('button', {
-      name: 'Create Learning Space',
+      name: '创建学习空间',
     });
     await user.click(createButtons[0]);
 
-    const nameInput = await screen.findByLabelText('Name');
+    const nameInput = await screen.findByLabelText('名称');
     await user.type(nameInput, '   ');
-    expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '创建' })).toBeDisabled();
 
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.click(screen.getByRole('button', { name: '创建' }));
     expect(createLearningSpace).not.toHaveBeenCalled();
   });
 
@@ -204,12 +205,12 @@ describe('SpacesPage', () => {
     renderWithProviders(<SpacesPage />, { apiClient });
 
     const createButtons = await screen.findAllByRole('button', {
-      name: 'Create Learning Space',
+      name: '创建学习空间',
     });
     await user.click(createButtons[0]);
 
-    await user.type(await screen.findByLabelText('Name'), '  Math 101  ');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(await screen.findByLabelText('名称'), '  Math 101  ');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     await waitFor(() => {
       expect(createLearningSpace).toHaveBeenCalledWith({
@@ -234,12 +235,12 @@ describe('SpacesPage', () => {
     renderWithProviders(<SpacesPage />, { apiClient });
 
     const createButtons = await screen.findAllByRole('button', {
-      name: 'Create Learning Space',
+      name: '创建学习空间',
     });
     await user.click(createButtons[0]);
 
-    await user.type(await screen.findByLabelText('Name'), 'Math 101');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(await screen.findByLabelText('名称'), 'Math 101');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('服务器暂时无法完成请求，请稍后重试。');
@@ -263,14 +264,14 @@ describe('SpacesPage', () => {
     renderWithProviders(<SpacesPage />, { apiClient });
 
     const createButtons = await screen.findAllByRole('button', {
-      name: 'Create Learning Space',
+      name: '创建学习空间',
     });
     await user.click(createButtons[0]);
 
-    await user.type(await screen.findByLabelText('Name'), 'Math 101');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(await screen.findByLabelText('名称'), 'Math 101');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
-    const submit = await screen.findByRole('button', { name: 'Creating…' });
+    const submit = await screen.findByRole('button', { name: '创建中…' });
     expect(submit).toBeDisabled();
     // Escape / close are blocked while pending
     await user.keyboard('{Escape}');
@@ -300,12 +301,12 @@ describe('SpacesPage', () => {
     renderWithProviders(<SpacesPage />, { apiClient });
 
     const createButtons = await screen.findAllByRole('button', {
-      name: 'Create Learning Space',
+      name: '创建学习空间',
     });
     await user.click(createButtons[0]);
 
-    await user.type(await screen.findByLabelText('Name'), 'NoId');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(await screen.findByLabelText('名称'), 'NoId');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     await waitFor(() => {
       expect(listLearningSpaces).toHaveBeenCalledTimes(2);
@@ -338,7 +339,7 @@ describe('SpacesPage', () => {
     const user = userEvent.setup();
     const listLearningSpaces = vi
       .fn()
-      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new NetworkUnavailableError())
       .mockResolvedValue({
         data: [{ id: 1, name: 'Math 101', status: 'ACTIVE' }],
         response: { status: 200 },
@@ -381,8 +382,8 @@ describe('SpacesPage', () => {
 
     renderWithProviders(<SpacesPage />, { apiClient });
 
-    expect(await screen.findByText('Space #3')).toBeInTheDocument();
-    expect(screen.getByText('No description')).toBeInTheDocument();
+    expect(await screen.findByText('空间 #3')).toBeInTheDocument();
+    expect(screen.getByText('暂无说明')).toBeInTheDocument();
     // no #undefined / #null artifacts anywhere
     expect(document.body.textContent).not.toMatch(/#undefined|#null/);
   });

@@ -49,3 +49,104 @@ export type KnowledgePoint = ResultData<ApiClient['listKnowledgePoints']>[number
 
 /** Space detail (same shape as list entries in this contract). */
 export type SpaceDetail = ResultData<ApiClient['getLearningSpace']>;
+
+/** Single Exam, inferred from listExams(). */
+export type Exam = ResultData<ApiClient['listExams']>[number];
+
+/** Exam detail (question list included), inferred from getExam(). */
+export type ExamDetail = ResultData<ApiClient['getExam']>;
+
+/** One started attempt, inferred from createExamAttempt(). */
+export type ExamAttempt = ResultData<ApiClient['createExamAttempt']>;
+
+/** Attempt as re-read from the server (question paper + deadlines). */
+export type ExamAttemptDetail = ResultData<ApiClient['getExamAttempt']>;
+
+/** Graded exam result. */
+export type ExamResult = ResultData<ApiClient['getExamResult']>;
+
+/**
+ * One saved answer on an attempt — the only thing that proves an answer
+ * exists (C10: it carries `answeredAt`, never the answer content). Derived
+ * from the single method that produces it so it cannot drift.
+ */
+export type ExamAnswerRecord = ResultData<ApiClient['submitExamAnswer']>;
+
+/** Contract `ExamAnswerRequest`: the body the answer endpoint accepts. */
+export type ExamAnswerBody = NonNullable<
+  Parameters<ApiClient['submitExamAnswer']>[2]
+>;
+
+/** Contract `AnswerPayloadView`, reached through its request wrapper. */
+export type ExamAnswerPayload = NonNullable<ExamAnswerBody['answer']>;
+
+/**
+ * One paper slot of a live attempt. The contract types both ids optional, so
+ * they are intersected back to required: save state is keyed by
+ * `examQuestionId`, and a slot without an id cannot be rendered at all.
+ */
+export type ExamQuestionSlot = NonNullable<
+  ExamAttemptDetail['questions']
+>[number] & { examQuestionId: number; questionId: number };
+
+/** Practice session detail: status, counts and its question paper. */
+export type PracticeSessionDetail = ResultData<ApiClient['getPracticeSession']>;
+
+/**
+ * Server-graded answer row for one practice question. Derived from the only
+ * method that produces it, so a feature cannot hand-copy `isCorrect` /
+ * `correctAnswer` / `score` and drift from the contract (ADR-031: the server
+ * grades, the renderer displays).
+ */
+export type PracticeAnswerRecord = ResultData<ApiClient['submitPracticeAnswer']>;
+
+/** Contract `PracticeAnswerRequest` — the body the practice answer accepts. */
+export type PracticeAnswerBody = NonNullable<
+  Parameters<ApiClient['submitPracticeAnswer']>[2]
+>;
+
+/** Contract `AnswerPayloadView`, reached through its request wrapper. */
+export type PracticeAnswerPayload = NonNullable<PracticeAnswerBody['answer']>;
+
+/** One question of a practice paper, as the session detail lists it. */
+export type PracticeQuestionSlot = NonNullable<
+  PracticeSessionDetail['questions']
+>[number];
+
+/** Body the practice start endpoint accepts, inferred from its parameters. */
+export type CreatePracticeSessionBody = NonNullable<
+  Parameters<ApiClient['createPracticeSession']>[1]
+>;
+
+/** Question as stored (options + answer key + provenance ids). */
+export type QuestionDetail = ResultData<ApiClient['getQuestion']>;
+
+/** One paged search hit-set, inferred from search(). */
+export type SearchPageResult = ResultData<ApiClient['search']>;
+
+/** AI provider settings as the server reports them (never the key). */
+export type AiProviderSettings = ResultData<ApiClient['getAiSettings']>;
+
+/** Outcome of the backend-originated provider probe. */
+export type AiConnectionTest = ResultData<ApiClient['testAiConnection']>;
+
+/** Paged AI conversation list / message page. */
+export type AiConversationPage = ResultData<ApiClient['listConversations']>;
+export type AiMessagePage = ResultData<ApiClient['listMessages']>;
+
+/**
+ * Score summary of a practice session, read at any later time. `finish` returns
+ * the same shape for the session it just closed; this endpoint is what makes a
+ * session reopened from history able to show its result at all.
+ */
+export type PracticeResult = ResultData<ApiClient['getPracticeResult']>;
+
+/** Page envelope of attempt history (W07/C11). */
+export type ExamAttemptPage = ResultData<ApiClient['listExamAttempts']>;
+
+/**
+ * One row of attempt history. `status` is the server's own vocabulary, which is
+ * how the UI tells an unfinished attempt from a graded one instead of inferring
+ * it from a null score.
+ */
+export type ExamAttemptSummary = NonNullable<ExamAttemptPage['items']>[number];

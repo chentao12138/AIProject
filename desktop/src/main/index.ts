@@ -16,12 +16,25 @@
  * FE-001 has zero business IPC surface (preload exposes nothing).
  */
 
-import { app, BrowserWindow, net, protocol, session } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  net,
+  protocol,
+  safeStorage,
+  session,
+} from 'electron';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { cspFor } from './csp';
 import { isPermissionGranted } from './permissions';
-import { resolveApiBaseUrl } from '../shared/api-config';
+import { buildWebPreferences } from './window-options';
+import { registerAuthVaultIpc } from './auth-vault';
+import { DEFAULT_API_BASE_URL } from '../shared/api-config';
+import { resolveRuntimeApiBaseUrl } from './runtime-config';
+import { registerAppConfigIpc } from './config-ipc';
 import {
   APP_ORIGIN,
   APP_SCHEME,
@@ -32,13 +45,32 @@ import {
 
 const DEV_SERVER_URL = process.env['ELECTRON_RENDERER_URL'];
 
-// Single API base URL contract (FE-001.5 PRE-COMMIT REVIEW FIX-01):
-// the SAME VITE_API_BASE_URL resolution the renderer client uses
-// (electron-vite exposes VITE_* env vars to the main build too, and
-// tsconfig.node.json types import.meta.env via vite/client). The CSP
-// connect-src origin derives from it, so the policy always allows the
-// origin the renderer actually talks to — never a hardcoded duplicate.
-const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+// Single API base URL contract (FE-001.5 FIX-01, extended by ADR-051):
+// main resolves the URL ONCE at startup (env -> userData/config.json ->
+// build-time VITE_API_BASE_URL -> default) and is the only authority. The
+// CSP connect-src origin is derived from that value and the renderer reads
+// the very same value over a read-only IPC channel, so policy and traffic can
+// never disagree — and the target is no longer welded into the binary.
+let apiBaseUrl = DEFAULT_API_BASE_URL;
+
+// One process must own the refresh-token vault: the vault is a single file
+// slot and the backend rotates on every exchange, so a second instance
+// restoring concurrently would reuse a rotated token and revoke the whole
+// refresh family (ADR-026). Later launches just focus the running window.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const [window] = BrowserWindow.getAllWindows();
+    if (!window) {
+      return;
+    }
+    if (window.isMinimized()) {
+      window.restore();
+    }
+    window.focus();
+  });
+}
 
 // Must run BEFORE app ready. standard+secure gives app://aistudy a real,
 // non-opaque origin; supportFetchAPI lets the renderer fetch over it;
@@ -79,13 +111,12 @@ function createMainWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     title: 'AIStudy',
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-    },
+    webPreferences: buildWebPreferences({
+      preloadPath: join(__dirname, '../preload/index.js'),
+      // A packaged renderer holds the access token in memory: DevTools would
+      // be a read path for it, and the shipped product needs neither.
+      allowDevTools: !app.isPackaged,
+    }),
   });
 
   mainWindow.on('ready-to-show', () => {
@@ -118,6 +149,24 @@ function createMainWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // Resolution happens here (not at module scope) because userData is only
+  // reliable once the app is ready.
+  const runtime = resolveRuntimeApiBaseUrl({
+    userDataPath: () => app.getPath('userData'),
+    buildDefault: import.meta.env.VITE_API_BASE_URL,
+  });
+  apiBaseUrl = runtime.url;
+  // Startup diagnostic: the shell header shows the same value, so a
+  // mis-set/typo'd target is visible without a CSP forensics session.
+  console.log(`[aistudy] API base URL: ${runtime.url} (source: ${runtime.source})`);
+
+  // The default menu exposes reload / force-reload / toggle-devtools and is
+  // summonable with Alt even with autoHideMenuBar; the product has no menu
+  // commands, so a packaged build ships without one.
+  if (app.isPackaged) {
+    Menu.setApplicationMenu(null);
+  }
+
   // Serve ONLY app://aistudy/** from the packaged renderer output.
   // Traversal / foreign-host / malformed URLs are rejected by
   // resolveAppUrlPath; net.fetch streams from disk (no whole-file
@@ -134,7 +183,7 @@ app.whenReady().then(() => {
     }
     const response = await net.fetch(pathToFileURL(filePath).toString());
     const headers = new Headers(response.headers);
-    headers.set('Content-Security-Policy', cspFor(false, { apiBaseUrl: API_BASE_URL }));
+    headers.set('Content-Security-Policy', cspFor(false, { apiBaseUrl }));
     return new Response(response.body, {
       status: response.status,
       headers,
@@ -150,7 +199,7 @@ app.whenReady().then(() => {
           'Content-Security-Policy': [
             cspFor(true, {
               devServerUrl: DEV_SERVER_URL ?? undefined,
-              apiBaseUrl: API_BASE_URL,
+              apiBaseUrl,
             }),
           ],
         },
@@ -172,6 +221,39 @@ app.whenReady().then(() => {
       return isPermissionGranted(permission, requestingOrigin);
     }
   );
+
+  // FE-AUTH-001 (ADR-026): encrypted refresh-token vault. Only the
+  // application's own renderer origin may call its IPC channels:
+  // app://aistudy in production, additionally the Vite dev server in
+  // development. safeStorage encrypts at rest via the OS keychain.
+  const vaultAllowedOrigins = [APP_ORIGIN];
+  if (DEV_SERVER_URL) {
+    try {
+      vaultAllowedOrigins.push(new URL(DEV_SERVER_URL).origin);
+    } catch {
+      // malformed dev URL: production origin only
+    }
+  }
+  registerAuthVaultIpc({
+    userDataPath: () => app.getPath('userData'),
+    isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+    encryptString: (plaintext) => safeStorage.encryptString(plaintext),
+    decryptString: (ciphertext) => safeStorage.decryptString(ciphertext),
+    handle: (channel, listener) => {
+      ipcMain.handle(channel, listener);
+    },
+    allowedOrigins: vaultAllowedOrigins,
+  });
+
+  // ADR-051: publish the resolved target to the renderer (read-only, same
+  // origin allowlist as the token vault).
+  registerAppConfigIpc({
+    apiBaseUrl: () => apiBaseUrl,
+    allowedOrigins: vaultAllowedOrigins,
+    handle: (channel, listener) => {
+      ipcMain.handle(channel, listener);
+    },
+  });
 
   createMainWindow();
 

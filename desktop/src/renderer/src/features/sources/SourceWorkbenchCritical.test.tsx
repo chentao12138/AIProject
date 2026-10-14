@@ -18,6 +18,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SourceWorkbenchPage } from './SourceWorkbenchPage';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
+import { NetworkUnavailableError } from '../../lib/api-error';
 
 const sourceOk = {
   data: { id: 3, title: 'S', sourceType: 'DESKTOP_UPLOAD', status: 'ACTIVE' },
@@ -47,7 +48,7 @@ function renderWB(api: ReturnType<typeof mockApiClient>) {
 }
 
 async function waitForm() {
-  await screen.findByRole('button', { name: /upload & ingest/i });
+  await screen.findByRole('button', { name: /上传并解析/i });
 }
 
 function pickFile(name: string, type = 'text/plain') {
@@ -63,7 +64,7 @@ function pickFile(name: string, type = 'text/plain') {
 
 describe('Critical — source get errors', () => {
   it.each([
-    [401, /开发会话未认证|Authentication integration pending/],
+    [401, /登录状态已失效，请重新登录/],
     [403, /无权执行此操作/],
     [404, /资源不存在或当前不可访问/],
     [500, /服务器暂时无法完成请求/],
@@ -84,7 +85,7 @@ describe('Critical — source get errors', () => {
     renderWB(
       baseApi({
         getSource: vi.fn(async () => {
-          throw new TypeError('fetch failed');
+          throw new NetworkUnavailableError();
         }),
       })
     );
@@ -113,7 +114,7 @@ describe('Critical — invalid ids', () => {
 
 describe('Critical — upload errors', () => {
   it.each([
-    [401, /开发会话未认证|Authentication integration pending/],
+    [401, /登录状态已失效，请重新登录/],
     [403, /无权执行此操作/],
     [500, /服务器暂时无法完成请求/],
   ])('surfaces upload HTTP %s safely', async (status, pattern) => {
@@ -129,7 +130,7 @@ describe('Critical — upload errors', () => {
     );
     await waitForm();
     pickFile('a.txt');
-    await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
+    await user.click(screen.getByRole('button', { name: /上传并解析/i }));
     expect(await screen.findByText(pattern as RegExp)).toBeInTheDocument();
   });
 });
@@ -137,9 +138,9 @@ describe('Critical — upload errors', () => {
 /* ── Polling stop on terminal ── */
 
 describe('Critical — polling stops on terminal', () => {
-  it('stops polling after SUCCEEDED and shows success', async () => {
+  it('stops polling after PUBLISHED and shows success', async () => {
     const getIngestionJob = vi.fn(async () => ({
-      data: { id: 55, status: 'SUCCEEDED', stage: 'PUBLISHED' },
+      data: { id: 55, status: 'PUBLISHED', stage: 'REVIEW' },
       response: { status: 200 },
     }));
     renderWB(
@@ -149,7 +150,7 @@ describe('Critical — polling stops on terminal', () => {
           response: { status: 201 },
         })),
         createIngestionJob: vi.fn(async () => ({
-          data: { id: 55, status: 'PENDING', stage: 'QUEUED' },
+          data: { id: 55, status: 'QUEUED', stage: 'IMPORT' },
           response: { status: 201 },
         })),
         getIngestionJob,
@@ -158,7 +159,7 @@ describe('Critical — polling stops on terminal', () => {
     await waitForm();
     pickFile('a.txt');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
+    await user.click(screen.getByRole('button', { name: /上传并解析/i }));
 
     await waitFor(() => {
       expect(screen.getByTestId('active-job')).toBeInTheDocument();
@@ -199,13 +200,13 @@ describe('Critical — polling stops on terminal', () => {
     await waitForm();
     pickFile('a.pdf', 'application/pdf');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /upload & ingest/i }));
+    await user.click(screen.getByRole('button', { name: /上传并解析/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /PDF 文件格式无效/
     );
     expect(
-      screen.getByRole('button', { name: /retry ingestion/i })
+      screen.getByRole('button', { name: /重新解析/i })
     ).toBeInTheDocument();
   });
 });
@@ -225,8 +226,8 @@ describe('Critical — stale content prevention', () => {
         })),
         listIngestionJobs: vi.fn(async () => ({
           data: [
-            { id: 55, assetId: 90, status: 'SUCCEEDED', stage: 'PUBLISHED', createdAt: '2026-09-01T10:00:01Z' },
-            { id: 56, assetId: 91, status: 'PENDING', stage: 'QUEUED', createdAt: '2026-09-02T10:00:01Z' },
+            { id: 55, assetId: 90, status: 'PUBLISHED', stage: 'REVIEW', createdAt: '2026-09-01T10:00:01Z' },
+            { id: 56, assetId: 91, status: 'QUEUED', stage: 'IMPORT', createdAt: '2026-09-02T10:00:01Z' },
           ],
           response: { status: 200 },
         })),
@@ -257,7 +258,7 @@ describe('Critical — stale content prevention', () => {
         })),
         listIngestionJobs: vi.fn(async () => ({
           data: [
-            { id: 55, assetId: 90, status: 'SUCCEEDED', stage: 'PUBLISHED', createdAt: '2026-09-01T10:00:01Z' },
+            { id: 55, assetId: 90, status: 'PUBLISHED', stage: 'REVIEW', createdAt: '2026-09-01T10:00:01Z' },
             { id: 56, assetId: 91, status: 'FAILED', stage: 'QUEUED', createdAt: '2026-09-02T10:00:01Z', errorCode: 'INVALID_PDF' },
           ],
           response: { status: 200 },
@@ -290,8 +291,8 @@ describe('Critical — latest asset/job deterministic', () => {
         })),
         listIngestionJobs: vi.fn(async () => ({
           data: [
-            { id: 55, assetId: 90, status: 'SUCCEEDED', stage: 'PUBLISHED', createdAt: '2026-09-01T10:00:01Z' },
-            { id: 56, assetId: 91, status: 'SUCCEEDED', stage: 'PUBLISHED', createdAt: '2026-09-02T10:00:01Z' },
+            { id: 55, assetId: 90, status: 'PUBLISHED', stage: 'REVIEW', createdAt: '2026-09-01T10:00:01Z' },
+            { id: 56, assetId: 91, status: 'PUBLISHED', stage: 'REVIEW', createdAt: '2026-09-02T10:00:01Z' },
           ],
           response: { status: 200 },
         })),
@@ -335,17 +336,62 @@ describe('Critical — retry semantics', () => {
         })),
         listIngestionJobs: vi.fn(async () => ({
           data: [
-            { id: 55, assetId: 90, status: 'SUCCEEDED', stage: 'PUBLISHED', createdAt: '2026-09-01T10:00:01Z' },
+            { id: 55, assetId: 90, status: 'PUBLISHED', stage: 'REVIEW', createdAt: '2026-09-01T10:00:01Z' },
             { id: 56, assetId: 91, status: 'FAILED', stage: 'QUEUED', createdAt: '2026-09-02T10:00:01Z' },
-            { id: 57, assetId: 90, status: 'RUNNING', stage: 'IMPORTING', createdAt: '2026-09-03T10:00:01Z' },
+            { id: 57, assetId: 90, status: 'IMPORTING', stage: 'IMPORT', createdAt: '2026-09-03T10:00:01Z' },
           ],
           response: { status: 200 },
         })),
       })
     );
-    const retryButtons = await screen.findAllByRole('button', { name: 'Retry' });
+    const retryButtons = await screen.findAllByRole('button', { name: '重试' });
     // Only the FAILED job gets a Retry button.
     expect(retryButtons).toHaveLength(1);
+  });
+
+  it('refetches the ingestion history after retry from the active-job panel', async () => {
+    const listIngestionJobs = vi.fn(async () => ({
+      data: [],
+      response: { status: 200 },
+    }));
+    renderWB(
+      baseApi({
+        listIngestionJobs,
+        uploadSourceAsset: vi.fn(async () => ({
+          data: { id: 90, originalName: 'a.txt' },
+          response: { status: 201 },
+        })),
+        createIngestionJob: vi.fn(async () => ({
+          data: { id: 55, status: 'FAILED', stage: 'QUEUED', errorCode: 'INVALID_PDF' },
+          response: { status: 201 },
+        })),
+        getIngestionJob: vi.fn(async () => ({
+          data: { id: 55, status: 'FAILED', stage: 'QUEUED', errorCode: 'INVALID_PDF' },
+          response: { status: 200 },
+        })),
+        retryIngestionJob: vi.fn(async () => ({
+          data: { id: 55, status: 'QUEUED', stage: 'IMPORT' },
+          response: { status: 200 },
+        })),
+      })
+    );
+    await waitForm();
+    pickFile('a.txt');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /上传并解析/i }));
+
+    const retryButton = await screen.findByRole('button', {
+      name: /重新解析/i,
+    });
+    const before = listIngestionJobs.mock.calls.length;
+
+    await user.click(retryButton);
+
+    // 修复点：重试后必须按 (spaceId, sourceId) 失效任务列表缓存并重新拉取，
+    // 否则历史表格会一直显示旧的 FAILED 状态。
+    await waitFor(() => {
+      expect(listIngestionJobs.mock.calls.length).toBeGreaterThan(before);
+    });
   });
 });
 
@@ -363,7 +409,7 @@ describe('Critical — size precheck', () => {
     fireEvent.change(input, { target: { files: [file] } });
     expect(await screen.findByRole('alert')).toHaveTextContent(/100 MB/);
     expect(
-      screen.getByRole('button', { name: /upload & ingest/i })
+      screen.getByRole('button', { name: /上传并解析/i })
     ).toBeDisabled();
   });
 });

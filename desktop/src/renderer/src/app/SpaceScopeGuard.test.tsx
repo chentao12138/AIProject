@@ -13,6 +13,7 @@ import { Route, Routes } from 'react-router-dom';
 import type { ApiClient } from '@aistudy/api-client';
 import { SpaceScopeGuard } from './SpaceScopeGuard';
 import { mockApiClient, renderWithProviders } from '../test/test-utils';
+import { NetworkUnavailableError } from '../lib/api-error';
 
 function renderGuard(apiClient: ApiClient, initialEntry: string) {
   renderWithProviders(
@@ -95,7 +96,7 @@ describe('SpaceScopeGuard', () => {
     const user = userEvent.setup();
     const getLearningSpace = vi
       .fn()
-      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new NetworkUnavailableError())
       .mockResolvedValue({
         data: { id: 3, name: 'Math', status: 'ACTIVE' },
         response: { status: 200 },

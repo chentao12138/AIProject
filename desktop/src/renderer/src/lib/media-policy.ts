@@ -9,14 +9,16 @@
  *   PDF   .pdf            application/pdf | application/octet-stream
  *         max 100MB / 200 pages / 2,000,000 chars
  *         encrypted → FAILED PDF_ENCRYPTED
- *         image-only → SUCCEEDED + BODY page + empty text + 0 blocks
+ *         image-only → PUBLISHED + BODY page + empty text + 0 blocks
  *   Image .png .jpg .jpeg image/png | image/jpeg | application/octet-stream
  *         max 50MB / 10000×10000 / 100,000,000 px
- *         success → SUCCEEDED + IMAGE page + 0 blocks + extractedText=null
+ *         success → PUBLISHED + IMAGE page + 0 blocks + extractedText=null
  *         NO OCR, NO WebP
  *   Text  .txt .md .markdown
  *         FE-002A behavior unchanged
  */
+
+import { classifyIngestionStatus } from './ingestion-status';
 
 export type MediaKind = 'text' | 'markdown' | 'pdf' | 'image' | 'unknown';
 
@@ -88,29 +90,36 @@ function formatLimit(bytes: number): string {
  * Stable backend failure-code → safe user-facing Chinese copy.
  * Unknown codes fall back to a neutral message. Never shows raw
  * backend exceptions or stack traces.
+ *
+ * Exported so `ingestion-codes-contract.test.ts` can compare the vocabulary
+ * against the server's own `IngestionErrorCode` enum in both directions.
  */
+export const INGESTION_ERROR_COPY: Record<string, string> = {
+  PDF_ENCRYPTED: '该 PDF 已加密，无法提取文本。请选择未加密的 PDF。',
+  INVALID_PDF: 'PDF 文件格式无效或已损坏。',
+  PDF_PAGE_LIMIT_EXCEEDED: 'PDF 页数超过 200 页上限。',
+  PDF_TEXT_LIMIT_EXCEEDED: 'PDF 提取文本超过 2,000,000 字符上限。',
+  PDF_PARSE_FAILED: 'PDF 解析失败，请检查文件是否有效。',
+  INVALID_IMAGE: '图片文件格式无效或已损坏。',
+  IMAGE_DIMENSION_LIMIT_EXCEEDED: '图片宽高超过 10000×10000 上限。',
+  IMAGE_PIXEL_LIMIT_EXCEEDED: '图片总像素超过 1 亿上限。',
+  IMAGE_TOO_LARGE: '图片文件超过 50MB 上限。',
+  IMAGE_PARSE_FAILED: '图片解析失败，请检查文件是否有效。',
+  UNSUPPORTED_FORMAT: '不支持的文件格式。',
+  DOCUMENT_TOO_LARGE: '文件超过服务器大小上限。',
+  ENCODING_ERROR: '文件编码无法识别。',
+  ZIP_SAFETY_VIOLATION: 'ZIP 安全检查未通过。',
+};
+
+/** The copy shown when a code is not in the table above. */
+export const INGESTION_GENERIC_COPY = '文件处理失败，请稍后重试或更换文件。';
+
 export function describeIngestionErrorCode(
   errorCode?: string | null,
   errorMessage?: string | null
 ): string {
   const code = (errorCode ?? '').trim().toUpperCase();
-  const map: Record<string, string> = {
-    PDF_ENCRYPTED: '该 PDF 已加密，无法提取文本。请选择未加密的 PDF。',
-    INVALID_PDF: 'PDF 文件格式无效或已损坏。',
-    PDF_PAGE_LIMIT_EXCEEDED: 'PDF 页数超过 200 页上限。',
-    PDF_TEXT_LIMIT_EXCEEDED: 'PDF 提取文本超过 2,000,000 字符上限。',
-    PDF_PARSE_FAILED: 'PDF 解析失败，请检查文件是否有效。',
-    INVALID_IMAGE: '图片文件格式无效或已损坏。',
-    IMAGE_DIMENSION_LIMIT_EXCEEDED: '图片宽高超过 10000×10000 上限。',
-    IMAGE_PIXEL_LIMIT_EXCEEDED: '图片总像素超过 1 亿上限。',
-    IMAGE_TOO_LARGE: '图片文件超过 50MB 上限。',
-    IMAGE_PARSE_FAILED: '图片解析失败，请检查文件是否有效。',
-    UNSUPPORTED_FORMAT: '不支持的文件格式。',
-    DOCUMENT_TOO_LARGE: '文件超过服务器大小上限。',
-    ENCODING_ERROR: '文件编码无法识别。',
-    ZIP_SAFETY_VIOLATION: 'ZIP 安全检查未通过。',
-  };
-  const mapped = map[code];
+  const mapped = INGESTION_ERROR_COPY[code];
   if (mapped) {
     return mapped;
   }
@@ -119,7 +128,7 @@ export function describeIngestionErrorCode(
   if (errorMessage && errorMessage.length < 200 && !errorMessage.includes('\n')) {
     return errorMessage;
   }
-  return '文件处理失败，请稍后重试或更换文件。';
+  return INGESTION_GENERIC_COPY;
 }
 
 /**
@@ -133,7 +142,8 @@ export function isImageOnlyPdfSuccess(params: {
   blockCount: number;
 }): boolean {
   const status = (params.status ?? '').trim().toUpperCase();
-  if (status !== 'SUCCEEDED') {
+
+  if (classifyIngestionStatus(status) !== 'success-terminal') {
     return false;
   }
   if (params.blockCount > 0) {
@@ -159,7 +169,8 @@ export function isStandaloneImageSuccess(params: {
   blockCount: number;
 }): boolean {
   const status = (params.status ?? '').trim().toUpperCase();
-  if (status !== 'SUCCEEDED') {
+
+  if (classifyIngestionStatus(status) !== 'success-terminal') {
     return false;
   }
   if (params.blockCount > 0) {

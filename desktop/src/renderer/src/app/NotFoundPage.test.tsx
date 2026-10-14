@@ -15,10 +15,10 @@ describe('NotFoundPage', () => {
     renderWithProviders(<NotFoundPage />);
 
     expect(
-      screen.getByRole('heading', { name: 'Not found' })
+      screen.getByRole('heading', { name: '页面不存在' })
     ).toBeInTheDocument();
     expect(
-      screen.getByText('The page you requested does not exist.')
+      screen.getByText('你访问的页面不存在。')
     ).toBeInTheDocument();
   });
 });

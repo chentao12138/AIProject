@@ -14,15 +14,45 @@
  *     presented as belonging to the new asset.
  *   - Ingestion history: full job list with asset link, status, stage,
  *     timestamps, retry only for FAILED.
+ *   - Asset/job pairing is strict (W14): only the LATEST asset's own job
+ *     describes it. An asset without a job shows "尚未开始解析"; a sibling
+ *     asset's SUCCEEDED/FAILED is never borrowed.
  *   - Upload-another: same flow, appends to history, updates latest.
  *   - PDF reader: Page X of N, Prev/Next, aria-current, stable selection.
+ *     The reader selection is read from `?page=` (W15), and the URL is
+ *     normalized whenever it points at a page of a different asset, so
+ *     state, highlight and history can never disagree with the screen.
+ *     A `page`/`block` that cannot belong to the current asset is REMOVED
+ *     once the source's asset+page lists have arrived (W15: an asset with no
+ *     pages yet must not keep another asset's page in the URL); before they
+ *     arrive the URL is left alone, because nothing is known yet and a valid
+ *     deep link must survive the load.
+ *   - Cross-module shortcuts (W16): source / page / content block each offer
+ *     新建笔记 with the ids the contract really carries for that entity, and
+ *     问 AI opens the AI workspace WITH that entity as message context
+ *     (A3.2 / G07): each entry names the narrowest id of the entity on screen
+ *     via the AI page's `attachSourceId` / `attachSourcePageId` /
+ *     `attachContentBlockId` keys, which `AiChatPage` puts into
+ *     `SendMessageRequest` and lists above the composer. One pointer per entry,
+ *     because the backend derives the levels above it from the one it is given.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { normalizeApiError, unwrap } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
+import { entityQuery } from '../../lib/queries';
+import { useSpaceId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { formatBytes, formatDateTime } from '../../lib/format';
 import { isPositiveId, parsePositiveIdParam } from '../../lib/ids';
@@ -44,8 +74,9 @@ import {
   CONTENT_STATE_LABELS,
   deriveContentState,
   filterPagesForAsset,
+  resolveJobForAsset,
   selectLatestAsset,
-  selectLatestJobForAsset,
+  type AssetJobResolution,
 } from '../../lib/latest-selection';
 import { useFormError } from '../../lib/use-form-error';
 import { Button } from '../../components/Button';
@@ -60,62 +91,49 @@ const POLL_INTERVAL_MS = 2000;
 export function SourceWorkbenchPage() {
   const api = useApiClient();
   const navigate = useNavigate();
-  const { spaceId: spaceIdParam, sourceId: sourceIdParam } = useParams();
-  const [searchParams] = useSearchParams();
+  const spaceId = useSpaceId();
+  const { sourceId: sourceIdParam } = useParams();
 
-  const spaceId = parsePositiveIdParam(spaceIdParam);
   const sourceId = parsePositiveIdParam(sourceIdParam);
 
-  const sourceQuery = useQuery({
-    queryKey: queryKeys.source(spaceId ?? 0, sourceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || sourceId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.getSource(spaceId, sourceId).then(unwrap);
-    },
-    enabled: spaceId !== null && sourceId !== null,
-  });
+  const sourceQuery = useQuery(
+    entityQuery(
+      spaceId,
+      sourceId,
+      queryKeys.source(spaceId, sourceId),
+      (id, sid) => api.getSource(id, sid)
+    )
+  );
 
-  const assetsQuery = useQuery({
-    queryKey: queryKeys.sourceAssets(spaceId ?? 0, sourceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || sourceId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.listSourceAssets(spaceId, sourceId).then(unwrap);
-    },
-    enabled: spaceId !== null && sourceId !== null,
-  });
+  const assetsQuery = useQuery(
+    entityQuery(
+      spaceId,
+      sourceId,
+      queryKeys.sourceAssets(spaceId, sourceId),
+      (id, sid) => api.listSourceAssets(id, sid)
+    )
+  );
 
-  const jobsQuery = useQuery({
-    queryKey: queryKeys.ingestionJobs(spaceId ?? 0, sourceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || sourceId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.listIngestionJobs(spaceId, sourceId).then(unwrap);
-    },
-    enabled: spaceId !== null && sourceId !== null,
-  });
+  const jobsQuery = useQuery(
+    entityQuery(
+      spaceId,
+      sourceId,
+      queryKeys.ingestionJobs(spaceId, sourceId),
+      (id, sid) => api.listIngestionJobs(id, sid)
+    )
+  );
 
-  const pagesQuery = useQuery({
-    queryKey: queryKeys.sourcePages(spaceId ?? 0, sourceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null || sourceId === null) {
-        return Promise.reject(new Error('invalid ids'));
-      }
-      return api.listSourcePages(spaceId, sourceId).then(unwrap);
-    },
-    enabled: spaceId !== null && sourceId !== null,
-  });
-
-  // Deep-link: ?page=<id>&block=<id> from provenance or refresh.
-  const deepLinkPageId = parsePositiveIdParam(searchParams.get('page') ?? undefined);
-  const deepLinkBlockId = parsePositiveIdParam(searchParams.get('block') ?? undefined);
+  const pagesQuery = useQuery(
+    entityQuery(
+      spaceId,
+      sourceId,
+      queryKeys.sourcePages(spaceId, sourceId),
+      (id, sid) => api.listSourcePages(id, sid)
+    )
+  );
 
   if (spaceId === null || sourceId === null) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   if (sourceQuery.isPending) {
@@ -137,24 +155,76 @@ export function SourceWorkbenchPage() {
   const allPages = pagesQuery.data ?? [];
 
   const latestAsset = selectLatestAsset(assets);
-  const latestJob = selectLatestJobForAsset(jobs, latestAsset?.id);
+  // W14: the LATEST asset's own job is the only thing that can describe it.
+  // The old `?? selectLatestJob(jobs)` fallback answered "asset B has no job"
+  // with asset A's SUCCEEDED/FAILED, so a failed upload looked fine and a
+  // finished one looked broken. No job for this asset now means "尚未开始解析".
+  const assetJob = resolveJobForAsset({
+    jobs,
+    assetId: latestAsset?.id,
+    assetCount: assets.length,
+  });
+  const latestJob = assetJob.job;
   const latestPages = filterPagesForAsset(allPages, latestAsset?.id);
+  // W15: "this asset has no pages" is only a FACT once both the asset list
+  // and the page list have arrived for this source. Until then the page set is
+  // unknown, so the URL normaliser must not rewrite — let alone delete — a
+  // `?page=&block=` deep link on a guess.
+  const pageSetResolved = assetsQuery.isSuccess && pagesQuery.isSuccess;
 
   return (
     <div className="page">
       <PageHeader
-        title={source?.title ?? 'Source workbench'}
+        title={source?.title ?? '来源详情'}
         actions={
-          <Button onClick={() => navigate(`/spaces/${spaceId}/sources`)}>
-            Back to Sources
-          </Button>
+          <>
+            <Button onClick={() => navigate(`/spaces/${spaceId}/sources`)}>
+              返回来源列表
+            </Button>
+            {/* W16: a note started here is attached to THIS source. `sourceId`
+                is the only context id a source itself owns — the page and
+                content-block links live in the reader below, where those ids
+                are on screen. The keys are the Notes list page's own prefill
+                keys; its listing keys (`page`/`size`/`keyword`) are not
+                touched, and neither is the reader's `?page=`. */}
+            <Link
+              className="nav-link"
+              data-testid="source-note-link"
+              to={`/spaces/${spaceId}/notes?${new URLSearchParams({
+                sourceId: String(sourceId),
+              }).toString()}`}
+            >
+              新建笔记
+            </Link>
+            {/* A3.2 / G07: an entry into the AI workspace that carries this
+                source as the message context. `attachSourceId` is the AI page's
+                own prefill key (NOT the Notes prefill key of the same purpose,
+                and not the reader's `page`/`block`), it is the only context id a
+                source itself owns, and AiChatPage puts it in the request body as
+                `SendMessageRequest.sourceId` — the copy below therefore says
+                plainly what travels. Page-level and block-level entries are in
+                the reader, where those ids are on screen. */}
+            <Link
+              className="nav-link"
+              data-testid="source-ai-link"
+              to={`/spaces/${spaceId}/ai?${new URLSearchParams({
+                attachSourceId: String(sourceId),
+              }).toString()}`}
+            >
+              问 AI
+            </Link>
+          </>
         }
       />
+      <p className="page__note" data-testid="ai-entry-note">
+        问 AI 打开 AI 辅导，并把这条来源附带为上下文；发送前可在输入框上方看到或取消它。
+      </p>
 
       <BusinessSummary
         source={source}
         latestAsset={latestAsset}
         latestJob={latestJob}
+        jobScope={assetJob.source}
         latestPages={latestPages}
         assetsQueryPending={assetsQuery.isPending}
         jobsQueryPending={jobsQuery.isPending}
@@ -176,9 +246,9 @@ export function SourceWorkbenchPage() {
         sourceId={sourceId}
         latestAssetId={latestAsset?.id}
         latestJobStatus={latestJob?.status}
+        jobScope={assetJob.source}
         latestPages={latestPages}
-        deepLinkPageId={deepLinkPageId}
-        deepLinkBlockId={deepLinkBlockId}
+        pageSetResolved={pageSetResolved}
       />
     </div>
   );
@@ -190,6 +260,7 @@ function BusinessSummary({
   source,
   latestAsset,
   latestJob,
+  jobScope,
   latestPages,
   assetsQueryPending,
   jobsQueryPending,
@@ -198,6 +269,7 @@ function BusinessSummary({
   source?: { sourceType?: string; status?: string; createdAt?: string };
   latestAsset: { id?: number; originalName?: string; mimeType?: string; sizeBytes?: number; createdAt?: string } | null;
   latestJob: { id?: number; status?: string; stage?: string; createdAt?: string } | null;
+  jobScope: AssetJobResolution['source'];
   latestPages: { id?: number; pageType?: string; extractedText?: string | null }[];
   assetsQueryPending: boolean;
   jobsQueryPending: boolean;
@@ -239,6 +311,10 @@ function BusinessSummary({
       parts.push(formatIngestionStage(latestJob?.stage, jobStatus));
     } else if (kind === 'failure-terminal') {
       parts.push('处理失败');
+    } else if (latestJob === null) {
+      // W14: this asset has no job of its own. Nothing from a sibling asset
+      // is borrowed to describe it.
+      parts.push('尚未开始解析');
     } else {
       parts.push('等待处理');
     }
@@ -246,25 +322,25 @@ function BusinessSummary({
   }
 
   return (
-    <section className="workbench-section" aria-label="Source summary" data-testid="business-summary">
-      <h2 className="section-title">Summary</h2>
+    <section className="workbench-section" aria-label="来源概览" data-testid="business-summary">
+      <h2 className="section-title">概览</h2>
       <p className="workbench-summary" data-testid="summary-line">
         {summaryLine}
       </p>
       <dl className="meta-list">
         <div>
-          <dt>Type</dt>
+          <dt>类型</dt>
           <dd>{source?.sourceType ?? '—'}</dd>
         </div>
         <div>
-          <dt>Source status</dt>
+          <dt>来源状态</dt>
           <dd>
             <StatusBadge status={source?.status} />
           </dd>
         </div>
         {latestAsset && (
           <div>
-            <dt>Latest file</dt>
+            <dt>最近文件</dt>
             <dd title={latestAsset.originalName}>
               {latestAsset.originalName ?? '—'}
               {latestAsset.sizeBytes !== undefined
@@ -273,23 +349,37 @@ function BusinessSummary({
             </dd>
           </div>
         )}
+        {jobScope === 'none' && latestAsset && (
+          <div>
+            <dt>最近解析</dt>
+            <dd data-testid="no-job-for-asset">尚未开始解析</dd>
+          </div>
+        )}
         {latestJob && (
           <div>
-            <dt>Latest ingestion</dt>
+            <dt>最近解析</dt>
             <dd>
               <StatusBadge status={latestJob.status} />
+              {jobScope === 'legacy-unlinked' && (
+                // Backend rows created before `assetId` was filled: the job is
+                // attributed because this source has exactly one asset.
+                <span className="muted" data-testid="legacy-job-attribution">
+                  {' '}
+                  · 历史任务（未关联资产）
+                </span>
+              )}
             </dd>
           </div>
         )}
         <div>
-          <dt>Content</dt>
+          <dt>内容</dt>
           <dd data-testid="content-state">
             {CONTENT_STATE_LABELS[contentState]}
           </dd>
         </div>
         {latestAsset?.createdAt && (
           <div>
-            <dt>Uploaded</dt>
+            <dt>上传时间</dt>
             <dd>{formatDateTime(latestAsset.createdAt)}</dd>
           </div>
         )}
@@ -374,8 +464,8 @@ function UploadSection({
   const busy = uploadAndIngest.isPending;
 
   return (
-    <section className="workbench-section" aria-label="Upload file">
-      <h2 className="section-title">Upload</h2>
+    <section className="workbench-section" aria-label="上传文件">
+      <h2 className="section-title">上传</h2>
       <form
         className="form"
         onSubmit={(event) => {
@@ -388,7 +478,7 @@ function UploadSection({
       >
         <div className="form__field">
           <label htmlFor="source-upload-input" className="form__label">
-            File (TXT / Markdown / PDF / PNG / JPEG)
+            文件（TXT / Markdown / PDF / PNG / JPEG）
           </label>
           <input
             id="source-upload-input"
@@ -436,10 +526,10 @@ function UploadSection({
             variant="primary"
             disabled={!file || busy || uploadError !== null}
           >
-            {busy ? UPLOAD_STAGE_LABELS[stage] : 'Upload & Ingest'}
+            {busy ? UPLOAD_STAGE_LABELS[stage] : '上传并解析'}
           </Button>
           <Button onClick={clearFile} disabled={busy || !file} type="button">
-            Clear
+            清除
           </Button>
         </div>
       </form>
@@ -447,6 +537,7 @@ function UploadSection({
       {activeJobId !== null && (
         <ActiveJobStatus
           spaceId={spaceId}
+          sourceId={sourceId}
           jobId={activeJobId}
           onTerminal={() => {
             void queryClient.invalidateQueries({
@@ -474,12 +565,14 @@ function UploadSection({
 
 function ActiveJobStatus({
   spaceId,
+  sourceId,
   jobId,
   onTerminal,
   onSucceeded,
   onFailed,
 }: {
   spaceId: number;
+  sourceId: number;
   jobId: number;
   onTerminal: () => void;
   onSucceeded: () => void;
@@ -491,12 +584,7 @@ function ActiveJobStatus({
 
   const jobQuery = useQuery({
     queryKey: queryKeys.ingestionJob(spaceId, jobId),
-    queryFn: () => {
-      if (!isPositiveId(jobId)) {
-        return Promise.reject(new Error('invalid job id'));
-      }
-      return api.getIngestionJob(spaceId, jobId).then(unwrap);
-    },
+    queryFn: () => api.getIngestionJob(spaceId, jobId).then(unwrap),
     enabled: isPositiveId(jobId),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
@@ -535,13 +623,13 @@ function ActiveJobStatus({
         queryKey: queryKeys.ingestionJob(spaceId, jobId),
       });
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.ingestionJobs(spaceId, jobId),
+        queryKey: queryKeys.ingestionJobs(spaceId, sourceId),
       });
     },
   });
 
   if (jobQuery.isPending) {
-    return <p className="muted">Loading ingestion job…</p>;
+    return <p className="muted">加载解析任务…</p>;
   }
   if (jobQuery.isError) {
     const err = normalizeApiError(jobQuery.error);
@@ -551,7 +639,7 @@ function ActiveJobStatus({
           {err.message}
         </p>
         <Button onClick={() => void jobQuery.refetch()} type="button">
-          Retry status request
+          重新请求状态
         </Button>
       </div>
     );
@@ -563,7 +651,7 @@ function ActiveJobStatus({
   return (
     <div className="ingestion-active" data-testid="active-job">
       <p role="status" aria-live="polite">
-        Ingestion: {formatIngestionStage(job?.stage, status)}
+        解析：{formatIngestionStage(job?.stage, status)}
       </p>
       {kind === 'failure-terminal' && (
         <div>
@@ -576,7 +664,7 @@ function ActiveJobStatus({
               onClick={() => retry.mutate()}
               disabled={retry.isPending}
             >
-              {retry.isPending ? 'Retrying…' : 'Retry ingestion'}
+              {retry.isPending ? '重试中…' : '重新解析'}
             </Button>
           )}
         </div>
@@ -645,21 +733,21 @@ function IngestionHistory({
   }, [jobs]);
 
   return (
-    <section className="workbench-section" aria-label="Ingestion history">
-      <h2 className="section-title">Ingestion history</h2>
+    <section className="workbench-section" aria-label="解析历史">
+      <h2 className="section-title">解析历史</h2>
       {sorted.length === 0 ? (
-        <p className="muted">No ingestion jobs yet.</p>
+        <p className="muted">还没有解析任务。</p>
       ) : (
         <table className="table">
           <thead>
             <tr>
               <th>Job</th>
-              <th>File</th>
-              <th>Status</th>
-              <th>Stage</th>
-              <th>Created</th>
-              <th>Finished</th>
-              <th>Actions</th>
+              <th>文件</th>
+              <th>状态</th>
+              <th>阶段</th>
+              <th>创建时间</th>
+              <th>完成时间</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -696,7 +784,7 @@ function IngestionHistory({
                         onClick={() => retry.mutate(jobId)}
                         disabled={retry.isPending}
                       >
-                        {retry.isPending ? 'Retrying…' : 'Retry'}
+                        {retry.isPending ? '重试中…' : '重试'}
                       </Button>
                     ) : (
                       <span className="muted">—</span>
@@ -719,25 +807,24 @@ function ContentSection({
   sourceId,
   latestAssetId,
   latestJobStatus,
+  jobScope,
   latestPages,
-  deepLinkPageId,
-  deepLinkBlockId,
+  pageSetResolved,
 }: {
   spaceId: number;
   sourceId: number;
   latestAssetId?: number;
   latestJobStatus?: string | null;
+  jobScope: AssetJobResolution['source'];
+  pageSetResolved: boolean;
   latestPages: {
     id?: number;
     pageType?: string;
     extractedText?: string | null;
     pageOrder?: number;
   }[];
-  deepLinkPageId: number | null;
-  deepLinkBlockId: number | null;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedPageId, setSelectedPageId] = useState<number | null>(null);
 
   const pages = useMemo(() => {
     return [...latestPages].sort(
@@ -745,19 +832,63 @@ function ContentSection({
     );
   }, [latestPages]);
 
-  // Auto-select: deep-link first, then first valid page.
+  // W15: `?page=` is the single source of truth for the selected page, so
+  // back/forward/refresh can never disagree with what is rendered. A page id
+  // that is not part of the CURRENT asset's pages is a stale deep link — it
+  // selects nothing, and the URL is rewritten below instead of staying
+  // pointed at another asset's page while pages[0] shows.
+  const urlPageId = parsePositiveIdParam(searchParams.get('page') ?? undefined);
+  const urlBlockId = parsePositiveIdParam(searchParams.get('block') ?? undefined);
+  const pageBelongsToAsset =
+    urlPageId !== null && pages.some((page) => page.id === urlPageId);
+  const selectedPageId = pageBelongsToAsset
+    ? urlPageId
+    : (pages.find((page) => isPositiveId(page.id))?.id ?? null);
+  // A `?block=` highlight only means something for the page the URL names;
+  // after a stale page the block belongs to another asset.
+  const highlightBlockId = pageBelongsToAsset ? urlBlockId : null;
+
   useEffect(() => {
-    if (deepLinkPageId !== null && pages.some((p) => p.id === deepLinkPageId)) {
-      setSelectedPageId(deepLinkPageId);
+    const next = new URLSearchParams(searchParams);
+
+    if (selectedPageId === null) {
+      // The current asset has no page to select. If its page set has settled,
+      // any `page`/`block` left in the URL can only be another asset's, so it
+      // is removed instead of lingering as residue (and resurrecting on
+      // refresh). Before the set settles, nothing is known and the URL stays
+      // exactly as it is — that is what keeps a valid deep link alive through
+      // the load.
+      if (
+        !pageSetResolved ||
+        (!searchParams.has('page') && !searchParams.has('block'))
+      ) {
+        return;
+      }
+      next.delete('page');
+      next.delete('block');
+      setSearchParams(next, { replace: true });
       return;
     }
-    if (selectedPageId === null && pages.length > 0) {
-      const first = pages[0].id;
-      if (isPositiveId(first)) {
-        setSelectedPageId(first);
-      }
+
+    const pageIsCurrent = searchParams.get('page') === String(selectedPageId);
+    const blockIsConsistent =
+      highlightBlockId !== null || !searchParams.has('block');
+    if (pageIsCurrent && blockIsConsistent) {
+      return;
     }
-  }, [pages, deepLinkPageId, selectedPageId]);
+    next.set('page', String(selectedPageId));
+    if (highlightBlockId === null) {
+      next.delete('block');
+    }
+    // replace: normalizing state is not a navigation the user can go back to.
+    setSearchParams(next, { replace: true });
+  }, [
+    selectedPageId,
+    highlightBlockId,
+    pageSetResolved,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const status = (latestJobStatus ?? '').trim().toUpperCase();
   const isImagePages = pages.length > 0 && pages.every(
@@ -769,20 +900,33 @@ function ContentSection({
 
   if (!latestAssetId) {
     return (
-      <section className="workbench-section" aria-label="Content">
-        <h2 className="section-title">Content</h2>
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
         <EmptyState
-          title="No file uploaded yet"
-          description="Upload a TXT, Markdown, PDF, or image file to get started."
+          title="尚未上传文件"
+          description="上传 TXT、Markdown、PDF 或图片文件即可开始。"
         />
       </section>
     );
   }
 
-  if (status === 'PENDING' || status === 'RUNNING') {
+  // W14: this asset has no job of its own — no sibling asset's
+  // SUCCEEDED/FAILED may be shown here.
+  if (jobScope === 'none') {
     return (
-      <section className="workbench-section" aria-label="Content">
-        <h2 className="section-title">Content</h2>
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
+        <p className="muted" role="status" data-testid="not-started-note">
+          尚未开始解析。
+        </p>
+      </section>
+    );
+  }
+
+  if (classifyIngestionStatus(status) === 'non-terminal') {
+    return (
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
         <p className="page__note" role="status" data-testid="processing-note">
           新文件正在处理中，完成后内容将自动更新。
         </p>
@@ -790,10 +934,10 @@ function ContentSection({
     );
   }
 
-  if (status === 'FAILED') {
+  if (classifyIngestionStatus(status) === 'failure-terminal') {
     return (
-      <section className="workbench-section" aria-label="Content">
-        <h2 className="section-title">Content</h2>
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
         <p className="form__error" role="alert" data-testid="failed-note">
           最新文件处理失败。请查看上方错误信息，或上传其它文件。
         </p>
@@ -801,20 +945,22 @@ function ContentSection({
     );
   }
 
-  if (status !== 'SUCCEEDED') {
+  if (classifyIngestionStatus(status) !== 'success-terminal') {
     return (
-      <section className="workbench-section" aria-label="Content">
-        <h2 className="section-title">Content</h2>
-        <p className="muted">等待开始处理。</p>
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
+        <p className="muted" role="status" data-testid="unknown-status-note">
+          等待开始处理。
+        </p>
       </section>
     );
   }
 
-  // SUCCEEDED
+  // A terminal-success job: show whatever the pipeline produced.
   if (pages.length === 0) {
     return (
-      <section className="workbench-section" aria-label="Content">
-        <h2 className="section-title">Content</h2>
+      <section className="workbench-section" aria-label="内容">
+        <h2 className="section-title">内容</h2>
         <p className="muted">处理成功，但没有生成内容页面。</p>
       </section>
     );
@@ -827,18 +973,19 @@ function ContentSection({
   function goToPage(index: number) {
     const page = pages[index];
     if (page && isPositiveId(page.id)) {
-      setSelectedPageId(page.id);
-      // Sync URL for deep-link / refresh.
+      // The URL alone selects the page (W15); pushing keeps browser
+      // back/forward truthful, and a page change never carries a `?block=`
+      // highlight over from the page it belongs to.
       const next = new URLSearchParams(searchParams);
       next.set('page', String(page.id));
       next.delete('block');
-      setSearchParams(next, { replace: true });
+      setSearchParams(next);
     }
   }
 
   return (
-    <section className="workbench-section" aria-label="Content">
-      <h2 className="section-title">Content</h2>
+    <section className="workbench-section" aria-label="内容">
+      <h2 className="section-title">内容</h2>
 
       {isImagePages && (
         <p className="page__note" data-testid="image-success-note">
@@ -858,7 +1005,7 @@ function ContentSection({
           onClick={() => goToPage(safeIndex - 1)}
           disabled={safeIndex <= 0}
         >
-          Previous
+          上一页
         </Button>
         <span className="pdf-reader-nav__label" data-testid="page-indicator">
           Page {safeIndex + 1} of {pages.length}
@@ -868,12 +1015,12 @@ function ContentSection({
           onClick={() => goToPage(safeIndex + 1)}
           disabled={safeIndex >= pages.length - 1}
         >
-          Next
+          下一页
         </Button>
       </div>
 
       {/* Page list for direct selection */}
-      <div className="content-nav" role="navigation" aria-label="Pages">
+      <div className="content-nav" role="navigation" aria-label="页码">
         {pages.map((page, index) => {
           const pageId = page.id;
           if (!isPositiveId(pageId)) {
@@ -898,14 +1045,45 @@ function ContentSection({
       </div>
 
       {selectedPage && isPositiveId(selectedPage.id) && (
-        <PageContent
-          spaceId={spaceId}
-          sourceId={sourceId}
-          pageId={selectedPage.id}
-          pageType={selectedPage.pageType}
-          extractedText={selectedPage.extractedText}
-          highlightBlockId={deepLinkBlockId}
-        />
+        <>
+          {/* W16: the entity on screen here is the page, so the note starts
+              with the two ids this screen really has — the source from the
+              route and this page. Its block, when there is one, is linked
+              from the block itself and adds `contentBlockId`.
+              A3.2 / G07: the AI entry names only THIS page's id, because the
+              backend resolves the owning source from it
+              (AiLearningContextService.resolveSelectedContext) and an
+              inconsistent source/page pair is a 400 of its own. */}
+          <p className="page__note">
+            <Link
+              className="nav-link"
+              data-testid="page-note-link"
+              to={`/spaces/${spaceId}/notes?${new URLSearchParams({
+                sourceId: String(sourceId),
+                sourcePageId: String(selectedPage.id),
+              }).toString()}`}
+            >
+              本页新建笔记
+            </Link>
+            <Link
+              className="nav-link"
+              data-testid="page-ai-link"
+              to={`/spaces/${spaceId}/ai?${new URLSearchParams({
+                attachSourcePageId: String(selectedPage.id),
+              }).toString()}`}
+            >
+              问 AI（本页）
+            </Link>
+          </p>
+          <PageContent
+            spaceId={spaceId}
+            sourceId={sourceId}
+            pageId={selectedPage.id}
+            pageType={selectedPage.pageType}
+            extractedText={selectedPage.extractedText}
+            highlightBlockId={highlightBlockId}
+          />
+        </>
       )}
     </section>
   );
@@ -991,18 +1169,19 @@ function PageContent({
   return (
     <div className="content-blocks">
       {blocks.map((block, index) => {
+        const blockId = block.id;
         const isHighlighted =
-          highlightBlockId !== null && block.id === highlightBlockId;
+          highlightBlockId !== null && blockId === highlightBlockId;
         return (
           <article
-            key={block.id ?? `block-${index}`}
+            key={blockId ?? `block-${index}`}
             className={
               isHighlighted
                 ? 'content-block content-block--highlighted'
                 : 'content-block'
             }
             data-testid="content-block"
-            data-block-id={block.id}
+            data-block-id={blockId}
           >
             <p className="content-block__type muted">
               {block.blockType ?? 'TEXT'}
@@ -1011,6 +1190,40 @@ function PageContent({
             <pre className="content-block__text">
               {block.normalizedText ?? '—'}
             </pre>
+            {isPositiveId(blockId) && (
+              <p className="page__note">
+                {/* W16: the three ids this content block really has — the
+                    source the workbench is open on, the page these blocks were
+                    read from, and the block itself. The Notes form keeps the
+                    most specific pointer (block > page > source) and lets the
+                    server resolve the chain, so none of them is invented. */}
+                <Link
+                  className="nav-link"
+                  data-testid="block-note-link"
+                  aria-label={`为片段 #${blockId} 新建笔记`}
+                  to={`/spaces/${spaceId}/notes?${new URLSearchParams({
+                    sourceId: String(sourceId),
+                    sourcePageId: String(pageId),
+                    contentBlockId: String(blockId),
+                  }).toString()}`}
+                >
+                  新建笔记
+                </Link>
+                {/* A3.2 / G07: the block alone is the AI context — the narrowest
+                    id here, whose page and source the server derives from the
+                    block row itself, so the request cannot contradict itself. */}
+                <Link
+                  className="nav-link"
+                  data-testid="block-ai-link"
+                  aria-label={`就片段 #${blockId} 问 AI`}
+                  to={`/spaces/${spaceId}/ai?${new URLSearchParams({
+                    attachContentBlockId: String(blockId),
+                  }).toString()}`}
+                >
+                  问 AI
+                </Link>
+              </p>
+            )}
           </article>
         );
       })}

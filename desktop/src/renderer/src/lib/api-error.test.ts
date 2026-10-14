@@ -10,28 +10,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   ApiRequestError,
+  NetworkUnavailableError,
+  apiProblemCode,
   normalizeApiError,
   unwrap,
 } from './api-error';
 
 describe('normalizeApiError — error classes', () => {
-  it('maps 401 to unauthorized with a dev build message', () => {
-    const normalized = normalizeApiError(new ApiRequestError(401), {
-      isDev: true,
-    });
+  it('maps 401 to unauthorized with a uniform re-login hint (FE-AUTH-001)', () => {
+    const normalized = normalizeApiError(new ApiRequestError(401));
     expect(normalized.kind).toBe('unauthorized');
     expect(normalized.status).toBe(401);
-    expect(normalized.message).toBe(
-      '当前开发会话未认证或令牌已失效。请更新 Development Session 令牌。'
-    );
-  });
-
-  it('maps 401 to the auth-pending placeholder in production builds', () => {
-    const normalized = normalizeApiError(new ApiRequestError(401), {
-      isDev: false,
-    });
-    expect(normalized.kind).toBe('unauthorized');
-    expect(normalized.message).toBe('Authentication integration pending.');
+    expect(normalized.message).toBe('登录状态已失效，请重新登录。');
   });
 
   it('maps 403 to forbidden', () => {
@@ -48,7 +38,7 @@ describe('normalizeApiError — error classes', () => {
   });
 
   it('maps 5xx to server with retry-encouraging wording', () => {
-    for (const status of [500, 502, 503, 504]) {
+    for (const status of [500, 503, 504]) {
       const normalized = normalizeApiError(new ApiRequestError(status));
       expect(normalized.kind).toBe('server');
       expect(normalized.status).toBe(status);
@@ -56,11 +46,29 @@ describe('normalizeApiError — error classes', () => {
     }
   });
 
-  it('maps TypeError (fetch failure) to network', () => {
-    const normalized = normalizeApiError(new TypeError('fetch failed'));
+  // A 502 from the AI endpoints means our server reached a provider that said
+  // no; "retry later" sends the user to the wrong thing.
+  it('maps 502 to a distinct upstream failure', () => {
+    const normalized = normalizeApiError(new ApiRequestError(502));
+    expect(normalized.kind).toBe('upstream');
+    expect(normalized.message).toContain('上游服务拒绝了请求');
+  });
+
+  it('maps NetworkUnavailableError (fetch rejected) to network', () => {
+    const normalized = normalizeApiError(new NetworkUnavailableError(new TypeError('fetch failed')));
     expect(normalized.kind).toBe('network');
     expect(normalized.status).toBeUndefined();
     expect(normalized.message).toBe('无法连接到后端服务。请确认服务已启动后重试。');
+  });
+
+  // A bare TypeError used to be reported as a backend outage, which sent every
+  // "client method missing" report chasing a server that was fine.
+  it('does not blame the backend for a TypeError from the call site', () => {
+    const normalized = normalizeApiError(
+      new TypeError('api.listExams is not a function')
+    );
+    expect(normalized.kind).toBe('unknown');
+    expect(normalized.message).not.toContain('后端');
   });
 
   it('maps other HTTP statuses to unknown', () => {
@@ -69,6 +77,38 @@ describe('normalizeApiError — error classes', () => {
       expect(normalized.kind).toBe('unknown');
       expect(normalized.status).toBe(status);
     }
+  });
+
+  // The backend answers 400 with ProblemDetail.errors[]; hiding it behind
+  // "请求失败，请稍后重试。" left users with no way to fix their own input.
+  it('surfaces field-level validation messages from a 400 body', () => {
+    const normalized = normalizeApiError(
+      new ApiRequestError(400, {
+        code: 'VALIDATION_ERROR',
+        errors: [{ field: 'questions', message: 'questions must not be empty' }],
+      })
+    );
+    expect(normalized.message).toContain('questions');
+    expect(normalized.message).toContain('questions must not be empty');
+  });
+
+  it('never leaks a non-validation body through the 400 message', () => {
+    const normalized = normalizeApiError(
+      new ApiRequestError(400, { detail: 'SQL syntax near table_x' })
+    );
+    expect(normalized.message).toBe('请求失败，请稍后重试。');
+  });
+
+  // The backend also reports input problems as a bare detail under
+  // VALIDATION_ERROR; swallowing it left "请求失败" for a fixable mistake.
+  it('surfaces a validation detail when there is no errors[] list', () => {
+    const normalized = normalizeApiError(
+      new ApiRequestError(400, {
+        code: 'VALIDATION_ERROR',
+        detail: 'TRUE_FALSE requires correctBoolean',
+      })
+    );
+    expect(normalized.message).toContain('TRUE_FALSE requires correctBoolean');
   });
 
   it('maps arbitrary thrown values to unknown', () => {
@@ -101,5 +141,38 @@ describe('unwrap', () => {
     }
     expect(thrown).toBeInstanceOf(ApiRequestError);
     expect((thrown as ApiRequestError).status).toBe(404);
+  });
+});
+
+describe('apiProblemCode', () => {
+  it('reads the ProblemDetail code so a page can branch on it', () => {
+    const error = new ApiRequestError(409, {
+      code: '  PRACTICE_RESULT_NOT_RECORDED  ',
+      detail: 'score columns did not exist',
+    });
+    expect(apiProblemCode(error)).toBe('PRACTICE_RESULT_NOT_RECORDED');
+  });
+
+  it('is null when the body carries no usable code', () => {
+    expect(apiProblemCode(new ApiRequestError(409, {}))).toBeNull();
+    expect(apiProblemCode(new ApiRequestError(409))).toBeNull();
+    expect(apiProblemCode(new ApiRequestError(409, { code: '   ' }))).toBeNull();
+    expect(apiProblemCode(new ApiRequestError(409, { code: 409 }))).toBeNull();
+  });
+
+  // normalizeApiError must stay code-blind: a known code is a page's decision,
+  // never a licence to put the server's English detail on screen.
+  it('is null for anything that is not an ApiRequestError', () => {
+    expect(apiProblemCode(new Error('boom'))).toBeNull();
+    expect(apiProblemCode(undefined)).toBeNull();
+    expect(apiProblemCode('PRACTICE_SESSION_NOT_SUBMITTED')).toBeNull();
+  });
+
+  it('does not change the safe copy of a coded 409', () => {
+    const error = new ApiRequestError(409, {
+      code: 'PRACTICE_SESSION_NOT_SUBMITTED',
+      detail: 'session is not submitted',
+    });
+    expect(normalizeApiError(error).message).toBe('请求失败，请稍后重试。');
   });
 });

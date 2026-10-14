@@ -40,6 +40,7 @@ export default tseslint.config(
     files: [
       'src/main/**/*.ts',
       'src/preload/**/*.ts',
+      'scripts/**/*.mjs',
       'electron.vite.config.ts',
       'vitest.config.ts',
     ],
@@ -60,6 +61,39 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       '@typescript-eslint/no-explicit-any': 'error',
+    },
+  },
+
+  // Layering (FE-ARCH stage D). `src/shared` is compiled by BOTH
+  // tsconfig.node.json and tsconfig.web.json, so a `node:fs` import there
+  // passes typecheck and only explodes at preload runtime inside the
+  // sandbox. Feature-isolation and the components/lib → features rules are
+  // enforced in app/renderer-conventions.test.ts, which resolves relative
+  // specifiers exactly (glob depth is too coarse for that here).
+  {
+    files: ['src/shared/**/*.ts'],
+    ignores: ['src/shared/**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                'node:*',
+                'electron',
+                'fs',
+                'path',
+                'os',
+                'crypto',
+                'child_process',
+              ],
+              message:
+                'src/shared is imported by main, preload and renderer: keep it platform-free or the sandboxed preload breaks at runtime.',
+            },
+          ],
+        },
+      ],
     },
   },
 

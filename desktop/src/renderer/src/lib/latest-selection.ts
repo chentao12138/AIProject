@@ -14,9 +14,10 @@
  *   latestJob    = among jobs for that asset, max(createdAt), tiebreak max(id)
  *   pagesForAsset = pages where sourceAssetId === asset.id
  *
- * If the contract cannot associate a job with an asset (missing
- * assetId), the job is excluded from latest-job selection rather
- * than guessed.
+ * An asset whose job list is empty has NO status: the workbench shows
+ * "尚未开始解析" (see `resolveJobForAsset`). A job is never borrowed from
+ * another asset — the only exception is a one-asset source whose jobs were
+ * created before the backend filled `IngestionJobResponse.assetId`.
  */
 
 export interface AssetLike {
@@ -26,7 +27,8 @@ export interface AssetLike {
 
 export interface JobLike {
   id?: number;
-  assetId?: number;
+  /** The API sends `null`, not a missing key, for an unlinked job. */
+  assetId?: number | null;
   createdAt?: string;
   status?: string;
 }
@@ -99,6 +101,33 @@ export function selectLatestJobForAsset(
 }
 
 /**
+ * Newest job of a source, ignoring the asset link.
+ *
+ * Kept for the ONE case where the owner cannot be ambiguous: a source with a
+ * single asset whose jobs were created before the backend filled
+ * `IngestionJobResponse.assetId` (see `resolveJobForAsset`). Never call it to
+ * guess the status of one asset among several — that is exactly what made the
+ * workbench show asset A's SUCCEEDED/FAILED as asset B's state (W14).
+ */
+export function selectLatestJob(jobs: JobLike[]): JobLike | null {
+  let best: JobLike | null = null;
+  for (const j of jobs) {
+    if (typeof j.id !== 'number') {
+      continue;
+    }
+    if (best === null) {
+      best = j;
+      continue;
+    }
+    const cmp = ts(j.createdAt) - ts(best.createdAt);
+    if (cmp > 0 || (cmp === 0 && (j.id ?? 0) > (best.id ?? 0))) {
+      best = j;
+    }
+  }
+  return best;
+}
+
+/**
  * Filter pages belonging to a specific asset. Pages without a
  * matching sourceAssetId are excluded (no guessing).
  */
@@ -113,8 +142,61 @@ export function filterPagesForAsset(
 }
 
 /**
+ * Where the status shown for an asset came from (W14).
+ *
+ *  - `asset`            the asset's OWN job. This is the only branch that may
+ *                       drive an asset's SUCCEEDED / FAILED / running copy.
+ *  - `legacy-unlinked`  a job with no `assetId` at all, accepted ONLY because
+ *                       the source has exactly one asset, so the job cannot
+ *                       belong to a different one. Older backend rows were
+ *                       created with `assetId: null`; treating them as "no
+ *                       job" pinned that single-asset workbench on
+ *                       "尚未开始解析" forever and stopped the poll gate.
+ *  - `none`             the asset has no job of its own → "尚未开始解析".
+ *                       Another asset's job is never borrowed to fill this in.
+ */
+export type AssetJobResolution =
+  | { source: 'asset'; job: JobLike }
+  | { source: 'legacy-unlinked'; job: JobLike }
+  | { source: 'none'; job: null };
+
+function isUnlinked(job: JobLike): boolean {
+  return job.assetId === null || job.assetId === undefined;
+}
+
+/**
+ * Resolve the job that describes `assetId`.
+ *
+ * `assetCount` is how many assets the source has. With two or more, an
+ * unlinked job has no provable owner, so the answer is `none`.
+ */
+export function resolveJobForAsset(params: {
+  jobs: JobLike[];
+  assetId: number | undefined;
+  assetCount: number;
+}): AssetJobResolution {
+  const own = selectLatestJobForAsset(params.jobs, params.assetId);
+  if (own !== null) {
+    return { source: 'asset', job: own };
+  }
+  if (params.assetCount === 1 && params.assetId !== undefined) {
+    const legacy = selectLatestJob(params.jobs.filter(isUnlinked));
+    if (legacy !== null) {
+      return { source: 'legacy-unlinked', job: legacy };
+    }
+  }
+  return { source: 'none', job: null };
+}
+
+import {
+  INGESTION_STATUSES,
+  classifyIngestionStatus,
+} from './ingestion-status';
+
+/**
  * Frontend presentation state for the content area.
  * These are NOT backend enums — they describe what the user sees.
+ * The backend status itself is read only through `classifyIngestionStatus`.
  */
 export type ContentPresentationState =
   | 'NO_ASSET'
@@ -136,17 +218,16 @@ export function deriveContentState(params: {
   if (!params.hasAsset) {
     return 'NO_ASSET';
   }
-  const status = (params.jobStatus ?? '').trim().toUpperCase();
-  if (status === 'PENDING') {
-    return 'INGESTION_PENDING';
+  const kind = classifyIngestionStatus(params.jobStatus);
+  if (kind === 'non-terminal') {
+    return (params.jobStatus ?? '').trim().toUpperCase() === INGESTION_STATUSES.QUEUED
+      ? 'INGESTION_PENDING'
+      : 'INGESTION_RUNNING';
   }
-  if (status === 'RUNNING') {
-    return 'INGESTION_RUNNING';
-  }
-  if (status === 'FAILED') {
+  if (kind === 'failure-terminal') {
     return 'INGESTION_FAILED';
   }
-  if (status === 'SUCCEEDED') {
+  if (kind === 'success-terminal') {
     if (params.blockCount > 0 || params.hasExtractedText) {
       return 'CONTENT_READY';
     }
@@ -162,7 +243,7 @@ export function deriveContentState(params: {
 /** Human label for a content presentation state. */
 export const CONTENT_STATE_LABELS: Record<ContentPresentationState, string> = {
   NO_ASSET: '尚未上传文件',
-  ASSET_UPLOADED: '文件已上传，等待开始处理',
+  ASSET_UPLOADED: '文件已上传，尚未开始解析',
   INGESTION_PENDING: '排队等待处理…',
   INGESTION_RUNNING: '正在处理…',
   INGESTION_FAILED: '处理失败',

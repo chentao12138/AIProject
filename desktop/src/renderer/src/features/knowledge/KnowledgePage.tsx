@@ -8,14 +8,20 @@
  */
 
 import { useState } from 'react';
+import { KNOWLEDGE_FORM_LIMITS } from '../../lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useApiClient } from '../../lib/api-context';
-import { unwrap, normalizeApiError } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
+import { spaceQuery } from '../../lib/queries';
+import { requireId, useSpaceId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { buildCategoryTree } from '../../lib/category-tree';
 import {
-  parsePositiveIdParam,
   isPositiveId,
   parseOptionalInteger,
   parseOptionalPositiveId,
@@ -29,6 +35,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { Input } from '../../components/Input';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
+import { originLabel } from '../../lib/format';
 import { Select } from '../../components/Select';
 import { StatusBadge } from '../../components/StatusBadge';
 import { TextArea } from '../../components/TextArea';
@@ -37,33 +44,25 @@ export function KnowledgePage() {
   const api = useApiClient();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { spaceId: spaceIdParam } = useParams();
+  const spaceId = useSpaceId();
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [creatingPoint, setCreatingPoint] = useState(false);
 
-  const spaceId = parsePositiveIdParam(spaceIdParam);
+  const categoriesQuery = useQuery(
+    spaceQuery(
+      spaceId,
+      queryKeys.knowledgeCategories(spaceId),
+      (id) => api.listKnowledgeCategories(id)
+    )
+  );
 
-  const categoriesQuery = useQuery({
-    queryKey: queryKeys.knowledgeCategories(spaceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.listKnowledgeCategories(spaceId).then(unwrap);
-    },
-    enabled: spaceId !== null,
-  });
-
-  const pointsQuery = useQuery({
-    queryKey: queryKeys.knowledgePoints(spaceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.listKnowledgePoints(spaceId).then(unwrap);
-    },
-    enabled: spaceId !== null,
-  });
+  const pointsQuery = useQuery(
+    spaceQuery(
+      spaceId,
+      queryKeys.knowledgePoints(spaceId),
+      (id) => api.listKnowledgePoints(id)
+    )
+  );
 
   const createCategory = useMutation({
     mutationFn: (body: {
@@ -71,15 +70,13 @@ export function KnowledgePage() {
       description?: string;
       parentId?: number;
       sortOrder?: number;
-    }) => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.createKnowledgeCategory(spaceId, body).then(unwrap);
-    },
+    }) =>
+      api
+        .createKnowledgeCategory(requireId(spaceId, 'space id'), body)
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgeCategories(spaceId ?? 0),
+        queryKey: queryKeys.knowledgeCategories(spaceId),
       });
       setCreatingCategory(false);
     },
@@ -92,22 +89,20 @@ export function KnowledgePage() {
       content: string;
       categoryId?: number;
       difficulty?: string;
-    }) => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.createKnowledgePoint(spaceId, body).then(unwrap);
-    },
+    }) =>
+      api
+        .createKnowledgePoint(requireId(spaceId, 'space id'), body)
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgePoints(spaceId ?? 0),
+        queryKey: queryKeys.knowledgePoints(spaceId),
       });
       setCreatingPoint(false);
     },
   });
 
-  if (spaceId === null) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+  if (!spaceId) {
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   const categories = categoriesQuery.data ?? [];
@@ -130,14 +125,14 @@ export function KnowledgePage() {
   return (
     <div className="page">
       <PageHeader
-        title="Knowledge"
+        title="知识库"
         actions={
           <>
             <Button onClick={() => setCreatingCategory(true)}>
-              Create Category
+              创建分类
             </Button>
             <Button variant="primary" onClick={() => setCreatingPoint(true)}>
-              Create Knowledge Point
+              创建知识点
             </Button>
           </>
         }
@@ -157,24 +152,24 @@ export function KnowledgePage() {
 
       {!loading && !error && (
         <div className="knowledge-layout">
-          <section className="knowledge-layout__tree" aria-label="Category tree">
-            <h2 className="section-title">Categories</h2>
+          <section className="knowledge-layout__tree" aria-label="分类树">
+            <h2 className="section-title">分类</h2>
             {categories.length === 0 ? (
-              <p className="muted">No categories yet.</p>
+              <p className="muted">还没有分类。</p>
             ) : (
               <CategoryTree nodes={tree} />
             )}
           </section>
 
-          <section className="knowledge-layout__points" aria-label="Knowledge points">
-            <h2 className="section-title">Points</h2>
+          <section className="knowledge-layout__points" aria-label="知识点">
+            <h2 className="section-title">知识点</h2>
             {points.length === 0 ? (
               <EmptyState
-                title="No knowledge points yet"
-                description="Create a knowledge point to start building your catalog."
+                title="还没有知识点"
+                description="先创建一个知识点，开始搭建你的知识体系。"
                 action={
                   <Button variant="primary" onClick={() => setCreatingPoint(true)}>
-                    Create Knowledge Point
+                    创建知识点
                   </Button>
                 }
               />
@@ -186,7 +181,7 @@ export function KnowledgePage() {
                   const content = (
                     <>
                       <span className="point-list__title">
-                        {point.title ?? 'Untitled'}
+                        {point.title ?? '未命名'}
                       </span>
                       {point.summary && (
                         <span className="point-list__summary">
@@ -203,7 +198,7 @@ export function KnowledgePage() {
                           )}
                         {point.originType && (
                           <span className="badge badge--unknown">
-                            {point.originType}
+                            {originLabel(point.originType)}
                           </span>
                         )}
                         {point.difficulty && (
@@ -286,7 +281,7 @@ function CategoryTreeItem({ node }: { node: CategoryNode }) {
   return (
     <li className="category-tree__item">
       <span className="category-tree__label">
-        {hasChildren ? '▾' : '·'} {node.category.name ?? 'Untitled'}
+        {hasChildren ? '▾' : '·'} {node.category.name ?? '未命名'}
         {node.category.description && (
           <span className="category-tree__desc"> — {node.category.description}</span>
         )}
@@ -330,7 +325,7 @@ function CreateCategoryDialog({
   const formError = useFormError(error);
 
   return (
-    <Dialog title="Create Category" onClose={onClose} busy={pending}>
+    <Dialog title="创建分类" onClose={onClose} busy={pending}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -347,8 +342,9 @@ function CreateCategoryDialog({
         }}
       >
         <Input
-          label="Name"
+          label="名称"
           required
+          maxLength={KNOWLEDGE_FORM_LIMITS.categoryNameMaxLength}
           value={name}
           onChange={(event) => {
             setName(event.target.value);
@@ -356,7 +352,8 @@ function CreateCategoryDialog({
           }}
         />
         <Input
-          label="Description (optional)"
+          label="说明（可选）"
+          maxLength={KNOWLEDGE_FORM_LIMITS.categoryDescriptionMaxLength}
           value={description}
           onChange={(event) => {
             setDescription(event.target.value);
@@ -364,7 +361,7 @@ function CreateCategoryDialog({
           }}
         />
         <Select
-          label="Parent category (optional)"
+          label="父分类（可选）"
           value={parentId}
           onChange={(event) => {
             setParentId(event.target.value);
@@ -381,7 +378,7 @@ function CreateCategoryDialog({
             ))}
         </Select>
         <Input
-          label="Sort order (optional)"
+          label="排序（可选）"
           type="number"
           value={sortOrder}
           onChange={(event) => {
@@ -394,10 +391,10 @@ function CreateCategoryDialog({
         )}
         <div className="form__actions">
           <Button type="submit" variant="primary" disabled={pending || !name.trim()}>
-            {pending ? 'Creating…' : 'Create'}
+            {pending ? '创建中…' : '创建'}
           </Button>
           <Button onClick={onClose} disabled={pending}>
-            Cancel
+            取消
           </Button>
         </div>
       </form>
@@ -432,7 +429,7 @@ function CreatePointDialog({
   const formError = useFormError(error);
 
   return (
-    <Dialog title="Create Knowledge Point" onClose={onClose} busy={pending}>
+    <Dialog title="创建知识点" onClose={onClose} busy={pending}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -450,8 +447,9 @@ function CreatePointDialog({
         }}
       >
         <Input
-          label="Title"
+          label="标题"
           required
+          maxLength={KNOWLEDGE_FORM_LIMITS.pointTitleMaxLength}
           value={title}
           onChange={(event) => {
             setTitle(event.target.value);
@@ -459,7 +457,8 @@ function CreatePointDialog({
           }}
         />
         <Input
-          label="Summary (optional)"
+          label="摘要（可选）"
+          maxLength={KNOWLEDGE_FORM_LIMITS.pointSummaryMaxLength}
           value={summary}
           onChange={(event) => {
             setSummary(event.target.value);
@@ -467,7 +466,7 @@ function CreatePointDialog({
           }}
         />
         <TextArea
-          label="Content"
+          label="正文"
           required
           rows={6}
           value={content}
@@ -477,7 +476,7 @@ function CreatePointDialog({
           }}
         />
         <Select
-          label="Category (optional)"
+          label="分类（可选）"
           value={categoryId}
           onChange={(event) => {
             setCategoryId(event.target.value);
@@ -494,7 +493,8 @@ function CreatePointDialog({
             ))}
         </Select>
         <Input
-          label="Difficulty (optional free text)"
+          label="难度（可选，自由填写）"
+          maxLength={KNOWLEDGE_FORM_LIMITS.pointDifficultyMaxLength}
           value={difficulty}
           onChange={(event) => {
             setDifficulty(event.target.value);
@@ -510,10 +510,10 @@ function CreatePointDialog({
             variant="primary"
             disabled={pending || !title.trim() || !content.trim()}
           >
-            {pending ? 'Creating…' : 'Create'}
+            {pending ? '创建中…' : '创建'}
           </Button>
           <Button onClick={onClose} disabled={pending}>
-            Cancel
+            取消
           </Button>
         </div>
       </form>

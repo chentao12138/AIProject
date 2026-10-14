@@ -5,6 +5,9 @@
  * EVERYTHING else (including substring lookalikes like INACTIVE and
  * UNPUBLISHED) renders as the neutral unknown badge. Missing/empty
  * status renders the "—" placeholder.
+ *
+ * Queried by `title`, which always carries the raw backend value — the
+ * visible label is display copy and is free to change.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -18,43 +21,43 @@ function renderBadge(status?: string) {
 describe('StatusBadge — exact known statuses', () => {
   it('maps DRAFT to the draft variant', () => {
     renderBadge('DRAFT');
-    expect(screen.getByText('DRAFT')).toHaveClass('badge--draft');
+    expect(screen.getByTitle('DRAFT')).toHaveClass('badge--draft');
   });
 
   it('maps PUBLISHED to the published variant', () => {
     renderBadge('PUBLISHED');
-    expect(screen.getByText('PUBLISHED')).toHaveClass('badge--published');
+    expect(screen.getByTitle('PUBLISHED')).toHaveClass('badge--published');
   });
 
   it('maps ACTIVE to the active variant', () => {
     renderBadge('ACTIVE');
-    expect(screen.getByText('ACTIVE')).toHaveClass('badge--active');
+    expect(screen.getByTitle('ACTIVE')).toHaveClass('badge--active');
   });
 });
 
 describe('StatusBadge — no substring misclassification (FIX-01)', () => {
   it('INACTIVE must NOT render as active', () => {
     renderBadge('INACTIVE');
-    const badge = screen.getByText('INACTIVE');
+    const badge = screen.getByTitle('INACTIVE');
     expect(badge).toHaveClass('badge--unknown');
     expect(badge).not.toHaveClass('badge--active');
   });
 
   it('UNPUBLISHED must NOT render as published', () => {
     renderBadge('UNPUBLISHED');
-    const badge = screen.getByText('UNPUBLISHED');
+    const badge = screen.getByTitle('UNPUBLISHED');
     expect(badge).toHaveClass('badge--unknown');
     expect(badge).not.toHaveClass('badge--published');
   });
 
   it('REGISTERED renders as the neutral unknown badge', () => {
     renderBadge('REGISTERED');
-    expect(screen.getByText('REGISTERED')).toHaveClass('badge--unknown');
+    expect(screen.getByTitle('REGISTERED')).toHaveClass('badge--unknown');
   });
 
   it('any unknown backend string stays neutral', () => {
     renderBadge('ARCHIVED');
-    expect(screen.getByText('ARCHIVED')).toHaveClass('badge--unknown');
+    expect(screen.getByTitle('ARCHIVED')).toHaveClass('badge--unknown');
   });
 });
 

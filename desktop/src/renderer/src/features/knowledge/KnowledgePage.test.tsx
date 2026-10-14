@@ -69,14 +69,14 @@ describe('KnowledgePage — list rendering', () => {
 
     expect(await screen.findByText('Draft point')).toBeInTheDocument();
     expect(screen.getByText('Published point')).toBeInTheDocument();
-    expect(screen.getAllByText('DRAFT')).toHaveLength(1);
-    expect(screen.getAllByText('PUBLISHED')).toHaveLength(1);
+    expect(screen.getAllByText('草稿')).toHaveLength(1);
+    expect(screen.getAllByText('已发布')).toHaveLength(1);
   });
 
   it('shows empty state when no points exist', async () => {
     renderKnowledge(baseApi({}));
     expect(
-      await screen.findByText('No knowledge points yet')
+      await screen.findByText('还没有知识点')
     ).toBeInTheDocument();
   });
 
@@ -237,9 +237,9 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({ createKnowledgeCategory }));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
-    const submit = screen.getByRole('button', { name: 'Create' });
+    const submit = screen.getByRole('button', { name: '创建' });
     expect(submit).toBeDisabled();
     await user.click(submit);
     expect(createKnowledgeCategory).not.toHaveBeenCalled();
@@ -250,10 +250,10 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({}));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
 
-    const select = screen.getByLabelText('Parent category (optional)');
+    const select = screen.getByLabelText('父分类（可选）');
     const options = Array.from(select.querySelectorAll('option')).map(
       (option) => ({ value: option.value, text: option.textContent })
     );
@@ -283,9 +283,9 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(apiClient);
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
-    const select = screen.getByLabelText('Parent category (optional)');
+    const select = screen.getByLabelText('父分类（可选）');
     const optionTexts = Array.from(select.querySelectorAll('option')).map(
       (option) => option.textContent
     );
@@ -313,9 +313,9 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(apiClient);
 
     await user.click(
-      (await screen.findAllByRole('button', { name: 'Create Knowledge Point' }))[0]
+      (await screen.findAllByRole('button', { name: '创建知识点' }))[0]
     );
-    const select = screen.getByLabelText('Category (optional)');
+    const select = screen.getByLabelText('分类（可选）');
     const optionTexts = Array.from(select.querySelectorAll('option')).map(
       (option) => option.textContent
     );
@@ -332,21 +332,21 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({ createKnowledgeCategory }));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
 
-    await user.type(screen.getByLabelText('Name'), '  Trigonometry  ');
+    await user.type(screen.getByLabelText('名称'), '  Trigonometry  ');
     await user.selectOptions(
-      screen.getByLabelText('Parent category (optional)'),
+      screen.getByLabelText('父分类（可选）'),
       '10'
     );
     // hex-looking input must NOT coerce to 16; whitespace must NOT become 0
     // (fireEvent bypasses user-event's number-input char filtering so the
     // strict parser is what decides)
-    fireEvent.change(screen.getByLabelText('Sort order (optional)'), {
+    fireEvent.change(screen.getByLabelText('排序（可选）'), {
       target: { value: '0x10' },
     });
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     await waitFor(() => {
       expect(createKnowledgeCategory).toHaveBeenCalledWith(7, {
@@ -367,11 +367,11 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({ createKnowledgeCategory }));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
-    await user.type(screen.getByLabelText('Name'), 'X');
-    await user.type(screen.getByLabelText('Sort order (optional)'), '-3');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(screen.getByLabelText('名称'), 'X');
+    await user.type(screen.getByLabelText('排序（可选）'), '-3');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     await waitFor(() => {
       expect(createKnowledgeCategory).toHaveBeenCalledWith(7, {
@@ -393,10 +393,10 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({ createKnowledgeCategory }));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
-    await user.type(screen.getByLabelText('Name'), 'Trigonometry');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(screen.getByLabelText('名称'), 'Trigonometry');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('服务器暂时无法完成请求，请稍后重试。');
@@ -425,10 +425,10 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     renderKnowledge(baseApi({ listKnowledgeCategories, createKnowledgeCategory }));
 
     await user.click(
-      await screen.findByRole('button', { name: 'Create Category' })
+      await screen.findByRole('button', { name: '创建分类' })
     );
-    await user.type(screen.getByLabelText('Name'), 'Trigonometry');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(screen.getByLabelText('名称'), 'Trigonometry');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -444,18 +444,18 @@ describe('KnowledgePage — point create (PHASE 15)', () => {
     renderKnowledge(baseApi({}));
 
     const pointButtons = await screen.findAllByRole('button', {
-      name: 'Create Knowledge Point',
+      name: '创建知识点',
     });
     await user.click(pointButtons[0]);
 
-    const submit = screen.getByRole('button', { name: 'Create' });
+    const submit = screen.getByRole('button', { name: '创建' });
     expect(submit).toBeDisabled();
 
-    await user.type(screen.getByLabelText('Title'), 'Only title');
+    await user.type(screen.getByLabelText('标题'), 'Only title');
     expect(submit).toBeDisabled();
 
-    await user.clear(screen.getByLabelText('Title'));
-    await user.type(screen.getByLabelText('Content'), 'Only content');
+    await user.clear(screen.getByLabelText('标题'));
+    await user.type(screen.getByLabelText('正文'), 'Only content');
     expect(submit).toBeDisabled();
   });
 
@@ -468,25 +468,25 @@ describe('KnowledgePage — point create (PHASE 15)', () => {
     renderKnowledge(baseApi({ createKnowledgePoint }));
 
     const pointButtons = await screen.findAllByRole('button', {
-      name: 'Create Knowledge Point',
+      name: '创建知识点',
     });
     await user.click(pointButtons[0]);
 
-    await user.type(screen.getByLabelText('Title'), '  My Point  ');
-    await user.type(screen.getByLabelText('Summary (optional)'), '   ');
+    await user.type(screen.getByLabelText('标题'), '  My Point  ');
+    await user.type(screen.getByLabelText('摘要（可选）'), '   ');
     await user.type(
-      screen.getByLabelText('Content'),
+      screen.getByLabelText('正文'),
       '  line one{enter}{enter}line two  '
     );
     await user.selectOptions(
-      screen.getByLabelText('Category (optional)'),
+      screen.getByLabelText('分类（可选）'),
       '11'
     );
     await user.type(
-      screen.getByLabelText('Difficulty (optional free text)'),
+      screen.getByLabelText('难度（可选，自由填写）'),
       '  intermediate  '
     );
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     await waitFor(() => {
       expect(createKnowledgePoint).toHaveBeenCalledWith(7, {
@@ -515,13 +515,13 @@ describe('KnowledgePage — point create (PHASE 15)', () => {
     renderKnowledge(baseApi({ listKnowledgePoints, createKnowledgePoint }));
 
     const pointButtons = await screen.findAllByRole('button', {
-      name: 'Create Knowledge Point',
+      name: '创建知识点',
     });
     await user.click(pointButtons[0]);
 
-    await user.type(screen.getByLabelText('Title'), 'My Point');
-    await user.type(screen.getByLabelText('Content'), 'Body');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(screen.getByLabelText('标题'), 'My Point');
+    await user.type(screen.getByLabelText('正文'), 'Body');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -540,13 +540,13 @@ describe('KnowledgePage — point create (PHASE 15)', () => {
     renderKnowledge(baseApi({ createKnowledgePoint }));
 
     const pointButtons = await screen.findAllByRole('button', {
-      name: 'Create Knowledge Point',
+      name: '创建知识点',
     });
     await user.click(pointButtons[0]);
 
-    await user.type(screen.getByLabelText('Title'), 'My Point');
-    await user.type(screen.getByLabelText('Content'), 'Body');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.type(screen.getByLabelText('标题'), 'My Point');
+    await user.type(screen.getByLabelText('正文'), 'Body');
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('服务器暂时无法完成请求，请稍后重试。');

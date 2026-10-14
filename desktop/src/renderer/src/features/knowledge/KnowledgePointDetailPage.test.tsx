@@ -4,13 +4,58 @@
  * - DRAFT detail shows a Publish action
  * - PUBLISHED detail shows NO active publish CTA
  * - publish mutation calls publishKnowledgePoint(spaceId, pointId)
+ * - A2.1 (G06): provenance rows deep-link into the reader with the ids the
+ *   server sends, and degrade to text when the ids they need are absent.
+ * - A3.2 (G07): the AI entry carries this point's id as message context.
  */
 
 import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { RouteObject } from 'react-router-dom';
+import { posix } from 'node:path';
 import { KnowledgePointDetailPage } from './KnowledgePointDetailPage';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
+import { NetworkUnavailableError } from '../../lib/api-error';
+import { router } from '../../app/router';
+
+/**
+ * Does a produced href name a route the app actually registers? Re-implements
+ * the check `app/route-contract.test.ts` runs on literal targets, because a
+ * deep link built at runtime (id + optional query) is invisible to that scan.
+ */
+function collectRoutes(routes: readonly RouteObject[], parent = ''): string[] {
+  const out: string[] = [];
+  for (const route of routes) {
+    const raw = (route.path ?? '').replace(/\\/g, '/');
+    if (raw.startsWith('*')) {
+      continue;
+    }
+    const full = posix.join('/', parent, raw);
+    out.push(full);
+    out.push(...collectRoutes(route.children ?? [], full));
+  }
+  return out;
+}
+
+const REGISTERED_ROUTES = collectRoutes(router.routes);
+
+function provenanceRouteResolves(target: string): boolean {
+  const path = target.split('?')[0];
+  const segments = path.split('/').filter(Boolean);
+  return REGISTERED_ROUTES.some((pattern) => {
+    const parts = pattern.split('/').filter(Boolean);
+    return (
+      parts.length === segments.length &&
+      parts.every(
+        (segment, i) =>
+          segment.startsWith(':') ||
+          segments[i].startsWith(':') ||
+          segment === segments[i]
+      )
+    );
+  });
+}
 
 describe('KnowledgePointDetailPage', () => {
   it('shows Publish for a DRAFT point (K1.9)', async () => {
@@ -39,7 +84,115 @@ describe('KnowledgePointDetailPage', () => {
     });
 
     expect(await screen.findByText('Draft note')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Publish' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '发布' })).toBeInTheDocument();
+  });
+
+  it('links to the question list pre-filtered by this knowledge point (W16)', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: {
+          id: 5,
+          spaceId: 3,
+          title: 'Draft note',
+          content: 'body',
+          status: 'DRAFT',
+        },
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    const link = await screen.findByRole('link', {
+      name: '在题库中查看相关题目',
+    });
+    // The id must arrive as the query key QuestionsPage actually reads, so the
+    // user never has to type a knowledge point id by hand.
+    expect(link).toHaveAttribute(
+      'href',
+      '/spaces/3/questions?knowledgePointId=5'
+    );
+
+    const practiceLink = screen.getByRole('link', {
+      name: '就此知识点开始练习',
+    });
+    expect(practiceLink).toHaveAttribute(
+      'href',
+      '/spaces/3/practice?knowledgePointId=5'
+    );
+  });
+
+  it('links the point to a prefilled note and to the AI workspace (W16)', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: {
+          id: 5,
+          spaceId: 3,
+          title: 'Draft note',
+          content: 'body',
+          status: 'DRAFT',
+        },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        data: [
+          {
+            id: 70,
+            spaceId: 3,
+            knowledgePointId: 5,
+            contentBlockId: 31,
+            sourceId: 3,
+            sourcePageId: 20,
+            relationType: 'DERIVED_FROM',
+          },
+        ],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    // `knowledgePointId` is the only context id a knowledge point itself owns:
+    // the source/page/block trio belongs to the provenance rows, and the Notes
+    // list page's own listing keys (`page`, `size`, `keyword`) are not reused
+    // for a prefill.
+    expect(await screen.findByTestId('point-note-link')).toHaveAttribute(
+      'href',
+      '/spaces/3/notes?knowledgePointId=5'
+    );
+    // A3.2 / G07: the point's own id now travels into the AI request body (the
+    // contract's SendMessageRequest carries it), so the link names it and the
+    // copy says it is attached instead of denying it.
+    expect(screen.getByTestId('point-ai-link')).toHaveAttribute(
+      'href',
+      '/spaces/3/ai?attachKnowledgePointId=5'
+    );
+    expect(screen.getByTestId('ai-entry-note')).toHaveTextContent(
+      '把这个知识点附带为上下文'
+    );
+
+    // A2.1 / G06: the provenance row deep-links into the reader with the ids
+    // the server sends on this row — `page` is the source PAGE ROW id (20),
+    // not a document page number, and `block` rides along only with a page.
+    expect(
+      screen.getByRole('link', { name: '正文片段 #31' })
+    ).toHaveAttribute('href', '/spaces/3/sources/3?page=20&block=31');
   });
 
   it('shows no active publish CTA for a PUBLISHED point (K1.10)', async () => {
@@ -70,9 +223,9 @@ describe('KnowledgePointDetailPage', () => {
 
     expect(await screen.findByText('Published note')).toBeInTheDocument();
     // badge appears in the page header and in the Status row
-    expect(screen.getAllByText('PUBLISHED').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已发布').length).toBeGreaterThan(0);
     expect(
-      screen.queryByRole('button', { name: 'Publish' })
+      screen.queryByRole('button', { name: '发布' })
     ).not.toBeInTheDocument();
   });
 
@@ -116,7 +269,7 @@ describe('KnowledgePointDetailPage', () => {
       routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Publish' }));
+    await user.click(await screen.findByRole('button', { name: '发布' }));
 
     await waitFor(() => {
       expect(publishKnowledgePoint).toHaveBeenCalledWith(3, 5);
@@ -150,9 +303,9 @@ describe('KnowledgePointDetailPage', () => {
     });
 
     expect(await screen.findByText('No category')).toBeInTheDocument();
-    const row = screen.getByText('Category').closest('div');
+    const row = screen.getByText('分类').closest('div');
     expect(row).toBeTruthy();
-    expect(row!.textContent).toBe('Category—');
+    expect(row!.textContent).toBe('分类—');
     expect(screen.queryByText(/#null|#undefined|#NaN/)).not.toBeInTheDocument();
   });
 
@@ -268,7 +421,7 @@ describe('KnowledgePointDetailPage', () => {
   });
 
   it.each([
-    [401, /当前开发会话未认证或令牌已失效/],
+    [401, /登录状态已失效，请重新登录/],
     [403, /当前会话无权执行此操作/],
     [404, /资源不存在或当前不可访问/],
     [500, /服务器暂时无法完成请求/],
@@ -293,7 +446,7 @@ describe('KnowledgePointDetailPage', () => {
   it('renders a network error state on detail (PHASE 16)', async () => {
     const apiClient = mockApiClient({
       getKnowledgePoint: vi.fn(async () => {
-        throw new TypeError('fetch failed');
+        throw new NetworkUnavailableError();
       }),
     });
 
@@ -335,7 +488,7 @@ describe('KnowledgePointDetailPage', () => {
     });
 
     expect(await screen.findByText('Published, no timestamp')).toBeInTheDocument();
-    expect(screen.getByText(/Published at —/)).toBeInTheDocument();
+    expect(screen.getByText(/发布时间：—/)).toBeInTheDocument();
   });
 
   it('preserves readable content whitespace (PHASE 16)', async () => {
@@ -418,10 +571,10 @@ describe('KnowledgePointDetailPage', () => {
       routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Publish' }));
+    await user.click(await screen.findByRole('button', { name: '发布' }));
 
     const publishing = await screen.findByRole('button', {
-      name: 'Publishing…',
+      name: '发布中…',
     });
     expect(publishing).toBeDisabled();
     await user.click(publishing);
@@ -470,12 +623,12 @@ describe('KnowledgePointDetailPage', () => {
       routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Publish' }));
+    await user.click(await screen.findByRole('button', { name: '发布' }));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('服务器暂时无法完成请求，请稍后重试。');
     // CTA stays available for a retry
-    expect(screen.getByRole('button', { name: 'Publish' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '发布' })).toBeInTheDocument();
   });
 
   it('refetches the detail after publish and updates to PUBLISHED (PHASE 16)', async () => {
@@ -524,19 +677,19 @@ describe('KnowledgePointDetailPage', () => {
       routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Publish' }));
+    await user.click(await screen.findByRole('button', { name: '发布' }));
 
     // invalidate -> detail refetched
     await waitFor(() => {
       expect(getKnowledgePoint).toHaveBeenCalledTimes(2);
     });
     expect(
-      await screen.findByText(/Published at 2026/)
+      await screen.findByText(/发布时间：2026/)
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'Publish' })
+      screen.queryByRole('button', { name: '发布' })
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText('PUBLISHED').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已发布').length).toBeGreaterThan(0);
   });
 });
 
@@ -575,8 +728,143 @@ describe('KnowledgePointDetailPage — provenance (FE-002A PHASE 19)', () => {
       routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
     });
 
-    expect(await screen.findByText(/Content block #44/)).toBeInTheDocument();
+    expect(await screen.findByText(/正文片段 #44/)).toBeInTheDocument();
     expect(screen.getByText(/PRIMARY/)).toBeInTheDocument();
+    // A2.1 / G06: this row names a block but no source, so the reader has no
+    // route to open — text, not a link to `/sources/undefined`.
+    expect(
+      screen.queryByRole('link', { name: '正文片段 #44' })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('provenance-link')).not.toBeInTheDocument();
+  });
+
+  it('links a provenance row that names only its source, with no query at all', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: { id: 5, title: 'Point', content: 'body', status: 'DRAFT' },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        data: [{ id: 92, sourceId: 3, relationType: 'PRIMARY' }],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    // A source-level provenance row is still a working deep link: the reader
+    // opens that source. Nothing is invented, so there is no page/block param.
+    expect(await screen.findByRole('link', { name: '学习来源 #3' })).toHaveAttribute(
+      'href',
+      '/spaces/3/sources/3'
+    );
+  });
+
+  it('never emits block without a page, even when the block id is real', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: { id: 5, title: 'Point', content: 'body', status: 'DRAFT' },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        // The block has no page row in the response: `?block=` alone would be a
+        // highlight the reader has no page to apply it on.
+        data: [{ id: 93, sourceId: 3, contentBlockId: 44 }],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    expect(await screen.findByRole('link', { name: '正文片段 #44' })).toHaveAttribute(
+      'href',
+      '/spaces/3/sources/3'
+    );
+  });
+
+  it('refuses to link a provenance row whose source id is not a positive id', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: { id: 5, title: 'Point', content: 'body', status: 'DRAFT' },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        data: [
+          { id: 94, sourceId: 0, sourcePageId: 20, contentBlockId: 44 },
+          { id: 95, sourceId: -7, contentBlockId: 45 },
+        ],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    const rows = await screen.findAllByTestId('provenance-row');
+    // Both rows render, and neither is a link: `/sources/0` would be a 404
+    // dressed up as a deep link.
+    expect(rows).toHaveLength(2);
+    expect(screen.queryAllByTestId('provenance-link')).toEqual([]);
+  });
+
+  it('builds every provenance deep link onto a route the app registers', async () => {
+    const apiClient = mockApiClient({
+      listKnowledgeCategories: vi.fn(async () => ({
+        data: [],
+        response: { status: 200 },
+      })),
+      getKnowledgePoint: vi.fn(async () => ({
+        data: { id: 5, title: 'Point', content: 'body', status: 'DRAFT' },
+        response: { status: 200 },
+      })),
+      listKnowledgePointSources: vi.fn(async () => ({
+        data: [
+          { id: 96, sourceId: 3, sourcePageId: 20, contentBlockId: 31 },
+          { id: 97, sourceId: 3 },
+        ],
+        response: { status: 200 },
+      })),
+    });
+
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+
+    const links = await screen.findAllByTestId('provenance-link');
+    expect(links).toHaveLength(2);
+    // The same check `app/route-contract.test.ts` runs, applied to the hrefs
+    // this page can produce: a reader route that does not exist is a broken
+    // audit item, not a page.
+    for (const link of links) {
+      expect(
+        provenanceRouteResolves(link.getAttribute('href') ?? '')
+      ).toBe(true);
+    }
   });
 
   it('shows empty provenance note when no links exist', async () => {
@@ -602,7 +890,7 @@ describe('KnowledgePointDetailPage — provenance (FE-002A PHASE 19)', () => {
     });
 
     expect(
-      await screen.findByText('No linked source content yet.')
+      await screen.findByText('尚未关联任何来源内容。')
     ).toBeInTheDocument();
   });
 
@@ -630,6 +918,6 @@ describe('KnowledgePointDetailPage — provenance (FE-002A PHASE 19)', () => {
     });
 
     expect(await screen.findByText('Point')).toBeInTheDocument();
-    expect(await screen.findByText('Provenance unavailable.')).toBeInTheDocument();
+    expect(await screen.findByText('来源追溯暂不可用。')).toBeInTheDocument();
   });
 });

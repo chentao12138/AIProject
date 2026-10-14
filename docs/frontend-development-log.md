@@ -489,8 +489,443 @@ stash → merge → stash pop 无冲突。lint/typecheck/test/build 四项全绿
 - 只有用户真的输入新 Key 时才发送 `apiKey`
 - 绝不发送 `"********"` 占位符
 
-### 当前状态
+### 当前状态（已更新）
 
-- `packages/api-client` 已确认**无** AI Provider 方法
-- 等 AI-009 contract 稳定 + api-client 再生后接入
-- 架构约束已写入 frontend-current-task.md
+- AI-009 contract 已进入 stable api-client（9 个 wrapper 方法）
+- Scenario A：Settings + Tutor/Chat 全部可用
+
+## FE-AI-001 Implementation Checkpoint（2026-09-13）
+
+Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
+
+### 实现
+
+- `features/ai/AiSettingsPage.tsx`：Provider/Preset/BaseUrl/Model/API Key/Enabled
+  - apiKeyConfigured 状态展示
+  - 安全 Key 替换（未改则 omit，输入新 Key 才发送）
+  - 保存后立即清空 key input state
+  - 测试连接 + 结果展示
+  - 删除 Key 按钮
+- `features/ai/AiChatPage.tsx`：对话列表 + 聊天面板
+  - 创建/归档对话
+  - 消息 composer + 发送
+  - AI 回复渲染 + references
+  - 自动滚动到底部
+- 路由：`/settings/ai` + `/spaces/:id/ai` + `/spaces/:id/ai/:convId`
+- AppShell：AI Tutor 导航 + AI Settings 导航
+- Query keys：aiSettings / aiConversations / aiConversation / aiMessages
+- 测试：8 项 key 语义测试（GET 不填 Key / omit unchanged / 只在输入时发送 /
+  保存后清空 / 测试连接 / not-configured 状态）
+
+### 安全审计
+
+- 无 localStorage/sessionStorage 存 Key ✓
+- 无 renderer → StepFun 直连 ✓
+- 无 axios/direct fetch ✓
+- 无 Key 日志 ✓
+- GET 只返回 apiKeyConfigured ✓
+- SAVE 未改 Key 时 omit ✓
+- 保存后清空 key input ✓
+
+### Final gates
+
+- lint OK / typecheck OK / test:run **340/340**（27 files）/ build OK（588.90 kB）
+- 未 commit
+
+## FE-AI-001-PRE-COMMIT-FINALIZE-01（2026-09-13）
+
+### 补充实现
+
+- **Provider-not-configured flow**：AiChatPage 检查 `enabled + apiKeyConfigured`，
+  未配置时显示警告 + 「前往 AI Settings 配置」链接
+- **AiChatPage.test.tsx**：3 项（not-configured 警告、configured 无警告、placeholder）
+
+### 关键确认
+
+- `deleteAiApiKey()` 调用真实 `DELETE /settings/ai/api-key`，非 `apiKey:""` 模拟 ✓
+- `api.stepfun.com` 仅作为 UI placeholder 文字存在，无 renderer 直连 ✓
+- Streaming：contract 无 stream endpoint → NON-STREAMING，UI 为 Sending… → 完整响应
+- Context picker / Reference navigation：BLOCKED BY CONTRACT
+  （SendMessageRequest 无 context 输入；ContextReference 无 sourceId/pageId）
+
+### Real smoke
+
+- Settings / Provider / Chat smoke：PENDING — 无运行中 backend + 无安全测试 credential
+- Production app://：Electron 启动 PASS（12s）
+
+### Final gates
+
+- lint OK / typecheck OK / test:run **343/343**（28 files）/ build OK（589.54 kB）
+- Coverage：Statements 83.06% / Branches 81.36% / Functions 77.35%
+- 未 commit
+
+## FE-QUESTION/PRACTICE/EXAM/SEARCH/REVIEW Checkpoint (2026-09-17)
+
+- 新增业务模块：Questions / Practice / Exams / Search
+- api-client 新增 wrapper：listQuestions/createQuestion/publishQuestion、
+  listPracticeSessions/createPracticeSession/startPracticeSession/finishPracticeSession/submitPracticeAnswer、
+  listExams/createExam/getExam/publishExam/createExamAttempt/startExamAttempt/getExamAttempt/submitExamAttempt/getExamResult/getExamDiagnosis/submitExamAnswer、
+  search/studyCoach/explainPracticeAnswer/explainExamAnswer
+- 新增页面：QuestionsPage/QuestionDetailPage/QuestionForm/QuestionRenderer、
+  PracticePage/PracticeSessionPage、ExamsPage/ExamAttemptPage、SearchPage
+- AppShell nav 扩展：Questions/Practice/Exams/Search/AI Tutor
+- AiChatPage：conversation history persistence（listMessages + useQuery）
+- KnowledgePointDetailPage：provenance deep-link via `?block=`（A2.1 partial）
+- AI citation deep-links：SOURCE/QUESTION/KNOWLEDGE_POINT → entity routes（A3.3 partial）
+- query-keys 扩展：questions（含 filter 维度）、practiceSessions/practiceSession/exams/exam/examAttempt/search
+- 测试新增 5 文件（Questions/Practice/Exams/Search/PracticeSession）+ 回归修复
+- Final gates：lint OK / typecheck OK / test:run 391/391 / build OK
+- BACKEND CONTRACT REQUESTS 更新：A8 Notes / A2.1 provenance / A3.2 AI context / A3.3 AI reference IDs
+- Git：分 4 个 commit 合入 feat/fe-001（api-client / feature pages / app shell+routes / tests+docs）
+- 未 push
+
+
+## FE-ARCH-HARDENING-01（2026-09-21）
+
+- 触发：对 desktop 前端做架构评审（对照 ADR-029/030/031/037/044），结论是进程边界
+  与安全骨架成立，但 renderer 内部缺三层收口，且若干不变量只写在注释里。
+- Stage A（commit cb615ca）：`auth-session` 区分「凭证已死」(400/401/403) 与
+  「后端不可用」(5xx/网络)：后者保留 safeStorage 中的 refresh token，新增
+  `restore-unavailable` 状态与 RequireAuth 重试面板；`AuthProvider` 在任意离开
+  authenticated 的转换上清空 React Query 缓存（补齐文档声明的缓存边界）；
+  main 增加 `requestSingleInstanceLock`，消除双实例竞争同一 vault 槽。
+- Stage B（commit 596e1c5）：新增 `ExamDetailPage`（`getExam`/`publishExam`/
+  `createExamAttempt` 此前在 renderer 零调用）；移除不可达且只会创建重复题的
+  `questions/:questionId/edit`，缺失的更新动词登记为 A4.5 合同请求；4 处
+  `window.location.hash` 改 `useNavigate`；新增 `route-contract.test.ts`
+  （router ↔ 全部 navigate/Link 目标，并禁止绕过 router）。
+- 门禁：lint OK / typecheck OK / test:run 405 passed (40 files) / build OK。
+- 剩余（同一评审的后续阶段）：Stage C 数据访问层与 `useSpaceId`；Stage D 类型契约
+  补全 + eslint 边界与安全基线门禁；Stage E 运行期 API base 配置 + codegen 漂移门禁
+  + ADR。
+
+## FE-ARCH-HARDENING-01（2026-09-21，续 Stage C/D/E）
+
+- Stage C（commit c47c92f）：新增 `lib/space-scope.ts`（`useSpaceId` 单点读取 URL
+  中的 space，畸形 param 不再退化成数字前缀）与 `lib/queries.ts`
+  （`spaceQuery`/`entityQuery` 统一 key + `enabled` + 守卫 + `unwrap`）；
+  `query-keys.ts` 接受 `number | null`（编码为 `'none'`，消灭 31 处 `?? 0`），
+  过滤条件改为带标签槽位，使 `questions(spaceId)` 成为过滤键的前缀从而能真正
+  invalidate；SearchPage 的 key 补上 `types/page/size`（此前第 2 页覆盖第 1 页
+  缓存槽）；AiChatPage 改为以 Query 缓存为唯一消息来源（`setQueryData` + 失败回滚）；
+  provenance deep link 用 `URLSearchParams` 构造（旧写法在缺少 pageId 时生成
+  `/sources/5&block=9`）；新增 `renderer-conventions.test.ts` 把 README/ADR 里的
+  文字约束（无内联 id 守卫、除 client 外不得 fetch、令牌不落 storage、renderer
+  不碰 Node）变成对真实源码的扫描。
+- Stage D（commit 293da31）：`lib/types.ts` 按既有 `ResultData<ApiClient['…']>`
+  方式补齐 Question/Practice/Exam/Search/AI 派生类型，features 内
+  `as unknown as` 与 `Record<string, unknown>` 清零，并暴露两个真实缺陷：
+  `PracticeResult` 读取的 score 字段并不存在于 `PracticeSessionDetail`（只在
+  finish 响应里 → 登记 A5.3），`ExamResult` 依赖 `attempt.score` / `item.stem`
+  这两个契约里没有的字段；`QuestionRenderer` 移入 `components/`，eslint 与
+  约定测试共同禁止 feature 互访（按解析后的真实路径判定）；
+  `webPreferences` 抽成 `main/window-options.ts` 并由测试固定 ADR-037 四个开关，
+  打包版关闭 DevTools 且移除默认菜单；preload 进入 vitest include 并补桥面测试。
+- Stage E（commit e9802fd）：后端地址改为 main 运行期解析（env → userData
+  `config.json` → 构建期值 → 默认），renderer 经只读 `aistudyConfig` 通道取得同一
+  值，CSP 与 client 由此不可能分歧；桥类型下沉到 `src/shared`；新增
+  `api:check`（openapi.json ↔ api.d.ts ↔ manifest.json）并纳入 `npm run build`；
+  记录 ADR-051 / ADR-052。
+- 门禁：lint OK / typecheck OK / test:run 449 passed (48 files) / build OK。
+
+## FE-AUDIT-2026-10-13（审计驱动的收口）
+
+- 输入是 `desktop/docs/AISTUDY-FRONTEND-REMAINING-REQUIREMENTS-AUDIT-2026-10-13.md`
+  （G01–G09 / W01–W18 / A1–A11 / C01–C15 / R01–R08 / B12）。纪律：本轮事项只分
+  A（本轮闭环）或 B（永久排除），单测绿不等于 E2E 通过，不允许假闭环。
+- G03/W04/W05/W06（考试答题）：逐题保存状态改为以服务端 `answeredAt` 为准
+  （`features/exams/exam-attempt-state.ts`），交卷/启动失败有可见错误，倒计时取
+  服务端 `deadlineAt` 而不是本地推算；侧栏题号用 `aria-label` 播报已答/保存中/未答
+  （5d5bccd），未评分不再显示"答错"（c308ffd）。
+- W01/W02/W03（练习）：已提交状态以服务端为真源镜像进缓存，逐题 pending/error 独立，
+  409 冲突后重读；`SHORT_ANSWER` 的 null 判定不再被当成 0 分。
+- G02/G04/G09（题库）：填空题文案按服务端判分规则（整串 trim 相等）改写（7580d06），
+  选项/答案校验前置，practice 数量范围放开到契约允许的 1–100（e12a047）。
+- W07/W08/W12/W13/W16：跨模块按真实 ID 直达练习（b65bd6a）、搜索 key 含
+  types/page/size、URL 与请求同源。
+- W10/W11（AI）：Provider 未就绪时不渲染会话列表与输入框；历史消息按页拉取，
+  按钮写"加载更多历史消息"而不是暗示时间序（契约未声明排序）。
+- 表单上限统一落进 `lib/format.ts` 常量并由契约测试逐个比对 `maxLength`/`maxItems`
+  （8facc06/b52a8f0）；上传限制、ingestion 错误码改为读服务器真实配置/枚举
+  （9be3570/a1d47d1），故意改坏即 fail。
+- 工具链：`api:generate` 增加 AIStudy 锚点校验，拒绝把别的项目的 OpenAPI 文档
+  抄进契约（f072c5f，起因是 `:8080` 上是 `identity-access-ms`）；`api:check` 的
+  sha256 归一化 CRLF + `.gitattributes` 固定生成物为 LF，消除 Windows 上永久假失败。
+- 门禁（当时）：65 files / 777 tests、lint 0、typecheck 0、`api:check` 同步、
+  `dist:win` 产出 111 MB 安装包（仅产出，未安装）。
+
+## FE-CONTRACT-WAVE-2026-10-14（后端起来之后）
+
+- 后端会话把 AIStudy 跑在 `:8081`（`:8080` 是别人的服务），据此重新生成契约：
+  路径 **67 → 195**。快照立刻揭出一个已上线缺陷：`CreateExamRequest` 服务端绑的是
+  `timeLimitMinutes`，前端按旧快照发 `durationMinutes`，于是每张考试都没有时长，
+  依赖 `deadlineAt` 的倒计时也就无从倒计时。改为 `timeLimitMinutes`，并把常量与
+  守卫一起改名（fa43298/a6fd7b2）。
+- 根治防回归：新增 `npm run api:live`（`check-api.mjs --live`），把已提交文档与运行中
+  服务器文档做**规范化内容比对**（键排序后哈希），零路径变化的纯字段改名也能测出；
+  比对前先拒绝非 AIStudy 文档。两次负向验证：字段改名 fixture 与新路径 fixture 都
+  让门禁 fail，真实服务器则 pass。
+- `packages/api-client`：补 Notes CRUD+archive、题目 update/archive/restore、练习答案
+  回读、考试 update/archive；并删掉 **28 处 `(client as any)`**——那些绕过契约类型的
+  调用正是 `durationMinutes` 不被 `tsc` 发现的原因，删除后包内 typecheck 0 error。
+- 题型闸门按新契约重新决策：`CreateQuestionRequest.correctOrder/matches` 与
+  `AnswerPayloadView.orderingAnswer/matchingAnswer` 已发布，且服务端确实判分
+  （`QuestionAnswerEvaluator:139/:152`）。排序位置是 **1-based**（payload items 带
+  `minimum: 1`，判分做整表 `equals`），配对是 `[{"left","right"}]` 的 JSON 串（做集合
+  比较）。ORDERING/MATCHING 因此可创建/可发布/可作答；仍缺的是读侧
+  （`QuestionAnswerView` 没有 `correctOrder`/`matchesJson`）→ 记为 C09b，只保留
+  回显缺失的提示，撤掉创建/作答的拒绝文案。
+- 服务端答案规则核对（`PracticeAnswerService:255-345`）：每种题型只允许携带自己那一个
+  字段，多余字段 400；practice 对 `orderingAnswer` 元素强制 `@Min(1)`，exam 侧既没有
+  `@Min` 又仍接受旧的 `selectedOptionKeys` 顺序——两条路径宽严不一致，已记入
+  `BACKEND-CONTRACT-REQUESTS.md`。
+- 文档：台账改为"以发布出来的契约为准"（不再以服务器源码为准），C06 只算半交付
+  （逐题回顾有了，历史成绩仍无处读）；冒烟步骤拆成"仍被契约阻塞"与"只缺运行"两张表；
+  ROUTE_MAP/README 补 Notes 路由与"如何把安装版指向真实后端"。
+- 本轮进行中：Notes 模块、题目编辑/归档、排序配对作答控件、练习刷新恢复、搜索类型
+  过滤与 NOTE 深链、来源/知识点跨模块入口由并行子 Agent 实施，主 Agent 负责路由/导航
+  接线（88c204f 已注册 Notes 两条路由并加导航与 A9.1 覆盖测试）与最终门禁、安装验收。
+
+## FE-CONTRACT-WAVE-2026-10-14（续：功能落地与发布门禁实跑）
+
+- 并行子 Agent（同 worktree + 文件白名单 + 主 agent 提交）交付：Notes 全模块
+  （列表分页 / 关键字、创建、编辑器 + 未保存拦截、归档/删除、知识点与正文块双向
+  关联）、题目七类可创建 + 编辑 + 归档/恢复、ORDERING/MATCHING 作答控件、练习
+  刷新后以服务端 `…/answers` 恢复、搜索类型筛选与 NOTE 深链、来源/知识点的
+  新建笔记与问 AI 入口（W16）。
+- 子 Agent 触顶中断一次（题目 lane），主 agent 收尾：其 MATCHING 模型（左右两列
+  存成 L1…/R1… 选项、pairs 存右列下标、`matches` 提交键引用）是对的，测试还停在
+  旧的"一行一组"UI；另有一处配对重编号断言方向写反（`[2,0,1]` 删右 1 → `[1,0,-1]`
+  而不是 `[-1,0,2]`）。同时撤掉一个我起草的超限用例：`matches` 只装键，表单实际
+  到不了 4000 字符上限，为不可能的分支写测试是负债。
+- W15 真残留：workbench 的 page 归一化在"当前素材没有任何页"时提前 return，于是
+  旧素材的 `?page=&block=` 会留在 URL 上并在刷新后回来。修法是补 `pageSetResolved`
+  落地判定——去掉它，合法深链会在页列表到达前被删掉（临时移除后新测试失败已验证）。
+- 发布门禁实跑（此前只有单测）：
+  - R02 **装 / 起 / 卸 全流程通过**。静默安装 exit 0，
+    `%LOCALAPPDATA%\Programs\AIStudy\AIStudy.exe` productVersion 0.1.0.0，开始菜单
+    与桌面快捷方式生成，窗口标题 `AIStudy`，4 进程无崩溃；静默卸载删除目录、两个
+    快捷方式与 `HKCU\...\Uninstall` 项，但保留 `%APPDATA%\AIStudy`（
+    `deleteAppDataOnUninstall=false` 的预期）。
+  - 坑：NSIS 卸载器是**异步**的，进程先返回、文件后删。只看退出码或隔几秒去查
+    目录会误判成"卸载失败"。判据应为等目录消失。
+  - 新缺陷（打包版实测发现）：`Set-Content -Encoding utf8` 写的 `config.json` 带
+    UTF-8 BOM，`parseRuntimeConfig` 把整份文件当损坏丢弃 → 静默回落到打包默认
+    端口，运行期改地址失效。已修（剥掉前导 BOM）并由
+    `src/main/runtime-config.test.ts` 固定。
+  - 诚实边界：匿名状态下客户端**不发任何请求**（PHASE 7 无健康探测），打包版又按
+    ADR-037 关掉 DevTools，因此"配置的后端 origin 真被使用"与渲染内容仍需账号才能
+    观测 → R03–R05 挂在一个桌面测试账号上，已向后端会话单条排队索取。
+- 门禁（本轮结束时实跑）：lint 0 / typecheck 0 / `api:check` 与 `api:live` 均绿 /
+  **70 files 971 tests 全绿** / coverage statements 91.39% / build OK（renderer
+  889.64 kB）/ 制品 `AIStudy Setup 0.1.0.exe` 111,467,982 字节（01:38，时间戳从
+  制品读回）。
+- W17（键盘 / 读屏）补了一处实测可得的东西：排序作答控件里「上移 / 下移」只是 DOM
+  重排，读屏不会播报，而「确认当前顺序」提交后按钮直接消失，用户连自己停在哪都听不到。
+  现在 `<ol>` 外面有 `role="status"` 的实况文本（当前排列 / 已提交顺序），并有测试固定；
+  把这段 live region 摘掉该测试即失败（负向验证做过）。其余 W17 证据（真实读屏器、
+  1024×700 等分辨率）仍属运行期验收，挂在账号后面。门禁重跑：70 files / 972 tests、
+  lint 0、typecheck 0。
+- 同轮补 W17 的另一半：作答选项此前**只用颜色**表达状态（选中 = primary，
+  标准答案 = primary / 你选错 = danger），读屏听不出差别。现在选中状态走
+  `aria-pressed`，复习态的标准答案写进可及名称（`第一项（标准答案）`），判断题
+  两个按钮同样带 `aria-pressed`。真机上"哪个是绿的那个"这件事第一次有了等价的
+  说法。受影响的一处详情页断言同步改成断言新的可及名称。
+  门禁：**70 files / 975 tests**、lint 0、typecheck 0。真实读屏器与 1024×700
+  等分辨率证据仍属运行期（挂在账号后）。
+
+## 2026-10-14（第三轮）：契约缺口里有一半已经不存在了
+
+- **`api:live` 第一次真的干活**：把已提交快照与 `http://localhost:8080/v3/api-docs`
+  做规范化比对后确认 197-path 快照就是运行中服务发的文档（`api:check` 与 `api:live`
+  双绿）。这条门的意义在这一轮才显出来——`BACKEND-CONTRACT-REQUESTS.md` 里
+  **C02/C03/C04/C06/C10/C11/C-Paging 七行还写着"后端没做"**，而快照里字段和端点
+  一个都不缺：`KnowledgePointSourceResponse.sourceId/sourcePageId`、
+  `SendMessageRequest{sourceId,sourcePageId,contentBlockId,knowledgePointId}`、
+  `ContextReference` 的同名 id、`GET .../practice-sessions/{id}/result`、
+  `AttemptQuestionView{answer,answered}`、
+  `GET /spaces/{spaceId}/exam-attempts?examId=&status=&page=&size=`、
+  `QuestionPageResponse`。也就是说这些行**已经不是我该等的东西，而是我该做的活**；
+  矩阵与冒烟文档里对应的"Blocked by contract"行因此被移进新的
+  "Closed by the contract wave — frontend work"表，并逐行写明契约证据。
+- **C11 的形状问题在我方消失了**：后端问我们要「单卷 attempt 分页」还是「跨卷最近
+  attempt」，实际发的空间级列表用 `examId` 当可选过滤器同时覆盖两种。已回信
+  **明确请他们不要再补 `/exams/{examId}/attempts`**——先扫现有 path 再要点子，
+  省掉一个端点和一次联调。
+- **散文声明 vs 契约事实（C05）**：后端消息写「PUT /questions/{id}（仅 DRAFT 可改）」，
+  但同仓 `QuestionService.update()`（QuestionService.java:122-126）只拦 ARCHIVED
+  → 控制器 404（QuestionController.java:72-76），PUBLISHED 是能改进去的；重生成后的
+  这个 operation **连 description 都没有，响应只列 200**。两边证据都摆在
+  `BACKEND-CONTRACT-REQUESTS.md` 的 C05 行里，并把状态记成**未验证**而不是"已交付"：
+  既没有据散文给 UI 加 PUBLISHED 门禁（那会禁掉服务端其实允许的操作），也没有放行到
+  详情页/列表页的「编辑」入口逻辑——它保持只禁 ARCHIVED，这是能证明的那一半。
+  已一次一条问后端：运行中到底拦不拦、返回码是什么，并要求把规则落进契约
+  （`@Operation(description=…)` 或结构化 409+错误码）。
+- **同仓 `server/` 副本自己就旧**：`db/migration` 最大编号是
+  `V057__add_note_context_links.sql`，而后端实例已跑到 **V066**（practice 的
+  score/max_score/answered_count/correct_count 四列就是 V066 加的）。全仓 grep
+  `PRACTICE_SESSION_NOT_SUBMITTED`、`PRACTICE_RESULT_NOT_RECORDED` **零命中**。
+  结论：**"读 Java 常量"的守卫测试在这里没有源可读**，硬写只会得到一个正则空匹配的
+  假守卫。所以 A5.3 的两条码写成 `format.ts` 的命名常量
+  （`PRACTICE_RESULT_ERROR_CODES`），注释里写清出处是后端消息 + main V066，
+  并把"码进契约"记在 C11/C12 的开放项里。
+- **A5.3 / C06 分数闭环**：交卷后的成绩页不再留任何 `finish` 响应里的数字，改为每次
+  mount 调 `GET .../practice-sessions/{id}/result`（`usePracticeResult` +
+  纯函数 `practiceResultState` 把 `PracticeResultView` 映射成
+  `no-payload / unknown-status / not-finished / unscored / graded` 五态）。
+  `finish` 的返回值与 result 载荷**故意互相矛盾**地写进测试，再断言屏幕上的数字来自
+  后者——这才是"内存不是成绩来源"的证据。删掉了 `usePracticeSubmitSummary`
+  （应用内唯一的内存分数缓存）与随之失效的 `PracticeSubmitSummary` 类型和
+  `queryKeys.practiceSubmit`。
+- 同轮把两条 409 码接上：`apiProblemCode()`（`lib/api-error.ts`，只读 ProblemDetail
+  的 `code`，`normalizeApiError` 的安全文案不受影响）+
+  `practiceResultErrorNotice()`。"还没交卷"和"结束时后端还没有分数字段"是两件事，
+  后者尤其不能被读成 0 分；未知码保持原文案，不冒充已知原因。英文 `detail`
+  不进 UI（测试直接断言 `queryByText(/some internal english text/)` 为 null）。
+- 后端还告知 `explanation` 在 answers 列表里恒为 null 是**缺陷**不是设计（他们修），
+  因此 PracticeReviewList 保留"缺解析"的可见状态而不是把它渲染成空字符串。
+- 未跟踪文件 `login.json` / `spec-live.json`：后端提醒"看着像调试产物、别提交凭据"。
+  在本仓全深度（排除 `node_modules`/`.git`）搜过——`find` 无命中、`git ls-files`
+  无命中、`git status --ignored` 也没有任何 json 产物。**这两个文件不在我这棵树里**，
+  应属后端自己的 checkout。提交前照旧扫了 staged diff 的
+  `password|secret|token|authorization` 关键字，干净。
+- 门禁（本轮实跑）：`api:check` 与 `api:live` 双绿；lint 0（本轮改动文件）；
+  typecheck 0；practice + lib + questions 三条 lane 共 **88 + 400** 测试绿。
+  全量门禁等仍在写的 exams / ai 两条 lane 收口后重跑并在此更新数字。
+
+## 2026-10-14（第四轮）：三条 lane 落地，"等后端"这一类里大半本来就不是后端的活
+
+- **exam / practice / ai·knowledge·sources 三条并行 lane 全部收口并分别提交**
+  （`4cb52ae` 考试续作答+attempt 历史、`5f4cd8a` 练习分数只读 result、
+  `79d9867` AI 附带 id + 引用按 id 导航）。三条 lane 的产出都是**接线**，不是新端点、
+  不是新依赖：把 A2.1/A3.2/A3.3/A6.1/A6.2/A5.3/C-Paging 从"Blocked (pending backend)"
+  挪进"Wired"，并且每条都写明契约证据。
+- 考试侧的判分三态保持诚实：`AttemptSummaryView` **没有** `gradingStatus`，
+  所以"已交卷未评分"只能靠服务端有没有给数字来区分——`—` + 等待评分，不是 `0 / 0`。
+  我此前在 `BACKEND-CONTRACT-REQUESTS.md` 里写过"必须从 `status` 判、不许用 null 分数"，
+  **那句话按现有契约是做不到的**（`ExamAttemptService.java:42-44` 只有三个状态），
+  已改成明确的后端待办：把 attempt 已有的 `gradingStatus`（`:46-48`、`:416`）搬到列表行上。
+  历史行也**没有** `deadlineAt`，所以列表里不能声称某次进行中作答"已超时"——
+  过期判定留在作答页读服务端 `deadlineAt`。
+- 练习侧补上后端这轮才给的两条 409 码：`apiProblemCode()`（`lib/api-error.ts`）+
+  `practiceResultErrorNotice()`，"还没交卷"与"结束时后端还没有分数字段"分开说，
+  未知码保持原文案；测试直接断言英文 `detail` 不出现在屏幕上。
+- AI 侧一条规则值得留在文档里：**引用导航只用结构化 id，永不解析 `locator`**，
+  且 `ON DELETE SET NULL`（`V065__ai_reference_structured_locators.sql:24-27`）意味着
+  指针可以为空而 `id` 指向死行——所以没有服务端 id 就渲染成文本而不是猜链接。
+  新增待办：`ContextReference` 没有 `questionId`，`WRONG_QUESTION` 因此无处可跳。
+- **同仓 `server/` 副本原来一直是旧的**：后端权威 checkout 是 `D:\AIProject\server`，
+  本工作区这份迁移只到 **V057**、`AiDto.SendMessageRequest` 还是单 `content` 的 record。
+  这直接影响守卫的可信范围：`backend-vocabulary-contract.test.ts` 那批"读 Java 常量"
+  的测试证明的是"前端没瞎猜旧代码声明的词表"，**证明不了新实例的行为**。
+  已把这条限制写进 `docs/FINAL-FEATURE-MATRIX.md` 的证据表，而不是留成隐含前提。
+- 门禁（本轮实跑）：lint 0、`tsc` node+web 0、**72 files / 1054 tests 全绿**、
+  coverage statements 92.15% / branches 87.25% / functions 83.99%、
+  `api:check` 与 `api:live`（对 `:8080`）均绿、`npm run build` renderer **923.63 kB**。
+- 制品：`npm run dist:win` 重跑，`AIStudy Setup 0.1.0.exe` **111,472,382 字节**
+  （02:53，sha256 前缀 `cb6cc9ecf291a9c9`），**这个包还没装过**——R02 的安装/启动/卸载
+  证据仍属 01:55 那个包，矩阵里已按"A/B 事实"写清，不拿旧证据冒充新制品。
+- 账号仍未恢复：本轮实测 `POST :8080/api/v1/auth/login`（dev/devpassword123）→
+  `401 UNAUTHORIZED`。所以 A5.3 分数读回、`deadlineAt` 这两条此前记为"未跑"的 live
+  断言，以及 R03–R05，**继续挂在后端承诺的重灌窗口上**（已一次一条索取）。
+
+## 2026-10-14（第五轮）：后端交付 + 验证窗口，两条"未跑"的 live 断言补完了
+
+- **契约 197 → 198 path**：`api:generate` 对运行实例重生成后 `api:check` / `api:live` 双绿。
+- **`api:live` 假红一次，根因是 springdoc 把请求的 Host 回显进 `servers[].url`**：
+  同一份文档经 `localhost` 取回是 `http://localhost:8080`，经 `127.0.0.1` 取回是
+  `http://127.0.0.1:8080`，于是比对永远不等——"paths added: none, removed: none"
+  却报 canonical 不同。修法：比对**剔除 `servers`**（它是"你怎么访问到的"，不是契约内容），
+  并把失败信息改成打印两份 canonical 长度与**第一个差异字符位置**。
+  这次排障花了我四个临时脚本，就是因为原来那句话只说"不一样"，不说哪里不一样。
+  负向证据：改动前那份被人为改过字段的快照在 `api:check` 的 manifest 步骤就红了（守卫顺序如文档所述）。
+- **C05 从散文变成契约事实，并且实测到了**：PUT 的 description 写明只接受 DRAFT，
+  非 DRAFT 返回 **409 `code: QUESTION_NOT_EDITABLE`**，`status` 成了真枚举
+  （DRAFT/PUBLISHED/ARCHIVED/REJECTED）。于是「编辑」入口对 PUBLISHED/ARCHIVED/REJECTED
+  一律收起（列表页 + 详情页），编辑表单对这些状态只读、横幅点名那个 code，
+  并且**处理**这个 code（表单开着时题目被别人发布，也不会得到一个看不懂的失败）。
+  live 侧：同一道题 DRAFT 时 PUT 200，发布后 PUT 409 + 该 code。**没有**依据旧的
+  散文加门禁，也没依据旧代码放行——是契约变了才动 UI。
+- **C09b 落地**：`QuestionAnswerView` 现在有 `correctOrder` / `matches`。
+  两条"读不回来"的提示文案连同 `QUESTION_TYPE_DISPLAY_GAP` 一起删干净（不是留着不显示），
+  并加了会**反向失败**的守卫：任何人把这类文案加回来，`format.test.ts` 与
+  `question-type-contract.test.ts` 就红。详情页新增「标准顺序 / 标准配对」区块。
+  这里我先写错了一次语义：`correctOrder[i]` 是**第 i 个选项被放到的位置**，
+  不是"第 i 个位置放哪个选项"；按前者渲染才会把 `[2,1]` 读成 `第1位:第二项 / 第2位:第一项`。
+  语义以创建侧 `toCorrectOrder()` 写入的方向为准，测试钉死。
+- **ORDERING 破坏性变更核对**：后端新增"ORDERING 必须带 options(>=2) 且 correctOrder 是完整排列"。
+  我这侧**已经**是这个形状（编辑器把选项与排列一起发），实测 `options+correctOrder` → 201；
+  故意只发 `correctOrder` 不发 `options` → 400 `VALIDATION_ERROR`。已把"我们实际发什么形状"回给对方。
+- **两条此前记为"未跑"的 live 断言补完（22/22 全通过）**：练习分数在 `finish` 前后分别是
+  409 `PRACTICE_SESSION_NOT_SUBMITTED` 与 200 `{score:1,maxScore:1,correctCount:1}`；
+  `orderingAnswer:[1,2,3]` 服务端判 `isCorrect=true`；考试 `deadlineAt` 有值（30 分钟限时），
+  attempt 题行作答前 `answered:false / answer:null`；attempt 历史未判分时 `score:null`（不是 0）。
+  `answers` 列表的 `explanation` 缺陷也已修好并实测返回中文。
+  脚本留在 `scripts/live-journey.mjs`，可重跑；它按设计会往对方 schema 里写数据，只在承诺的窗口内跑。
+  注意 attempt 的创建动词是 `POST /exams/{examId}/sessions`（我第一版脚本猜成 `…/attempts` → 404）。
+- 门禁：lint 0 / `tsc` 0 / **73 files 1070 tests 全绿** / `api:check` + `api:live` 绿。
+- 仍未做：Notes 的 `archived` 过滤 + restore 按钮接线（本轮后端刚给）、打包版 R03–R05、
+  制品重安装；`matchingAnswer` 的 typed pairs 与练习模块专属冲突码仍缺。
+
+## 2026-10-14（第六轮）：窗口里后端又在跑，`api:live` 抓到一个"路径不变、字段变了"
+
+- 上一段验证窗口结束后，后端**当场又发了新东西**：`AttemptSummaryView.gradingStatus`
+  （枚举 `GRADED / PARTIALLY_GRADED / UNGRADED`，attempt 未判完时为 null）。
+  这就是我在 C11 里要的那一个字段——**`api:live` 在路径集合完全相同的情况下抓到了它**
+  （新加的诊断打印出"两份 canonical 第一个差异在字符 7896"），否则我只会以为自己那两条
+  负向 fixture 才是它唯一能做的事。契约重生成后 path 仍 198，`api:check` 绿。
+- 于是 attempt 历史的三态**不再靠"有没有数字"反推**：`exam-attempt-history.ts` 改读
+  `gradingStatus`，`已评分 / 客观题已判分，主观题仍待人工评分 / 已交卷，等待评分`
+  都成了服务端的说法；分数只在 GRADED 与 PARTIALLY_GRADED 时打印。
+  枚举由 `exam-attempt-history.test.ts` 直接对着 `openapi.json` 钉住（写死前端常量就红）。
+  `EXAM_GRADING_STATUSES` 的顺序刻意与契约枚举一致，不是按字母排的。
+- Notes 接上了刚交付的那半边：`只看已归档` 把 `archived=true` 交给服务端（列表默认隐藏归档行，
+  这不是前端能"看见"的东西），`NoteView.archivedAt` 决定哪一行出现「恢复」，
+  `POST /notes/{id}/restore` 成功后失效列表缓存；失败时保留行的可见状态并显示
+  反 IDOR 文案，不假装笔记回来了。反查（`?knowledgePointId=` 等）契约已有、入口未接，记在矩阵里。
+- C05 补了最后一个不自洽的地方：409 `QUESTION_NOT_EDITABLE` 之后页面**重读题目**，
+  横幅变成"非草稿不可编辑"、保存禁用。第一版我用 `useEffect` 在 `query.data` 变化时重置草稿，
+  结果 react-query 每次 refetch 都换引用，正在输入的草稿会被抹掉——这是真回归，
+  所以改成**什么都不重置**：`dirty` 只在可编辑时才成立，用户输入留在屏幕上但不再宣称"未保存"
+  （一个永远不会被接受的保存不是待提交修改）。测试同时钉住"错误文案还在"和"输入没被吞掉"。
+- 本轮实测状态要说清楚：**`gradingStatus` 与 Notes 归档/恢复都没跑过 live**。
+  后端为发这个字段重启了实例，之后 `127.0.0.1:8080` 连续 6 次探活都是 ECONNREFUSED，
+  我没有自行把服务拉起来（也不该拉）。已把 `api:live` 当前**跑不了**这件事写进矩阵证据表：
+  `api:check` 绿只证明快照与类型自洽，不证明它等于运行中的服务。
+- 门禁（实跑）：lint 0 warnings / `tsc` node+web 0 / **73 files 1078 tests 全绿** /
+  coverage statements 92.22% / build renderer **929.24 kB**。制品仍是 02:53 那个包，
+  本轮改动之后未重构建，也从未安装过 R03–R05 需要的那一版。
+
+## 2026-10-14（第七轮）：第五批交付接上，但 live 打回一个后端静默丢数据的缺陷
+
+- 后端重启到 **`:8081`** 并发了 E-04（ADMIN 人工改分闭环）/ E-07（AI 评分建议），再次清空 `aistudy_flyway_test`。
+  按锚点判身份不看端口：`api:live` 对 8081 报出 **+3 条 admin path（198 → 201）**，重生成后
+  `api:check` 与 `api:live` 均绿、前端 `tsc` 0 error。
+- **这三个 admin 端点 desktop 故意不接**：本应用没有 Admin 屏、审计里也没有，它们归 `admin-web`。
+  随之而来的新错误码（`EXAM_GRADING_INCOMPLETE` / `EXAM_ANSWER_NOT_SUBJECTIVE` /
+  `EXAM_ANSWER_NOT_FOUND` / `EXAM_GRADE_SCORE_OUT_OF_RANGE` / `AI_GRADING_SUGGESTION_NOT_AVAILABLE`）
+  我也**不往 learner 的 exam-error 表里加**——learner 路由不可能返回它们，加了就是为不会发生的场景写分支，
+  并且会稀释"每个已声明码都被处理"这条守卫的意义。答复了他们的三个问题：改分队列**不需要分页**
+  （契约里题位 `maxItems:100`，全量有序即可）；队列**应该**显式带 `referenceAnswer`/`explanation`
+  （只有题干+作答+满分就打分等于猜），且只给 ADMIN；AI 建议放**单题按钮**，不要 batch。
+- **实测把一个阻塞缺陷钉住了**：考试里答 ORDERING，`POST …/exam-attempts/{id}/answers`
+  带 `{orderingAnswer:[1,2,3]}` 返回 **200**，但响应与随后 `GET …/{attemptId}` 里的 `answer`
+  **所有字段都是 null**，而 `answered:true` ——服务端承认答了、内容丢了；接着 `submit` 一律
+  **400 `VALIDATION_ERROR`「请求包含无法处理的参数」**。对照组：`SHORT_ANSWER` 单独成卷能交卷并得
+  `PARTIALLY_GRADED + score 0/5`；同一个 ordering 载荷走练习链路能正常判分。所以缺陷在 exam 写入/
+  冻结快照分支。已把重现步骤、复现 id 与"这个 400 需要专属码"发给后端，并在矩阵里把
+  **考试 ORDERING 作答的 live 闭环标成被阻塞**（代码与单测都在，但没有 E2E 就不说 E2E 过了）。
+  harness 里新增了一条断言（echo 必须带回原 orderingAnswer），这个缺陷以后每次跑都会点名它。
+- **上一轮我自己接错的一处被实测纠正**：`ExamAnswerView.submitted` 我按"第二个已保存凭据"用了，
+  而 live 显示**存下的 answer 带的是 `submitted:false` + `answeredAt`**，契约又完全没写这个字段的含义。
+  照那个规则，重载后学习者自己已存的答案会被显示成"未作答"——正是 W04 那类错误。现在 `isSavedOnServer`
+  只看 `answered` / `answeredAt`，注释与测试都固定住"`submitted` 两个方向都不改变判定"，
+  并把它作为待后端定义的字段记进 `BACKEND-CONTRACT-REQUESTS.md`。
+  这也是本轮唯一需要**回滚我自己已提交逻辑**的地方（`c31a3c0` 那条 commit 的说明里声称它是第二凭据）。
+- Notes 那半边接完并 live 验证过：`?archived=true` 返回归档行且带 `archivedAt`（默认列表仍不含它），
+  `POST /notes/{id}/restore` → **204** 后笔记回到默认列表。
+- 新提的 learner 侧缺口：`ExamResultView` / `ExamAttemptView` 都没有 `gradingStatus`，所以历史行能说
+  "客观题已判分，主观题待人工"，一进成绩页就只剩一个分数——**部分成绩会被当成最终成绩读**。
+  已请求在 result 上加 `gradingStatus`（最好带 `pendingGradeCount`）。
+- 门禁：lint 0 / `tsc` node+web 0 / **73 files 1078 tests**（未改测试数量之外的口径）；
+  live harness 29/33，四个 FAIL 全部归因上面那一个后端缺陷，未当作通过。

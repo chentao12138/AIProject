@@ -7,13 +7,20 @@
  */
 
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { SOURCE_FORM_LIMITS } from '../../lib/format';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
-import { unwrap, normalizeApiError } from '../../lib/api-error';
+import {
+  NOT_FOUND_MESSAGE,
+  normalizeApiError,
+  unwrap,
+} from '../../lib/api-error';
+import { spaceQuery } from '../../lib/queries';
+import { requireId, useSpaceId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
 import { formatDateTime } from '../../lib/format';
-import { isPositiveId, parsePositiveIdParam } from '../../lib/ids';
+import { isPositiveId } from '../../lib/ids';
 import { useFormError } from '../../lib/use-form-error';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -29,41 +36,31 @@ const DESKTOP_SOURCE_TYPE = 'DESKTOP_UPLOAD';
 export function SourcesPage() {
   const api = useApiClient();
   const queryClient = useQueryClient();
-  const { spaceId: spaceIdParam } = useParams();
+  const spaceId = useSpaceId();
   const [creating, setCreating] = useState(false);
 
-  const spaceId = parsePositiveIdParam(spaceIdParam);
-
-  const sourcesQuery = useQuery({
-    queryKey: queryKeys.sources(spaceId ?? 0),
-    queryFn: () => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api.listSources(spaceId).then(unwrap);
-    },
-    enabled: spaceId !== null,
-  });
+  const sourcesQuery = useQuery(
+    spaceQuery(spaceId, queryKeys.sources(spaceId), (id) => api.listSources(id))
+  );
 
   const createSource = useMutation({
-    mutationFn: (title: string) => {
-      if (spaceId === null) {
-        return Promise.reject(new Error('invalid space id'));
-      }
-      return api
-        .createSource(spaceId, { title, sourceType: DESKTOP_SOURCE_TYPE })
-        .then(unwrap);
-    },
+    mutationFn: (title: string) =>
+      api
+        .createSource(requireId(spaceId, 'space id'), {
+          title,
+          sourceType: DESKTOP_SOURCE_TYPE,
+        })
+        .then(unwrap),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.sources(spaceId ?? 0),
+        queryKey: queryKeys.sources(spaceId),
       });
       setCreating(false);
     },
   });
 
-  if (spaceId === null) {
-    return <ErrorState message="资源不存在或当前不可访问。" />;
+  if (!spaceId) {
+    return <ErrorState message={NOT_FOUND_MESSAGE} />;
   }
 
   const sources = sourcesQuery.data ?? [];
@@ -71,10 +68,10 @@ export function SourcesPage() {
   return (
     <div className="page">
       <PageHeader
-        title="Sources"
+        title="学习来源"
         actions={
           <Button variant="primary" onClick={() => setCreating(true)}>
-            Create Source
+            创建学习来源
           </Button>
         }
       />
@@ -90,11 +87,11 @@ export function SourcesPage() {
 
       {sourcesQuery.isSuccess && sources.length === 0 && (
         <EmptyState
-          title="No sources yet"
-          description="Register your first source for this space."
+          title="还没有学习来源"
+          description="先为该空间登记一个学习来源。"
           action={
             <Button variant="primary" onClick={() => setCreating(true)}>
-              Create Source
+              创建学习来源
             </Button>
           }
         />
@@ -104,11 +101,11 @@ export function SourcesPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Title</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Created</th>
-              <th>Actions</th>
+              <th>标题</th>
+              <th>类型</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -129,7 +126,7 @@ export function SourcesPage() {
                         to={`/spaces/${spaceId}/sources/${sourceId}`}
                         className="nav-link"
                       >
-                        Open
+                        打开
                       </Link>
                     ) : (
                       <span className="muted">—</span>
@@ -171,7 +168,7 @@ function CreateSourceDialog({
   const formError = useFormError(error);
 
   return (
-    <Dialog title="Create Source" onClose={onClose} busy={pending}>
+    <Dialog title="创建学习来源" onClose={onClose} busy={pending}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -183,14 +180,15 @@ function CreateSourceDialog({
         }}
       >
         <Input
-          label="Title"
+          label="标题"
           required
+          maxLength={SOURCE_FORM_LIMITS.titleMaxLength}
           value={title}
           onChange={(event) => {
             setTitle(event.target.value);
             formError.clear();
           }}
-          placeholder="e.g. Chapter 3 notes"
+          placeholder="例如：第三章笔记"
         />
         <p className="form__note">
           Source type is fixed to DESKTOP_UPLOAD for this client.
@@ -206,10 +204,10 @@ function CreateSourceDialog({
             variant="primary"
             disabled={pending || !title.trim()}
           >
-            {pending ? 'Creating…' : 'Create'}
+            {pending ? '创建中…' : '创建'}
           </Button>
           <Button onClick={onClose} disabled={pending}>
-            Cancel
+            取消
           </Button>
         </div>
       </form>

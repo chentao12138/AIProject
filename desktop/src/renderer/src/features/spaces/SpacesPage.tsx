@@ -9,6 +9,7 @@
  */
 
 import { useState } from 'react';
+import { SPACE_FORM_LIMITS } from '../../lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApiClient } from '../../lib/api-context';
@@ -59,10 +60,10 @@ export function SpacesPage() {
   return (
     <div className="page">
       <PageHeader
-        title="Learning Spaces"
+        title="学习空间"
         actions={
           <Button variant="primary" onClick={() => setCreating(true)}>
-            Create Learning Space
+            创建学习空间
           </Button>
         }
       />
@@ -78,11 +79,11 @@ export function SpacesPage() {
 
       {spacesQuery.isSuccess && spaces.length === 0 && (
         <EmptyState
-          title="No learning spaces yet"
-          description="Create your first Learning Space to start organizing sources and knowledge."
+          title="还没有学习空间"
+          description="先创建一个学习空间，用来组织学习来源与知识。"
           action={
             <Button variant="primary" onClick={() => setCreating(true)}>
-              Create Learning Space
+              创建学习空间
             </Button>
           }
         />
@@ -94,11 +95,11 @@ export function SpacesPage() {
             const spaceId = space.id;
             const card = (
               <Card
-                title={space.name ?? `Space #${spaceId ?? 'unknown'}`}
+                title={space.name ?? `空间 #${spaceId ?? '未知'}`}
                 actions={<StatusBadge status={space.status} />}
               >
                 <p className="card__text">
-                  {space.description || 'No description'}
+                  {space.description || '暂无说明'}
                 </p>
               </Card>
             );
@@ -147,7 +148,7 @@ function CreateSpaceDialog({
   const formError = useFormError(error);
 
   return (
-    <Dialog title="Create Learning Space" onClose={onClose} busy={pending}>
+    <Dialog title="创建学习空间" onClose={onClose} busy={pending}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -162,17 +163,19 @@ function CreateSpaceDialog({
         }}
       >
         <Input
-          label="Name"
+          label="名称"
           required
+          maxLength={SPACE_FORM_LIMITS.nameMaxLength}
           value={name}
           onChange={(event) => {
             setName(event.target.value);
             formError.clear();
           }}
-          placeholder="e.g. Math 101"
+          placeholder="例如：高一数学"
         />
         <Input
-          label="Description (optional)"
+          label="说明（可选）"
+          maxLength={SPACE_FORM_LIMITS.descriptionMaxLength}
           value={description}
           onChange={(event) => {
             setDescription(event.target.value);
@@ -184,10 +187,10 @@ function CreateSpaceDialog({
         )}
         <div className="form__actions">
           <Button type="submit" variant="primary" disabled={pending || !name.trim()}>
-            {pending ? 'Creating…' : 'Create'}
+            {pending ? '创建中…' : '创建'}
           </Button>
           <Button onClick={onClose} disabled={pending}>
-            Cancel
+            取消
           </Button>
         </div>
       </form>
