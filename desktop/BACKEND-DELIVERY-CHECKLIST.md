@@ -29,6 +29,9 @@
 
 ## 1. 仍需后端交付 / 修复（Open Asks）
 
+> **已闭环（2026-10-14）**：**B2**（前端已基于 `:8081` 重生成 `packages/api-client`，提交 `cbf7d8c`）、**B7**（`AttemptSummaryView.deadlineAt` 已交付）、**B8**（`ExamResultView.gradingStatus`+`pendingGradeCount` 已交付）。这几项后端无需重做。
+> **注意**：B3 的 `explanation` 恒 null 指的是 **practice-session 答案**接口，与本次重生成捕获的 *admin-only* `ExamAnswerGradingView.explanation` 不是同一字段，**B3 仍 Open**。
+
 ### P0 —— 阻断端到端
 
 - **[B1] 考试 ORDERING 答案存储为空 → 无法交卷（measured 2026-10-14）**
@@ -37,10 +40,9 @@
   - 要求：① 修复考试路径 ORDERING 存储；② 给出**可定位的 400 错误码**（当前文案不可定位，UI 只能显示"校验未通过"+原句，学习者不知哪题丢答案）。
   - 影响：含 ORDERING 题的试卷无法交卷，阻断 A6.2/A6.3 全链路。
 
-- **[B2] 提交并更新 OpenAPI 规格（gating 所有前端接入）**
-  - 前端 `packages/api-client` 仍是 **67-path** 旧快照；后端 live 已到 **195/197 path**。
-  - 要求：把更新后的 `openapi.json` **提交进仓库**（或保持可访问的 stable 服务地址 + 版本），让前端执行 `npm run api:generate` 重生成 `api.d.ts` 并 `typecheck` 通过。
-  - 说明：一旦 `api.d.ts` 反映合同且 typecheck 通过，前端在同一次提交内实现对应 UI，不再下版本。
+- **[B2 ✅ 已闭环 2026-10-14] 提交并更新 OpenAPI 规格（gating 所有前端接入）**
+  - 前端已在 `feat/fe-001` 提交 `cbf7d8c`，基于运行中服务（`:8081`，**201 path**）重新生成 `packages/api-client`（`api.d.ts`/`openapi.json`/`manifest.json`）。`api:check` 与 `api:live` 均通过，`typecheck` 干净，1048 测试全绿。
+  - 后端无需再单独提交 `openapi.json`；保持 `:8081` 为可访问的 stable 服务即可。后续若改合同，前端再次 `npm run api:generate` 重生成。
 
 - **[B3] `explanation` 恒为 null 缺陷（后端已确认是 bug）**
   - `GET …/practice-sessions/{id}/answers` 的 `explanation` 恒为 `null`，错题回顾无法显示解析。
@@ -54,9 +56,9 @@
 
 - **[B6] C05 前置条件确认**：运行中的服务对 **PUBLISHED** 题目 `PUT` 是接受还是拒绝、用哪个码？`QuestionService.update()` 实际只拒绝 ARCHIVED→404，生成的操作无描述。要求：把真实行为写进合同（description 或结构化 409+code），前端据此决定编辑页是否对 PUBLISHED 开放。
 
-- **[B7] `AttemptSummaryView` 补齐 `gradingStatus` 与 `deadlineAt`**：历史行无法区分"已提交待评分"与"已评分"（当前只能用 `score` 是否为数字推断，若未评分却返回 `score:0` 会误判）；也缺 `deadlineAt`，历史行无法显示过期。前端切换点集中在 `features/exams/exam-attempt-history.ts`。
+- **[B7 ✅ 已交付 2026-10-14] `AttemptSummaryView` 的 `gradingStatus` 与 `deadlineAt`**：`gradingStatus` 此前已在合同；本轮 `deadlineAt`（`date-time`，未开始时为 null）已出现在 live 规格并被前端重生成捕获。前端 `exam-attempt-history.ts` 已按 `gradingStatus` 区分"分数是否最终"，答题页用 `deadlineAt` 倒计时；历史行过期展示现已可用。
 
-- **[B8] 结果页"部分成绩"提示**：`ExamResultView`/`ExamAttemptView` 缺 `gradingStatus`，`PARTIALLY_GRADED` 的 learner 看到 `score`/`maxScore` 与 `isCorrect:null` 却无"成绩未定稿"提示。要求：结果读模型带 `gradingStatus`（最好加 `pendingGradeCount`），UI 可显示"当前为部分成绩，N 题待人工评分"。
+- **[B8 ✅ 已交付 2026-10-14] 结果页"部分成绩"提示**：`ExamResultView` 现已带 `gradingStatus`（`GRADED`/`PARTIALLY_GRADED`/`UNGRADED`）+ `pendingGradeCount`，`ExamAttemptView` 另带 `deadlineAt`。前端切换点集中在 `exam-attempt-history.ts`（已按 `gradingStatus` 决定分数是否展示为最终，可据 `pendingGradeCount` 显示"当前为部分成绩，N 题待人工评分"）。
 
 ### P2
 
