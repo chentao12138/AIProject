@@ -172,16 +172,40 @@ Order of operations, and why the first one is not optional: (1) invalidate the s
 delete that subject's `auth_refresh_session` rows or rotate `AUTH_JWT_SECRET`, which
 invalidates every issued token; deleting the file without this leaves a valid 43-char refresh
 token in a public-adjacent history. (2) Then, and only then, rewrite `main` / the batch
-branch and re-create the tag. History rewriting on shared refs and the forced push are
-deliberately NOT done from this session: they are destructive to everyone else's clones,
-and the backend session explicitly left that cleanup to the user. (3) `login.json` and
-`spec-live.json` are now in `.gitignore` at the repo root, because the mechanism was an
-automatic checkpoint of an untracked file rather than a deliberate `git add` — ignoring the
-name is what stops the next one.
+branch and re-create the tag. (3) `login.json` and `spec-live.json` are now in `.gitignore`
+at the repo root, because the mechanism was an automatic checkpoint of an untracked file
+rather than a deliberate `git add` — ignoring the name is what stops the next one.
 
+**Steps 1 and 2 are now done (2026-10-16), on the user's authorization.** Step 1 was
+performed and *measured* by the backend, not assumed: they hashed the leaked plaintext
+refresh token and looked it up (bare, `hex:`-prefixed, partial-32) in every schema the server
+can reach — `aistudy_flyway_test` (1 account, 3 sessions, all issued today for `dev`),
+`aistudy_flyway_spike` (empty), `aistudy_spike` (no `user_account` table) — with **zero**
+hits, and the access token's `exp` (1791910236) had passed on 2026-10-14. The pair is inert,
+killed incidentally by the IT wipe rather than by an act of revocation, and
+`AUTH_JWT_SECRET` was deliberately **not** rotated because that needs a restart and would
+have cut the live `dev` session. Their stated caveat stands: inertness is proven only for
+schemas inside that container, so a pre-2026-10-15 DB dump elsewhere could still replay it.
+
+Step 2, split by ref so nobody's checked-out base moves under them: this session rewrote
+`main` with `git filter-branch --index-filter 'git rm --cached --ignore-unmatch login.json
+spec-live.json'` — `d01892a` → **`2252314`**, 231 commits on both sides, and
+`git diff --name-status d01892a 2252314` is exactly two `D` lines and nothing else — then
+pushed it with `--force-with-lease=refs/heads/main:d01892a…` and re-read the remote:
+`origin/main = 2252314`, tree contains neither file. `refs/original/refs/heads/main` (the
+filter-branch backup pointing at the dirty history) has been deleted. The pre-cleanup bundle
+is not present on any searched path (`D:\`, both worktree roots, the user profile to depth 3,
+`%LOCALAPPDATA%\Temp`); if it turns up, it holds the token plaintext and counts as a secret.
+`batch-c-frontend-handoff` is rewritten and pushed by the backend themselves (their tip is
+`58245ae`; origin still shows `37ed6c4` until they publish), and the tag
+`backend-2026-10-14-e04e07-b1` is **held** — it was never pushed (`git ls-remote --tags
+origin` is empty), and they will re-create it once both rewrites are out, after which the two
+sides exchange final SHAs instead of each moving it.
+
+`origin/batch-c-frontend-handoff` therefore still carries `917a14f` until that push lands.
 Nothing in this repository writes credentials to disk any more: `scripts/live-journey.mjs`
-reads `AISTUDY_USER` / `AISTUDY_PASS` from the environment and keeps the bearer token in
-memory only.
+and both R03 scripts read `AISTUDY_USER` / `AISTUDY_PASS` from the environment and keep the
+bearer token in memory only.
 
 ---
 ## Production security review (R07 / A11.4), 2026-10-13
