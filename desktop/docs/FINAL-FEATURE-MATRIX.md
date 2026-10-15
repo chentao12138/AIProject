@@ -89,7 +89,7 @@ Real command output at this commit, not a historical claim:
 | Unit | `npm run test:run` | 73 files / 1078 tests passed |
 | Coverage | `npm run test:coverage` | statements 92.22%, branches 87.26%, functions 84.09% |
 | Build | `npm run build` | main 13.95 kB + preload 1.65 kB, renderer **924.53 kB** (+ CSS 30.31 kB) |
-| Package | `npm run dist:win`, then `scripts/r02-installed-app.ps1` | **111,473,859 bytes, rebuilt at `21ac56e`, R02 cycle PASS and R03 measured on it.** Silent per-user install exit 0; installed `AIStudy.exe` `productVersion 0.1.0.0`; launching it produced 4 processes and a window titled `AIStudy`; the silent uninstall removed the install directory and the HKCU `Uninstall` entry while keeping the `%APPDATA%\AIStudy` directory (the `deleteAppDataOnUninstall: false` policy). The script waits for the directory to disappear because the NSIS uninstaller returns before it has finished. R03 evidence: 18 rows in `docs/SMOKE-INSTRUCTIONS.md`. |
+| Package | `npm run dist:win`, then `scripts/r02-installed-app.ps1` | **111,474,655 bytes, rebuilt at `ac8ec53`, R02 cycle PASS and R03/R04/R05 measured on it.** Silent per-user install exit 0; installed `AIStudy.exe` `productVersion 0.1.0.0`; launching it produced 4 processes and a window titled `AIStudy`; the silent uninstall removed the install directory and the HKCU `Uninstall` entry while keeping the `%APPDATA%\AIStudy` directory (the `deleteAppDataOnUninstall: false` policy). The script waits for the directory to disappear because the NSIS uninstaller returns before it has finished. R03 evidence: 18 rows in `docs/SMOKE-INSTRUCTIONS.md`. |
 | Package | `npm run dist:win` | see "what this does not prove" — the artifact is produced, and installing it is a separate gate |
 
 The previous table (2026-10-13: 65 files / 777 tests, renderer 775.91 kB) is kept
@@ -149,12 +149,19 @@ What this does **not** prove, and remains open A-class work:
   in the backend's prose (the two practice-result 409 codes) are recorded as such in
   `BACKEND-CONTRACT-REQUESTS.md` instead of being dressed up as checked constants.
 - R03 installed-app auth (login → restart → restore → offline → logout →
-  anonymous restart) is **measured on the installed build** (2026-10-16, 18 rows
-  across the two scripts). Two R03 sub-cases stay open and need a second stable
-  account, which the desktop app cannot manufacture for itself: 主体切换不串缓存 and
-  the 401 race. R04 (module-by-module GUI journey) and R05 (per-module paging /
-  URL replay / error states) are still not run. The contract-gated rows in the
-  Blocked table above remain gated on backend fields.
+  anonymous restart) is **measured on the installed build**: 18 rows across the two
+  R03 scripts, re-run on the current artifact.
+- R04/R05 are measured by `scripts/r04-r05-installed-journey.mjs`: **23/23 with 2
+  skipped**. Paging is proven against a real second page (21 questions, fixture
+  created and archived by the script itself), URL replay, back/forward, the 480px
+  width, an unknown id, offline + recovery and logout all pass; the sources and
+  knowledge rows pass on their components' empty states because space 29 has no
+  sources or points. The two skipped rows are the source workbench and KP
+  provenance — same reason — and their API equivalents are the 34/34 live journey,
+  which is a weaker claim and recorded as such.
+- Still open inside R03/R05: 主体切换不串缓存, the 401 race, duplicate-submit and
+  keyboard-only traversal. The second account (`learner`, space 30) has now been
+  issued, so the first two are unblocked rather than blocked.
 - 1054 passing tests cover renderer behaviour against mocked client responses.
   They cannot detect a contract that does not exist, so no E2E PASS is claimed
   from this table (see `docs/SMOKE-INSTRUCTIONS.md`).
@@ -202,7 +209,12 @@ is not present on any searched path (`D:\`, both worktree roots, the user profil
 origin` is empty), and they will re-create it once both rewrites are out, after which the two
 sides exchange final SHAs instead of each moving it.
 
-`origin/batch-c-frontend-handoff` therefore still carries `917a14f` until that push lands.
+**Closed afterwards, and re-checked from this side:** the backend rewrote and pushed
+`batch-c-frontend-handoff` → `380748b` and published the tag on that tip; re-reading the
+remote, `origin/main`, `origin/batch-c-frontend-handoff`, `origin/feat/fe-001` and
+`backend-2026-10-14-e04e07-b1` all have neither file in their tree. The old objects are
+still unreachable-but-present in the shared store until the backend runs
+`gc --prune=now`, which it has offered to do once this session says it is finished.
 Nothing in this repository writes credentials to disk any more: `scripts/live-journey.mjs`
 and both R03 scripts read `AISTUDY_USER` / `AISTUDY_PASS` from the environment and keep the
 bearer token in memory only.

@@ -31,7 +31,7 @@ declaring `FRONTEND V1 FUNCTIONALLY COMPLETE`.
    npm run dist:win
    ```
    Confirm `dist/AIStudy Setup 0.1.0.exe` has **today's timestamp** before installing.
-   **Status now:** the artifact on disk is 111,473,859 bytes, built at `21ac56e`, and it
+   **Status now:** the artifact on disk is 111,474,655 bytes, built at `ac8ec53`, and it
    *has* been installed: `scripts/r02-installed-app.ps1` PASSed against it (silent install
    exit 0 → `productVersion 0.1.0.0` → 4 processes with a window titled `AIStudy` →
    uninstall removed the directory and the HKCU entry, kept `%APPDATA%\AIStudy`), and
@@ -444,8 +444,8 @@ runtime override was silently dead and the CSP blocked the origin the operator h
 just configured. Fixed at `21ac56e` (`app.setName(APP_USER_DATA_NAME)` before
 anything resolves a path, pinned to `build.productName` by a drift guard).
 
-Then, on `AIStudy Setup 0.1.0.exe` = 111,473,859 bytes, against `:8081` with the
-`dev` account:
+Then, on `AIStudy Setup 0.1.0.exe` = 111,474,655 bytes (rebuilt at `ac8ec53`, after the
+form/pager layout pass), against `:8081` with the `dev` account:
 
 | `r03-installed-app.mjs` (10/10) | Observed |
 |---|---|
@@ -473,3 +473,44 @@ the 401 race need a second stable account — the desktop app cannot verify its 
 cache isolation with one user; R04 is the module-by-module GUI journey
 (Sources → Knowledge → Questions → Practice → Exam → Search → Notes → AI) and R05
 is per-module paging / URL replay / error states. Neither is run yet.
+
+## R04 / R05 on the installed build — 23/23, 2 skipped for want of data
+
+`scripts/r04-r05-installed-journey.mjs` walks the packaged window module by module
+over CDP. Three rules make the number mean something: each row says whether it was
+reached **by click or by URL**, a page is only read once it has settled (the app's
+own 加载… text gone), and a module with no server data passes only when that
+component's own empty state is what rendered.
+
+| Case | Observed on the installed build |
+|------|--------------------------------|
+| Spaces → space opens by clicking its card | shell links all eight modules, `missing=[]` |
+| Sources | `rows=0` and the component's own `还没有学习来源` — EMPTY, not a pass on a blank page |
+| Knowledge | same, `还没有知识点` |
+| Questions pager | `第 1 / 2 页 · 共 21 条`, 20 rows |
+| `?page=1` | different server page: first row `#50` → `#30` |
+| Paged URL replays across reload | hash keeps `?page=1`, still `第 2 / 2 页` |
+| `?page=99` (page that cannot exist) | healed to `?page=1`, `第 2 / 2 页`, 1 row — this is the row that caught the pager defect fixed at `6566f48` |
+| Question detail | opens by clicking 查看: `archived-notice`, `question-restore-button`, `question-renderer` |
+| Practice → session review | `result-score`, `review-item` on `practice/28` |
+| Exams → detail → attempt history | `attempt-history-total`, 3 rows |
+| Past attempt states whether the score is final | `result-score-line`, 得分 7 / … on `attempts/3` |
+| Search submits a query by typing + clicking | 8 hit links rendered |
+| Notes count + archived filter | `notes-archived-mode` appears, URL becomes `?archived=1` |
+| AI surface | `provider-not-ready` gate (no provider configured), not a crash |
+| back / forward | `history.back()` returns to `#/spaces/29/questions` with its pager |
+| 480px window | `scrollWidth-innerWidth=0px`, nav complete |
+| Unknown id | `资源不存在或当前不可访问。` + 重试, page intact |
+| Offline reload then recovery | `无法连接到后端服务…重试` while offline, `note-count` back after |
+| Logout ends the journey | `#/login` |
+
+**Skipped, and why:** the source workbench (ingestion state, content blocks) and the
+knowledge-point provenance/related-notes rows. Space 29 currently has **zero** sources
+and zero knowledge points — verified against `GET /spaces/29/sources` and
+`/knowledge-points`, both `[]` — so those GUI legs cannot be walked read-only. Their
+API-level equivalents are measured by `scripts/live-journey.mjs` (34/34), which is a
+different claim from "walked in the packaged GUI" and is recorded as such.
+
+**Still not run for R05:** duplicate-submit and keyboard-only traversal, and the
+401-race / subject-switch cases (the second account `learner` + space 30 has since
+been issued, so these are now unblocked rather than blocked).
