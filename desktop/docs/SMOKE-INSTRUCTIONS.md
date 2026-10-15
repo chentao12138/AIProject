@@ -31,14 +31,14 @@ declaring `FRONTEND V1 FUNCTIONALLY COMPLETE`.
    npm run dist:win
    ```
    Confirm `dist/AIStudy Setup 0.1.0.exe` has **today's timestamp** before installing.
-   **Status at this commit:** the artifact on disk is 111,472,382 bytes, built
-   2026-10-14 02:53, and it has **not** been installed. The recorded R02 pass
-   (silent install → window titled `AIStudy` → uninstall keeps `%APPDATA%\AIStudy`)
-   belongs to the 01:55 build (111,468,074 bytes), which is three lanes behind this
-   one. Steps 2–11 must be re-run on the current file before R02 is claimed here,
-   and steps 3 onward still need the test account that `:8080` currently refuses
-   (`POST /api/v1/auth/login` with `dev` → `401 UNAUTHORIZED`, probed again this
-   round after the backend's V066 Flyway run).
+   **Status now:** the artifact on disk is 111,473,859 bytes, built at `21ac56e`, and it
+   *has* been installed: `scripts/r02-installed-app.ps1` PASSed against it (silent install
+   exit 0 → `productVersion 0.1.0.0` → 4 processes with a window titled `AIStudy` →
+   uninstall removed the directory and the HKCU entry, kept `%APPDATA%\AIStudy`), and
+   steps 3 onward are measured by the two R03 scripts at the end of this file. Note step 3
+   as written only works because of `21ac56e`: before it the packaged app resolved userData
+   from package.json `name` (`aistudy-desktop`) and silently ignored the
+   `%APPDATA%\AIStudy\config.json` the installer/product name implies.
 2. Install `dist/AIStudy Setup 0.1.0.exe` (double-click, accept defaults).
 3. Point the installed app at the running backend. The build default is
    `http://localhost:8080`; precedence is
@@ -381,7 +381,7 @@ contract; they need execution, not a backend change.
 | Search hit of type NOTE | C-Search: enum has `NOTE`, hit carries `noteId` |
 | 排序/配对 authoring + answering + grading | C09 write side: `correctOrder`/`matches`, `orderingAnswer`/`matchingAnswer` |
 | Exam created with a time limit, and the countdown that depends on it | Field-name correction: the server binds `timeLimitMinutes`; the frontend had been sending `durationMinutes`, so no exam ever got a limit and `deadlineAt` came back null |
-| Installed-app login / restore / logout (A10, steps 1–11 above) | Only a desktop test account now. `dev` / `devpassword123` on `:8081` (space 87) **was** issued on 2026-10-14 16:28 and has since been removed by the backend's own integration-test run — `/health` answers UP while login returns `401 UNAUTHORIZED`, and a restore has been requested. R02 (install → launch → uninstall) is proven and needs no account; these steps are not proven until one exists, and must be executed on `dist/AIStudy Setup*.exe`, not the unpacked build |
+| Installed-app login / restore / logout (A10, steps 1–11 above) | **Measured 2026-10-16 on `dist/AIStudy Setup 0.1.0.exe`** over CDP: 10/10 (`scripts/r03-installed-app.mjs`) + 8/8 across real process restarts (`scripts/r03-auth-lifecycle.mjs`). See "R03 on the installed build" below. What still needs a human or another account: 主体切换不串缓存 and the 401 race |
 
 Before any of the above is run: `OPENAPI_URL=<server>/v3/api-docs npm run api:live`
 must be green. The `durationMinutes` incident is exactly what that gate now
@@ -404,9 +404,9 @@ Window granted by the backend (no IT, no restart); `:8081` readiness 200,
 | Provisional vs final label | the two states the result page now reads are exactly `PARTIALLY_GRADED + pendingGradeCount>0` and `GRADED + 0`, both observed live |
 | Practice result, deadline, notes archived/restore | unchanged passes: 409 `PRACTICE_SESSION_NOT_SUBMITTED` → 200 with score; `deadlineAt` present; `?archived=true` shows the row with `archivedAt`; `POST /notes/{id}/restore` → 204 |
 
-Still not run: the packaged app (A10 / R03–R05) — the artifact on `dist/` predates every
-commit in this session, so R02's old pass does not cover it and the login flow has never
-been observed in an installed build.
+Still not run at the time of that table: the packaged app (A10 / R03–R05) — the
+artifact on `dist/` predated every commit in that session. It has since been
+rebuilt and R03 is measured; see the two sections at the end of this file.
 
 ## R02 re-run on the current artifact — PASS, with the check now scripted
 
@@ -421,3 +421,55 @@ with a title appeared": logging in needs credentials typed into that window, and
 packaged build has DevTools off (ADR-037), so there is nothing observable to assert about
 the session, the vault restore, or CSP/network without a human at the keyboard. The row
 stays `not run` rather than being upgraded from a launched process.
+
+## R03 on the installed build — measured, and the bug it found first
+
+The packaged build could not be observed before: DevTools are removed (ADR-037)
+and an anonymous app issues no requests. Electron still honours
+`--remote-debugging-port`, so the window is driven over CDP. Scripts:
+`scripts/cdp.mjs` (client), `scripts/r03-install-and-launch.ps1` (silent install
++ launch), `scripts/r03-installed-app.mjs` (10 rows), and
+`scripts/r03-auth-lifecycle.mjs` (8 rows, real process restarts). Credentials are
+read from `AISTUDY_USER` / `AISTUDY_PASS` only.
+
+**First run failed, and the failure was real.** Login returned
+`登录失败，请稍后重试。` while `%APPDATA%\AIStudy\config.json` was present and
+valid: `window.aistudyConfig.getApiBaseUrl()` answered `http://localhost:8080`
+and the document CSP said `connect-src 'self' http://localhost:8080`. Cause:
+`app.getPath('userData')` derives from `app.getName()` = package.json `name`
+(`aistudy-desktop`), while electron-builder's `productName` — the installer, the
+Start-Menu entry, the uninstall key and ADR-051's documented path — is `AIStudy`.
+The installed app read a directory nobody writes config into, so ADR-051's
+runtime override was silently dead and the CSP blocked the origin the operator had
+just configured. Fixed at `21ac56e` (`app.setName(APP_USER_DATA_NAME)` before
+anything resolves a path, pinned to `build.productName` by a drift guard).
+
+Then, on `AIStudy Setup 0.1.0.exe` = 111,473,859 bytes, against `:8081` with the
+`dev` account:
+
+| `r03-installed-app.mjs` (10/10) | Observed |
+|---|---|
+| renderer paints the login route | `#/login`, `input[type=text]:username` + `input[type=password]`, one `登录` button |
+| no credentials in web storage before/after login | `localStorage` and `sessionStorage` both empty |
+| login lands on the spaces route | `#/spaces`, header shows `后端地址：http://localhost:8081` and the `dev` subject |
+| CSP blocks an origin the config never named | `fetch('http://127.0.0.1:9999/…')` → `blocked: TypeError` |
+| main reports the configured origin | `http://localhost:8081` (not the build default) |
+| the configured backend answers over the CSP-allowed origin | `GET http://localhost:8081/api/v1/spaces` with a bogus bearer → **401** |
+| session survives a reload | still `#/spaces`, no login form |
+| logout | back to `#/login`, no web storage |
+
+| `r03-auth-lifecycle.mjs` (8/8) | Observed |
+|---|---|
+| fresh start is anonymous | `#/login`, `auth-refresh.bin` absent, no web storage |
+| login writes the vault | `auth-refresh.bin` present, 129 bytes, while web storage stays empty |
+| **process killed → started again** | restores to `#/spaces` with `input[type=password]` count 0, no login submitted |
+| **offline reload keeps the session** | with `Network.emulateNetworkConditions{offline:true}` + reload: still `#/spaces`, body reads `无法连接到后端服务。请确认服务已启动后重试。` + `重试` / `用其他账号登录` — auth restore is main-side IPC, not a request |
+| network returns | reload shows the space list again (`integration-space`, `B1 verification window`) |
+| logout deletes the vault | `#/login` and `auth-refresh.bin` gone |
+| **restart after logout** | anonymous again: `#/login`, no vault, no web storage |
+
+**Still open inside R03/R04/R05** (not upgraded by these rows): 主体切换不串缓存 and
+the 401 race need a second stable account — the desktop app cannot verify its own
+cache isolation with one user; R04 is the module-by-module GUI journey
+(Sources → Knowledge → Questions → Practice → Exam → Search → Notes → AI) and R05
+is per-module paging / URL replay / error states. Neither is run yet.

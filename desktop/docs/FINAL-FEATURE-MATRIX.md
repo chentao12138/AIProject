@@ -89,7 +89,7 @@ Real command output at this commit, not a historical claim:
 | Unit | `npm run test:run` | 73 files / 1078 tests passed |
 | Coverage | `npm run test:coverage` | statements 92.22%, branches 87.26%, functions 84.09% |
 | Build | `npm run build` | main 13.95 kB + preload 1.65 kB, renderer **924.53 kB** (+ CSS 30.31 kB) |
-| Package | `npm run dist:win`, then `scripts/r02-installed-app.ps1` | **111,473,964 bytes, rebuilt at this HEAD (commit `311b33f`), and R02 re-run against it: PASS.** Silent per-user install exit 0; installed `AIStudy.exe` `productVersion 0.1.0.0`; launching it produced 4 processes and a window titled `AIStudy`; the silent uninstall removed the install directory and the HKCU `Uninstall` entry while keeping `%APPDATA%AIStudy` (the `deleteAppDataOnUninstall: false` policy). The script waits for the directory to disappear because the NSIS uninstaller returns before it has finished. |
+| Package | `npm run dist:win`, then `scripts/r02-installed-app.ps1` | **111,473,859 bytes, rebuilt at `21ac56e`, R02 cycle PASS and R03 measured on it.** Silent per-user install exit 0; installed `AIStudy.exe` `productVersion 0.1.0.0`; launching it produced 4 processes and a window titled `AIStudy`; the silent uninstall removed the install directory and the HKCU `Uninstall` entry while keeping the `%APPDATA%\AIStudy` directory (the `deleteAppDataOnUninstall: false` policy). The script waits for the directory to disappear because the NSIS uninstaller returns before it has finished. R03 evidence: 18 rows in `docs/SMOKE-INSTRUCTIONS.md`. |
 | Package | `npm run dist:win` | see "what this does not prove" — the artifact is produced, and installing it is a separate gate |
 
 The previous table (2026-10-13: 65 files / 777 tests, renderer 775.91 kB) is kept
@@ -124,12 +124,16 @@ What this does **not** prove, and remains open A-class work:
   **asynchronous** — its process returned before anything was deleted, so
   checking the exit code (or the files, seconds later) reads as a failed
   uninstall. Wait for the directory to disappear.
-- **Not proven by that run:** that the installed renderer *paints the app*, and
-  that a configured backend origin is actually used. Anonymous by design, the app
-  issues **zero** requests before login (there is no health probe, per PHASE 7),
-  so neither could be observed without credentials — and the packaged build has
-  DevTools disabled (ADR-037), so there is no console to read. That is what R03
-  still needs: a desktop test account.
+- **Proven afterwards, on the rebuilt artifact:** that the installed renderer
+  paints the app and that a configured backend origin is really used. Anonymous
+  by design, the app issues **zero** requests before login, and the packaged build
+  has DevTools disabled (ADR-037) — so this needed Electron's
+  `--remote-debugging-port`, not a console. `scripts/r03-installed-app.mjs` (10/10)
+  and `scripts/r03-auth-lifecycle.mjs` (8/8) measured it, and the first run found a
+  real defect: `app.getPath('userData')` came from package.json `name`
+  (`aistudy-desktop`) while `productName` and ADR-051 say `AIStudy`, so the
+  packaged app never read `config.json`, answered the build default, and the CSP
+  derived from that blocked the configured origin. Fixed at `21ac56e`.
 - **One limit on the source-read guards:** `backend-vocabulary-contract.test.ts`
   and the ingestion guards read `../server/**.java`, and this workspace's copy of
   that tree is **behind the running instance** — its migrations stop at
@@ -144,9 +148,13 @@ What this does **not** prove, and remains open A-class work:
   synced, so the exemption cannot rot into a silent pass. Facts that are still only
   in the backend's prose (the two practice-result 409 codes) are recorded as such in
   `BACKEND-CONTRACT-REQUESTS.md` instead of being dressed up as checked constants.
-- R03 installed-app auth (login → restart → restore → logout → anonymous
-  restart) and the R04/R05 end-to-end journeys are gated on that same account;
-  the contract-gated rows in the Blocked table above are gated on backend fields.
+- R03 installed-app auth (login → restart → restore → offline → logout →
+  anonymous restart) is **measured on the installed build** (2026-10-16, 18 rows
+  across the two scripts). Two R03 sub-cases stay open and need a second stable
+  account, which the desktop app cannot manufacture for itself: 主体切换不串缓存 and
+  the 401 race. R04 (module-by-module GUI journey) and R05 (per-module paging /
+  URL replay / error states) are still not run. The contract-gated rows in the
+  Blocked table above remain gated on backend fields.
 - 1054 passing tests cover renderer behaviour against mocked client responses.
   They cannot detect a contract that does not exist, so no E2E PASS is claimed
   from this table (see `docs/SMOKE-INSTRUCTIONS.md`).
