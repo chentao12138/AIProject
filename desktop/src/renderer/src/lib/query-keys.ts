@@ -137,6 +137,10 @@ export const queryKeys = {
       size?: number;
       keyword?: string;
       archived?: boolean;
+      knowledgePointId?: number;
+      sourceId?: number;
+      contentBlockId?: number;
+      questionId?: number;
     } = {}
   ) => ['notes', part(spaceId), ...labelled(filters)] as const,
   note: (spaceId: number | null, noteId: number | null) =>

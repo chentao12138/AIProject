@@ -599,6 +599,12 @@ describe('KnowledgePointDetailPage', () => {
       response: { status: 500 },
     }));
     const apiClient = mockApiClient({
+      // The related-notes section is a second read on this page; stub it so the
+      // assertion below stays about the publish error alone.
+      listNotes: vi.fn(async () => ({
+        data: { items: [], page: 0, pageSize: 20, totalItems: 0, totalPages: 0 },
+        response: { status: 200 },
+      })),
       listKnowledgeCategories: vi.fn(async () => ({
         data: [],
         response: { status: 200 },
@@ -919,5 +925,68 @@ describe('KnowledgePointDetailPage — provenance (FE-002A PHASE 19)', () => {
 
     expect(await screen.findByText('Point')).toBeInTheDocument();
     expect(await screen.findByText('来源追溯暂不可用。')).toBeInTheDocument();
+  });
+});
+
+describe('KnowledgePointDetailPage — related notes (C-Notes-reverse)', () => {
+  const page = (items: unknown[]) => ({
+    data: { items, page: 0, pageSize: 20, totalItems: items.length, totalPages: 1 },
+    response: { status: 200 },
+  });
+
+  function renderWithNotes(listNotes: ReturnType<typeof vi.fn>) {
+    const apiClient = mockApiClient({
+      listNotes,
+      getKnowledgePoint: vi.fn(async () => ({
+        data: { id: 5, spaceId: 3, title: 'Point', content: 'body', status: 'DRAFT' },
+        response: { status: 200 },
+      })),
+      listKnowledgeCategories: vi.fn(async () => ({ data: [], response: { status: 200 } })),
+    });
+    renderWithProviders(<KnowledgePointDetailPage />, {
+      apiClient,
+      initialEntries: ['/spaces/3/knowledge/5'],
+      routePath: '/spaces/:spaceId/knowledge/:knowledgePointId',
+    });
+    return apiClient;
+  }
+
+  it('asks the notes list for this point and links each returned note', async () => {
+    const listNotes = vi.fn(async () =>
+      page([
+        { id: 41, spaceId: 3, title: '公式整理', contentFormat: 'PLAIN_TEXT', updatedAt: '2026-10-02T08:00:00Z' },
+        { id: 42, spaceId: 3, title: '旧笔记', contentFormat: 'PLAIN_TEXT', updatedAt: '2026-10-03T08:00:00Z', archivedAt: '2026-10-04T08:00:00Z' },
+      ])
+    );
+    renderWithNotes(listNotes);
+
+    // The reverse lookup is a filter on the notes list — the client asks for
+    // this point, it does not slice some other list down.
+    await waitFor(() =>
+      expect(listNotes).toHaveBeenCalledWith(3, {
+        knowledgePointId: 5,
+        page: 0,
+        size: 20,
+      })
+    );
+    const link = await screen.findByRole('link', { name: '公式整理' });
+    expect(link).toHaveAttribute('href', '/spaces/3/notes/41');
+    expect(screen.getByText(/已归档/)).toBeInTheDocument();
+  });
+
+  it('says there is nothing related when the server returns an empty page', async () => {
+    renderWithNotes(vi.fn(async () => page([])));
+    expect(await screen.findByTestId('related-notes-empty')).toBeInTheDocument();
+    expect(screen.queryAllByTestId('related-note')).toHaveLength(0);
+  });
+
+  // A read that failed is not "no notes" — that would tell the reader nothing is
+  // related when the server only failed to answer.
+  it('keeps a failed related-notes read distinct from an empty one', async () => {
+    renderWithNotes(
+      vi.fn(async () => ({ error: { code: 'INTERNAL_ERROR' }, response: { status: 500 } }))
+    );
+    expect(await screen.findByTestId('related-notes-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('related-notes-empty')).not.toBeInTheDocument();
   });
 });

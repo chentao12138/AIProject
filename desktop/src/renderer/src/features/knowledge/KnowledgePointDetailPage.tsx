@@ -34,7 +34,7 @@ import {
 import { entityQuery, spaceQuery } from '../../lib/queries';
 import { requireId, useSpaceId } from '../../lib/space-scope';
 import { queryKeys } from '../../lib/query-keys';
-import { formatDateTime, originLabel } from '../../lib/format';
+import { formatDateTime, NOTE_FORM_LIMITS, originLabel } from '../../lib/format';
 import { parsePositiveIdParam, isPositiveId } from '../../lib/ids';
 import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
@@ -82,6 +82,28 @@ export function KnowledgePointDetailPage() {
       (id, point) => api.listKnowledgePointSources(id, point)
     )
   );
+
+  // C-Notes-reverse: the notes that belong to THIS point. The server matches the
+  // id against both the note's own context pointer and its M:N link rows, so one
+  // query covers both ways a note can be related — no `/knowledge-points/{id}/notes`
+  // sub-resource was needed. Failure must not take the detail page down.
+  const relatedNotesQuery = useQuery({
+    ...spaceQuery(
+      spaceId,
+      queryKeys.notes(spaceId, {
+        knowledgePointId: isPositiveId(knowledgePointId) ? knowledgePointId : undefined,
+        page: 0,
+        size: NOTE_FORM_LIMITS.pageSize,
+      }),
+      (id) =>
+        api.listNotes(id, {
+          knowledgePointId: requireId(knowledgePointId, 'knowledge point id'),
+          page: 0,
+          size: NOTE_FORM_LIMITS.pageSize,
+        })
+    ),
+    enabled: idsValid,
+  });
 
   const publish = useMutation({
     mutationFn: () =>
@@ -353,6 +375,47 @@ export function KnowledgePointDetailPage() {
             })}
           </ul>
         )}
+      </section>
+      <section className="workbench-section" aria-label="关联笔记">
+        <h2 className="section-title">关联笔记</h2>
+        {relatedNotesQuery.isPending && <LoadingState text="加载关联笔记…" />}
+        {/* A failed read is never shown as "no notes": that would tell the
+            reader nothing is related when the server only failed to answer. */}
+        {relatedNotesQuery.isError && (
+          <div data-testid="related-notes-error">
+            <ErrorState
+              message={normalizeApiError(relatedNotesQuery.error).message}
+              detail="无法读取与该知识点相关的笔记，本页其他内容不受影响。"
+              onRetry={() => void relatedNotesQuery.refetch()}
+            />
+          </div>
+        )}
+        {relatedNotesQuery.isSuccess &&
+          (relatedNotesQuery.data?.items?.length ?? 0) === 0 && (
+            <p className="page__note" data-testid="related-notes-empty">
+              还没有笔记引用这个知识点（正文指针与知识点的 M:N 链接都算引用）。
+            </p>
+          )}
+        {relatedNotesQuery.isSuccess &&
+          (relatedNotesQuery.data?.items?.length ?? 0) > 0 && (
+            <ul className="point-list" data-testid="related-notes">
+              {(relatedNotesQuery.data?.items ?? []).map((note, index) => (
+                <li key={note.id ?? `note-${index}`} data-testid="related-note">
+                  {isPositiveId(note.id) ? (
+                    <Link
+                      className="nav-link"
+                      to={`/spaces/${spaceId}/notes/${note.id}`}
+                    >
+                      {note.title?.trim() === '' ? `笔记 #${note.id}` : note.title}
+                    </Link>
+                  ) : (
+                    '（该笔记没有返回 ID，无法打开）'
+                  )}
+                  {note.archivedAt ? <span className="muted"> · 已归档</span> : null}
+                </li>
+              ))}
+            </ul>
+          )}
       </section>
     </div>
   );

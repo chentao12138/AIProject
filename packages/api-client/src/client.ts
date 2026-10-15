@@ -1133,6 +1133,16 @@ export function createApiClient(
         keyword?: string;
         /** Archived rows are filtered out unless this is true. */
         archived?: boolean;
+        /**
+         * The reverse lookups (C-Notes-reverse). A knowledge point / source /
+         * block id matches BOTH the note's own context pointer and its M:N link
+         * rows, per the backend's delivery note — so one query covers both ways
+         * a note can belong to an entity.
+         */
+        knowledgePointId?: number;
+        sourceId?: number;
+        contentBlockId?: number;
+        questionId?: number;
       }
     ) {
       return client.GET('/api/v1/spaces/{spaceId}/notes', {
