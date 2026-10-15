@@ -16,6 +16,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { Input } from '../../components/Input';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
+import { SelectMenu } from '../../components/SelectMenu';
 import type { components } from '@aistudy/api-client';
 import type { AiConnectionTest } from '../../lib/types';
 
@@ -160,29 +161,19 @@ export function AiSettingsPage() {
           </label>
         </div>
 
-        <div className="form__field">
-          <label className="form__label" htmlFor="ai-provider">服务类型</label>
-          <select
-            id="ai-provider"
-            className="select"
-            value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-          >
-            <option value="OPENAI_COMPATIBLE">OpenAI 兼容接口</option>
-          </select>
-        </div>
+        <SelectMenu
+          label="服务类型"
+          value={provider}
+          options={[{ value: 'OPENAI_COMPATIBLE', label: 'OpenAI 兼容接口' }]}
+          onValueChange={setProvider}
+        />
 
-        <div className="form__field">
-          <label className="form__label" htmlFor="ai-preset">服务商预设</label>
-          <select
-            id="ai-preset"
-            className="select"
-            value={preset}
-            onChange={(e) => applyPreset(e.target.value)}
-          >
-            <option value="STEPFUN">StepFun（阶跃星辰）</option>
-          </select>
-        </div>
+        <SelectMenu
+          label="服务商预设"
+          value={preset}
+          options={[{ value: 'STEPFUN', label: 'StepFun（阶跃星辰）' }]}
+          onValueChange={applyPreset}
+        />
 
         <Input
           label="接口地址"

@@ -37,6 +37,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
+import { SelectMenu } from '../../components/SelectMenu';
 import { StatusBadge } from '../../components/StatusBadge';
 
 export function QuestionsPage() {
@@ -150,63 +151,53 @@ export function QuestionsPage() {
       <section className="workbench-section" aria-label="筛选">
         <h2 className="section-title">筛选</h2>
         <div className="form form--inline">
-          <div className="form__field">
-            <label htmlFor="q-status" className="form__label">状态</label>
-            <select
-              id="q-status"
-              className="select"
-              value={status ?? ''}
-              onChange={(e) => setFilter('status', e.target.value)}
-            >
-              <option value="">全部</option>
-              <option value="DRAFT">草稿</option>
-              <option value="PUBLISHED">已发布</option>
-              {/* G09: `POST .../archive` writes status=ARCHIVED, and
-                  `selectBySpaceOwnerFilters` only filters on the status it is
-                  given (QuestionMapper.java:39-56), so an archived question is
-                  reachable by asking for it — it is not hidden or deleted. */}
-              <option value="ARCHIVED">已归档</option>
-            </select>
-          </div>
-          <div className="form__field">
-            <label htmlFor="q-type" className="form__label">题型</label>
-            <select
-              id="q-type"
-              className="select"
-              value={questionType ?? ''}
-              onChange={(e) => setFilter('questionType', e.target.value)}
-            >
-              <option value="">全部</option>
-              {QUESTION_TYPES.map((t) => (
-                <option key={t} value={t}>{questionTypeLabel(t)}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form__field">
-            <label htmlFor="q-kp" className="form__label">知识点</label>
-            <select
-              id="q-kp"
-              className="select"
-              data-testid="kp-filter"
-              value={knowledgePointId === undefined ? '' : String(knowledgePointId)}
-              onChange={(e) => setFilter('knowledgePointId', e.target.value)}
-            >
-              <option value="">全部</option>
-              {points.map((point) => (
-                <option key={point.id} value={String(point.id)}>
-                  {point.title}
-                </option>
-              ))}
-            </select>
-            {knowledgePointsQuery.isPending && (
-              <p className="field__hint">知识点加载中…</p>
-            )}
-            {knowledgePointsQuery.isError && (
-              <p className="field__hint">
-                知识点列表加载失败，仍可手动用 URL 参数 knowledgePointId 筛选。
-              </p>
-            )}
-          </div>
+          <SelectMenu
+            label="状态"
+            value={status ?? ''}
+            onValueChange={(value) => setFilter('status', value)}
+            options={[
+              { value: '', label: '全部' },
+              { value: 'DRAFT', label: '草稿' },
+              { value: 'PUBLISHED', label: '已发布' },
+              // G09: `POST .../archive` writes status=ARCHIVED, and
+              // `selectBySpaceOwnerFilters` only filters on the status it is
+              // given (QuestionMapper.java:39-56), so an archived question is
+              // reachable by asking for it — it is not hidden or deleted.
+              { value: 'ARCHIVED', label: '已归档' },
+            ]}
+          />
+          <SelectMenu
+            label="题型"
+            value={questionType ?? ''}
+            onValueChange={(value) => setFilter('questionType', value)}
+            options={[
+              { value: '', label: '全部' },
+              ...QUESTION_TYPES.map((type) => ({
+                value: type,
+                label: questionTypeLabel(type),
+              })),
+            ]}
+          />
+          <SelectMenu
+            label="知识点"
+            testId="kp-filter"
+            value={knowledgePointId === undefined ? '' : String(knowledgePointId)}
+            onValueChange={(value) => setFilter('knowledgePointId', value)}
+            hint={
+              knowledgePointsQuery.isPending
+                ? '知识点加载中…'
+                : knowledgePointsQuery.isError
+                  ? '知识点列表加载失败，仍可手动用 URL 参数 knowledgePointId 筛选。'
+                  : undefined
+            }
+            options={[
+              { value: '', label: '全部' },
+              ...points.map((point) => ({
+                value: String(point.id),
+                label: point.title,
+              })),
+            ]}
+          />
           {filterActive && (
             <Button
               type="button"

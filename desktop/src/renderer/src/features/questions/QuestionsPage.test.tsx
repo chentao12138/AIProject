@@ -142,7 +142,8 @@ describe('QuestionsPage', () => {
       });
     });
 
-    await user.selectOptions(await screen.findByLabelText('状态'), 'DRAFT');
+    await user.click(await screen.findByRole('button', { name: /状态/ }));
+    await user.click(screen.getByRole('option', { name: '草稿' }));
     await waitFor(() => {
       expect(listQuestions).toHaveBeenCalledWith(7, {
         status: 'DRAFT',
@@ -167,7 +168,8 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
       ['/spaces/7/questions']
     );
 
-    const filter = await screen.findByLabelText('知识点');
+    const filter = await screen.findByRole('button', { name: /知识点/ });
+    await user.click(filter);
     expect(
       await screen.findByRole('option', { name: '牛顿第二定律' })
     ).toBeInTheDocument();
@@ -176,7 +178,7 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
       screen.queryByRole('option', { name: '缺 id 的知识点' })
     ).not.toBeInTheDocument();
 
-    await user.selectOptions(filter, '3');
+    await user.click(screen.getByRole('option', { name: '牛顿第二定律' }));
 
     await waitFor(() =>
       expect(listQuestions).toHaveBeenCalledWith(7, {
@@ -188,7 +190,7 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
       })
     );
     expect(urlParams()).toEqual({ knowledgePointId: '3' });
-    expect(screen.getByLabelText('知识点')).toHaveValue('3');
+    expect(screen.getByRole('button', { name: /知识点/ })).toHaveTextContent('牛顿第二定律');
   });
 
   it('replays a knowledgePointId that arrived in the URL', async () => {
@@ -210,7 +212,7 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
         size: QUESTIONS_PAGE_SIZE,
       })
     );
-    expect(await screen.findByLabelText('知识点')).toHaveValue('5');
+    expect(await screen.findByRole('button', { name: /能量守恒/ })).toBeInTheDocument();
   });
 
   it('drops a malformed knowledgePointId instead of asking for NaN', async () => {
@@ -231,7 +233,7 @@ describe('QuestionsPage — knowledge point filter (W08)', () => {
       page: 0,
       size: QUESTIONS_PAGE_SIZE,
     });
-    expect(screen.getByLabelText('知识点')).toHaveValue('');
+    expect(screen.getByRole('button', { name: /知识点/ })).toHaveTextContent('全部');
   });
 
   it('clears every filter from the URL, not just the visible one', async () => {
@@ -374,10 +376,11 @@ describe('QuestionsPage — archived questions are reachable, not vanished (G09)
     // selectBySpaceOwnerFilters only filters on the status it is given, so an
     // archived question is findable — asking for it is the only honest way to
     // list it.
-    const filter = await screen.findByLabelText('状态');
+    const filter = await screen.findByRole('button', { name: /状态/ });
+    await user.click(filter);
     expect(screen.getByRole('option', { name: '已归档' })).toBeInTheDocument();
 
-    await user.selectOptions(filter, 'ARCHIVED');
+    await user.click(screen.getByRole('option', { name: '已归档' }));
     await waitFor(() =>
       expect(listQuestions).toHaveBeenCalledWith(7, {
         status: 'ARCHIVED',
