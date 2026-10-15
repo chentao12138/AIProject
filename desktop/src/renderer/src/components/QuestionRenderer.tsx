@@ -29,8 +29,9 @@
  * back to rendering their options instead of crashing.
  */
 
-import { type KeyboardEvent, useId } from 'react';
+import { type KeyboardEvent } from 'react';
 import { Button } from './Button';
+import { SelectMenu } from './SelectMenu';
 import {
   identityPositions,
   isCompleteOrdering,
@@ -119,7 +120,6 @@ export function QuestionRenderer({
   submitLabel = '提交',
   disabled = false,
 }: QuestionRendererProps) {
-  const selectIdBase = useId();
   const qType = (question.questionType ?? '').toUpperCase();
   const isSingle = qType === 'SINGLE_CHOICE';
   const isBoolean = qType === 'TRUE_FALSE';
@@ -414,9 +414,8 @@ export function QuestionRenderer({
           exactly `[{left,right},…]` — the only thing gradeMatching() compares. */}
       {isMatching && canEditPairs && leftItems.length > 0 && (
         <ul className="question-renderer__matching-rows" data-testid="matching-editor">
-          {leftItems.map((item, idx) => {
+          {leftItems.map((item) => {
             const selected = rightByLeft.get(item.optionKey) ?? '';
-            const selectId = `${selectIdBase}-matching-${idx}`;
             return (
               <li
                 key={item.optionKey}
@@ -424,27 +423,22 @@ export function QuestionRenderer({
                 data-testid="matching-row"
                 data-left-key={item.optionKey}
               >
-                <label
-                  className="question-renderer__matching-left"
-                  htmlFor={selectId}
-                >
-                  {idx + 1}. {item.content}
-                </label>
-                <select
-                  id={selectId}
-                  className="select"
+                <SelectMenu
+                  label={`为「${item.content}」选择配对项`}
                   value={selected}
                   disabled={disabled}
-                  aria-label={`为「${item.content}」选择配对项`}
-                  onChange={(e) => setPair(item.optionKey, e.target.value)}
-                >
-                  <option value="">请选择配对项</option>
-                  {rightItems.map((right) => (
-                    <option key={right.optionKey} value={right.optionKey}>
-                      {right.content}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={(value) => setPair(item.optionKey, value)}
+                  options={[
+                    // The empty value is the "no pair yet" state: `setPair`
+                    // deletes the left key for it, so choosing it again un-pairs
+                    // the row and leaves the answer incomplete.
+                    { value: '', label: '请选择配对项' },
+                    ...rightItems.map((right) => ({
+                      value: right.optionKey,
+                      label: right.content,
+                    })),
+                  ]}
+                />
               </li>
             );
           })}

@@ -302,7 +302,10 @@ export function QuestionsPage() {
                         编辑
                       </Link>
                     )}
-                    {!editable && q.id !== undefined && (
+                    {/* One hint per row: an archived question is by definition
+                        not editable, and saying both read as two unrelated
+                        notes stacked in the action column. */}
+                    {!editable && !archived && q.id !== undefined && (
                       <span className="muted" data-testid={`question-not-editable-hint-${q.id}`}>
                         只有草稿可编辑
                       </span>

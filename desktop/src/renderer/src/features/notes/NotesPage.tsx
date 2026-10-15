@@ -35,7 +35,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { Input } from '../../components/Input';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
-import { Select } from '../../components/Select';
+import { SelectMenu } from '../../components/SelectMenu';
 import { TextArea } from '../../components/TextArea';
 import {
   buildNoteCreateBody,
@@ -465,18 +465,19 @@ function NoteCreateForm({
           onChange={(event) => patch({ content: event.target.value })}
         />
 
-        <Select
+        <SelectMenu
           label="正文格式"
           hint="服务端只接受这两个值，其它值会被 400 拒绝。"
           value={draft.contentFormat}
-          onChange={(event) => patch({ contentFormat: event.target.value })}
-        >
-          {NOTE_CONTENT_FORMATS.map((format) => (
-            <option key={format} value={format}>
-              {format}（{contentFormatLabel(format)}）
-            </option>
-          ))}
-        </Select>
+          onValueChange={(value) => patch({ contentFormat: value })}
+          options={NOTE_CONTENT_FORMATS.map((format) => ({
+            // The option list is exactly `NoteService.normalizeFormat()`'s
+            // accept-set, and each label shows the wire value next to its
+            // display name so the id being posted is never ambiguous.
+            value: format,
+            label: `${format}（${contentFormatLabel(format)}）`,
+          }))}
+        />
 
         <fieldset className="field">
           <legend className="field__label">关联来源内容</legend>

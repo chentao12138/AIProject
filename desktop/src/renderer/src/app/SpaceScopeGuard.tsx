@@ -13,7 +13,7 @@
  * share one TanStack Query cache entry — no second source of truth.
  */
 
-import { Outlet } from 'react-router-dom';
+import { Link, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useApiClient } from '../lib/api-context';
 import { NOT_FOUND_MESSAGE, normalizeApiError } from '../lib/api-error';
@@ -47,7 +47,15 @@ export function SpaceScopeGuard() {
       <ErrorState
         message={normalizeApiError(spaceDetailQuery.error).message}
         onRetry={() => void spaceDetailQuery.refetch()}
-      />
+      >
+        {/* Landing on another subject's space is the ordinary result of
+            switching accounts in one window (the URL survives the logout), and
+            retry can never fix it. Without this exit the only way back to the
+            list is reloading the app. */}
+        <Link className="btn btn--secondary" to="/spaces">
+          返回学习空间列表
+        </Link>
+      </ErrorState>
     );
   }
 

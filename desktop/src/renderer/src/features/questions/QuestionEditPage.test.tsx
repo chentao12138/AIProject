@@ -109,7 +109,9 @@ describe('QuestionEditPage — the editable subset only', () => {
 
     expect(await screen.findByLabelText('题干')).toHaveValue('中国的首都是？');
     expect(screen.getByLabelText('解析')).toHaveValue('常识题。');
-    expect(screen.getByLabelText('难度')).toHaveValue('EASY');
+    // `difficulty` now lives in the custom dropdown: the stored EASY shows as
+    // its label, and the trigger button is the control that carries it.
+    expect(screen.getByRole('button', { name: /难度/ })).toHaveTextContent('简单');
   });
 
   it('sends exactly stem / explanation / difficulty, with no answer fields', async () => {

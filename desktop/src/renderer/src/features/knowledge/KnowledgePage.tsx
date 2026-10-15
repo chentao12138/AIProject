@@ -36,7 +36,7 @@ import { Input } from '../../components/Input';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
 import { originLabel } from '../../lib/format';
-import { Select } from '../../components/Select';
+import { SelectMenu } from '../../components/SelectMenu';
 import { StatusBadge } from '../../components/StatusBadge';
 import { TextArea } from '../../components/TextArea';
 
@@ -360,23 +360,28 @@ function CreateCategoryDialog({
             formError.clear();
           }}
         />
-        <Select
+        <SelectMenu
           label="父分类（可选）"
           value={parentId}
-          onChange={(event) => {
-            setParentId(event.target.value);
+          onValueChange={(value) => {
+            setParentId(value);
             formError.clear();
           }}
-        >
-          <option value="">(none — root category)</option>
-          {categories
-            .filter((category) => isPositiveId(category.id))
-            .map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name ?? `#${category.id}`}
-              </option>
-            ))}
-        </Select>
+          options={[
+            // The empty value is the root: `parentId` is parsed with
+            // parseOptionalPositiveId, so '' is omitted from the payload and the
+            // category is created at the top level.
+            { value: '', label: '(none — root category)' },
+            // Only current-space categories with a usable id are offered; a
+            // malformed id could not be sent as a parentId anyway.
+            ...categories
+              .filter((category) => isPositiveId(category.id))
+              .map((category) => ({
+                value: String(category.id),
+                label: category.name ?? `#${category.id}`,
+              })),
+          ]}
+        />
         <Input
           label="排序（可选）"
           type="number"
@@ -475,23 +480,27 @@ function CreatePointDialog({
             formError.clear();
           }}
         />
-        <Select
+        <SelectMenu
           label="分类（可选）"
           value={categoryId}
-          onChange={(event) => {
-            setCategoryId(event.target.value);
+          onValueChange={(value) => {
+            setCategoryId(value);
             formError.clear();
           }}
-        >
-          <option value="">(none)</option>
-          {categories
-            .filter((category) => isPositiveId(category.id))
-            .map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name ?? `#${category.id}`}
-              </option>
-            ))}
-        </Select>
+          options={[
+            // '' parses to undefined, so the field is left out of the payload
+            // and the point is created uncategorised.
+            { value: '', label: '(none)' },
+            // Only ids this space's own category list returned: an option value
+            // is the only way a categoryId can reach the request body.
+            ...categories
+              .filter((category) => isPositiveId(category.id))
+              .map((category) => ({
+                value: String(category.id),
+                label: category.name ?? `#${category.id}`,
+              })),
+          ]}
+        />
         <Input
           label="难度（可选，自由填写）"
           maxLength={KNOWLEDGE_FORM_LIMITS.pointDifficultyMaxLength}

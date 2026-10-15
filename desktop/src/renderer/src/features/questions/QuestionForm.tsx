@@ -33,6 +33,7 @@ import type { components } from '@aistudy/api-client';
 type CreateQuestionRequest = components['schemas']['CreateQuestionRequest'];
 import { ErrorState } from '../../components/ErrorState';
 import { PageHeader } from '../../components/PageHeader';
+import { SelectMenu } from '../../components/SelectMenu';
 import {
   AUTHORABLE_QUESTION_TYPES,
   QUESTION_FIELD_LIMITS,
@@ -387,25 +388,31 @@ export function QuestionForm() {
           whether a submit goes out — two parallel validation systems would
           disagree about FILL_BLANK vs SHORT_ANSWER. */}
       <form className="form" onSubmit={handleSubmit} noValidate>
-        <div className="form__field">
-          <label htmlFor="q-type" className="form__label">题型</label>
-          <select
-            id="q-type"
-            className="select"
-            value={questionType}
-            disabled={busy}
-            onChange={(e) => setQuestionType(e.target.value as AuthorableQuestionType)}
-          >
-            {AUTHORABLE_QUESTION_TYPES.map((t) => (
-              <option key={t} value={t}>{questionTypeLabel(t)}</option>
-            ))}
-            {BLOCKED_TYPES.map((t) => (
-              <option key={t} value={t} disabled>
-                {questionTypeLabel(t)}（暂不可创建）
-              </option>
-            ))}
-          </select>
-        </div>
+        <SelectMenu
+          label="题型"
+          value={questionType}
+          disabled={busy}
+          onValueChange={(value) => {
+            // A type this form shows but cannot create must never become the
+            // value. It used to be refused by `<option disabled>`; SelectMenu's
+            // option model is `{value, label}` with no per-option `disabled`,
+            // so the guard lives on the commit instead, and the
+            // `authoring-gap-notes` block below still names the gap.
+            if (isAuthorableQuestionType(value)) {
+              setQuestionType(value as AuthorableQuestionType);
+            }
+          }}
+          options={[
+            ...AUTHORABLE_QUESTION_TYPES.map((t) => ({
+              value: t,
+              label: questionTypeLabel(t),
+            })),
+            ...BLOCKED_TYPES.map((t) => ({
+              value: t,
+              label: `${questionTypeLabel(t)}（暂不可创建）`,
+            })),
+          ]}
+        />
 
         {BLOCKED_TYPES.length > 0 && (
           <div className="form__field" data-testid="authoring-gap-notes">
@@ -653,27 +660,27 @@ export function QuestionForm() {
                   <span className="input form__row-main" aria-hidden="true">
                     {content.trim() === '' ? `左侧 ${leftIndex + 1}` : content.trim()}
                   </span>
-                  <select
-                    className="select"
-                    aria-label={`左侧 ${matchingLeftKey(leftIndex)} 的标准配对`}
-                    data-testid={`match-pair-${leftIndex}`}
+                  <SelectMenu
+                    label={`左侧 ${matchingLeftKey(leftIndex)} 的标准配对`}
+                    testId={`match-pair-${leftIndex}`}
                     value={
                       matching.pairs[leftIndex] >= 0 &&
                       matching.pairs[leftIndex] < matching.right.length
                         ? String(matching.pairs[leftIndex])
                         : ''
                     }
-                    onChange={(e) => setPair(leftIndex, Number(e.target.value))}
+                    onValueChange={(value) => setPair(leftIndex, Number(value))}
                     disabled={busy}
-                  >
-                    <option value="">—</option>
-                    {matching.right.map((right, rightIndex) => (
-                      <option key={rightIndex} value={String(rightIndex)}>
-                        {matchingRightKey(rightIndex)}:{' '}
-                        {right.trim() === '' ? `右侧 ${rightIndex + 1}` : right.trim()}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: '', label: '—' },
+                      ...matching.right.map((right, rightIndex) => ({
+                        value: String(rightIndex),
+                        label: `${matchingRightKey(rightIndex)}: ${
+                          right.trim() === '' ? `右侧 ${rightIndex + 1}` : right.trim()
+                        }`,
+                      })),
+                    ]}
+                  />
                 </div>
               ))}
             </div>
@@ -695,21 +702,19 @@ export function QuestionForm() {
         )}
 
         {questionType === 'SINGLE_CHOICE' && (
-          <div className="form__field">
-            <label htmlFor="q-correct" className="form__label">正确答案</label>
-            <select
-              id="q-correct"
-              className="select"
-              value={correctSingle}
-              onChange={(e) => setCorrectSingle(e.target.value)}
-              disabled={busy}
-            >
-              <option value="">—</option>
-              {options.map((o) => (
-                <option key={o.optionKey} value={o.optionKey}>{o.optionKey}: {o.content || '（空）'}</option>
-              ))}
-            </select>
-          </div>
+          <SelectMenu
+            label="正确答案"
+            value={correctSingle}
+            onValueChange={setCorrectSingle}
+            disabled={busy}
+            options={[
+              { value: '', label: '—' },
+              ...options.map((o) => ({
+                value: o.optionKey,
+                label: `${o.optionKey}: ${o.content || '（空）'}`,
+              })),
+            ]}
+          />
         )}
 
         {questionType === 'MULTIPLE_CHOICE' && (
@@ -810,21 +815,18 @@ export function QuestionForm() {
           />
         </div>
 
-        <div className="form__field">
-          <label htmlFor="q-difficulty" className="form__label">难度</label>
-          <select
-            id="q-difficulty"
-            className="select"
-            value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value)}
-            disabled={busy}
-          >
-            <option value="">—</option>
-            <option value="EASY">简单</option>
-            <option value="MEDIUM">中等</option>
-            <option value="HARD">困难</option>
-          </select>
-        </div>
+        <SelectMenu
+          label="难度"
+          value={difficulty}
+          onValueChange={setDifficulty}
+          disabled={busy}
+          options={[
+            { value: '', label: '—' },
+            { value: 'EASY', label: '简单' },
+            { value: 'MEDIUM', label: '中等' },
+            { value: 'HARD', label: '困难' },
+          ]}
+        />
 
         <div className="form__field">
           <span className="form__label" id="q-kp-label">关联知识点</span>

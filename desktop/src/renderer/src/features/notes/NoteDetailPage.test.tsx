@@ -105,6 +105,18 @@ function renderDetail({
 
 const EDITOR_PATH = '/spaces/7/notes/42';
 
+/**
+ * The option rows of the SelectMenu that is currently open, as the user reads
+ * them. The listbox only exists while the trigger is expanded, and the current
+ * value's row also carries an `aria-hidden` ✓ that `textContent` still reports —
+ * stripped here so the comparison is about the labels.
+ */
+function openOptionLabels(): string[] {
+  return screen
+    .getAllByRole('option')
+    .map((option) => option.textContent?.replace('✓', '').trim() ?? '');
+}
+
 describe('NoteDetailPage view', () => {
   it('reads the note and links every stored context pointer', async () => {
     const getNote = vi.fn(async () => ({ data: NOTE, response: { status: 200 } }));
@@ -113,7 +125,11 @@ describe('NoteDetailPage view', () => {
     expect(await screen.findByRole('heading', { name: '矩阵笔记' })).toBeInTheDocument();
     expect(getNote).toHaveBeenCalledWith(7, 42);
     expect(screen.getByLabelText('正文')).toHaveValue('特征值');
-    expect(screen.getByLabelText('正文格式')).toHaveValue('MARKDOWN');
+    // The trigger displays the wire id before its label, so this is the same
+    // fact the native select's value carried: the note's format is MARKDOWN.
+    expect(
+      screen.getByRole('button', { name: /正文格式/ })
+    ).toHaveTextContent('MARKDOWN（Markdown）');
 
     const stored = screen.getByTestId('note-stored-context');
     // A block fixes its page and source, so the reader deep link carries both.
@@ -448,18 +464,19 @@ describe('NoteDetailPage knowledge-point links (A8.3)', () => {
     });
 
     const user = userEvent.setup();
-    const select = await screen.findByLabelText('选择要关联的知识点');
+    // Only the caption is matched: the trigger's accessible name is the caption
+    // plus the current value ('请选择…').
+    await user.click(
+      await screen.findByRole('button', { name: /选择要关联的知识点/ })
+    );
     // 12 is already linked, so only the unlinked point can be chosen: an unknown
     // id would come back as 201 with nothing stored.
-    expect(
-      within(select)
-        .getAllByRole('option')
-        .map((option) => option.getAttribute('value'))
-    ).toEqual(['', '15']);
+    expect(openOptionLabels()).toEqual(['请选择…', '二次型（#15）']);
 
-    await user.selectOptions(select, '15');
+    await user.click(screen.getByRole('option', { name: '二次型（#15）' }));
     await user.click(screen.getByRole('button', { name: '关联知识点' }));
 
+    // The row that was clicked is the id that reaches the wire.
     await waitFor(() =>
       expect(addNoteKnowledgePoints).toHaveBeenCalledWith(7, 42, [15])
     );
@@ -476,8 +493,14 @@ describe('NoteDetailPage knowledge-point links (A8.3)', () => {
     });
 
     await screen.findByRole('heading', { name: '关联知识点' });
+    // The trigger IS the add control here, so its absence is the fact to assert:
+    // with no readable catalog there is no way to verify an id, and the whole
+    // picker is withheld rather than left waiting for a hand-typed value.
     expect(
-      screen.queryByLabelText('选择要关联的知识点')
+      screen.queryByRole('button', { name: /选择要关联的知识点/ })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '关联知识点' })
     ).not.toBeInTheDocument();
     expect(
       await screen.findByText('服务器暂时无法完成请求，请稍后重试。')
@@ -558,18 +581,19 @@ describe('NoteDetailPage source-block links (A8.3)', () => {
     });
 
     const user = userEvent.setup();
-    await user.selectOptions(
-      await screen.findByLabelText('选择学习来源'),
-      '3'
-    );
+    // Pick the source from its own menu, then the block from the menu the source
+    // unlocks: the two levels are the only way an id gets here.
+    await user.click(await screen.findByRole('button', { name: /选择学习来源/ }));
+    await user.click(screen.getByRole('option', { name: '教材（#3）' }));
 
-    const blockSelect = await screen.findByLabelText('选择要关联的正文片段');
-    expect(blockSelect).toBeInTheDocument();
+    await user.click(
+      await screen.findByRole('button', { name: /^选择要关联的正文片段/ })
+    );
     expect(
-      within(blockSelect).getByRole('option', { name: /一段正文/ })
+      await screen.findByRole('option', { name: /一段正文/ })
     ).toBeInTheDocument();
 
-    await user.selectOptions(blockSelect, '101');
+    await user.click(screen.getByRole('option', { name: /一段正文/ }));
     await user.click(screen.getByRole('button', { name: '关联正文片段' }));
 
     await waitFor(() =>
@@ -593,17 +617,18 @@ describe('NoteDetailPage source-block links (A8.3)', () => {
     });
 
     expect(
-      screen.queryByLabelText('选择要关联的正文片段')
+      screen.queryByRole('button', { name: /^选择要关联的正文片段/ })
     ).not.toBeInTheDocument();
 
     const user = userEvent.setup();
-    await user.selectOptions(await screen.findByLabelText('选择学习来源'), '3');
+    await user.click(await screen.findByRole('button', { name: /选择学习来源/ }));
+    await user.click(screen.getByRole('option', { name: '教材（#3）' }));
 
     expect(
       await screen.findByText(/这个来源没有可关联的正文片段/)
     ).toBeInTheDocument();
     expect(
-      screen.queryByLabelText('选择要关联的正文片段')
+      screen.queryByRole('button', { name: /^选择要关联的正文片段/ })
     ).not.toBeInTheDocument();
   });
 });

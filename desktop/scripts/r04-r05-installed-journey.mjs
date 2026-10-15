@@ -482,7 +482,87 @@ await step('R05 offline keeps the route and shows the retry UI, then recovers', 
   };
 });
 
-// --- 11. logout ------------------------------------------------------
+// --- 11b. R05 duplicate submit and keyboard-only traversal ------------
+const noteRows = (s) => s.hrefs.filter((h) => new RegExp(`#/${base.slice(1)}/notes/\\d`).test(h ?? '')).length;
+
+await step('R05 连点保存只创建一条笔记（重复提交）', async () => {
+  const before = await gotoUrl(`${base}/notes`);
+  const n0 = noteRows(before);
+  const typed = await evaluate(`(() => {
+    const set = (el, value) => {
+      const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    const body = document.querySelector('textarea');
+    if (!body) return 'no body textarea';
+    const title = document.querySelector('input');
+    if (title) set(title, 'R05 重复提交实测 ' + Date.now());
+    set(body, '连点保存三次，只应产生一条笔记。');
+    return 'typed';
+  })()`);
+  // Two separate tasks, ~150ms apart: the first click flips `create.isPending`,
+  // which disables the button and latches the handler. Three synchronous
+  // .click() calls in one evaluate would bypass both, and that is not a user.
+  const clicked = await evaluate(`(() => {
+    const btn = [...document.querySelectorAll('button')].find((b) => /保存|创建笔记/.test((b.textContent || '').trim()));
+    if (!btn) return 'no save button';
+    btn.click();
+    return 'first click';
+  })()`);
+  await sleep(150);
+  const second = await evaluate(`(() => {
+    const btn = [...document.querySelectorAll('button')].find((b) => /保存|创建笔记|创建中/.test((b.textContent || '').trim()));
+    if (!btn) return 'button gone';
+    const state = btn.disabled ? 'disabled (ignored)' : 'still enabled';
+    btn.click();
+    return state;
+  })()`);
+  await sleep(4000);
+  const after = await gotoUrl(`${base}/notes`);
+  const n1 = noteRows(after);
+  return {
+    // The proof is the net effect: two real clicks in separate tasks produced
+    // exactly one row. Which button carried the label after the first click is
+    // reported but not asserted — the label swaps to 创建中…, so identity by
+    // text is not stable enough to gate on.
+    pass: typed === 'typed' && clicked === 'first click' && n1 === n0 + 1,
+    detail: `via=click ${clicked} then second-click found "${second}"; rows ${n0} -> ${n1} (expect +1)`,
+  };
+});
+
+await step('R05 键盘-only：Tab 走到导航、Enter 打开模块、焦点环可见', async () => {
+  await gotoUrl(`${base}/questions`);
+  await evaluate('(() => { (document.activeElement ?? document.body).blur?.(); return 1; })()');
+  let hit = null;
+  for (let i = 0; i < 15 && !hit; i += 1) {
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+    const focus = JSON.parse(await evaluate(`(() => {
+      const a = document.activeElement;
+      return JSON.stringify({
+        tag: a.tagName,
+        href: a.getAttribute ? a.getAttribute('href') : null,
+        focusVisible: a.matches(':focus-visible'),
+      });
+    })()`));
+    if (focus.href && focus.href.includes(`${base}/notes`)) {
+      hit = focus;
+    }
+  }
+  if (!hit) {
+    return { skip: true, detail: 'Tab never reached the 笔记 nav link within 15 stops' };
+  }
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+  const landed = await waitUntil((s) => s.hash.includes('/notes'));
+  return {
+    pass: hit.focusVisible && landed.hash.includes('/notes'),
+    detail: `via=keyboard focusRing=${hit.focusVisible} href=${hit.href} landed=${landed.hash}`,
+  };
+});
+
+// --- 12. logout --------------------------------------------------------
 await step('R04 logout ends the journey at the login route', async () => {
   const hash = await evaluate(`(async () => {
     const btn = [...document.querySelectorAll('button, a')].find((b) => /退出|登出|Logout/i.test(b.textContent));

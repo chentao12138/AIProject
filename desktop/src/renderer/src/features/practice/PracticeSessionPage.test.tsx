@@ -1050,15 +1050,15 @@ describe('PracticeSessionPage', () => {
     const submit = screen.getByRole('button', { name: '提交' });
     expect(submit).toBeDisabled();
 
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: '为「巴黎」选择配对项' }),
-      '1'
+    await user.click(
+      await screen.findByRole('button', { name: /为「巴黎」选择配对项/ })
     );
+    await user.click(screen.getByRole('option', { name: '法国' }));
     expect(submit).toBeDisabled();
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: '为「东京」选择配对项' }),
-      '2'
+    await user.click(
+      await screen.findByRole('button', { name: /为「东京」选择配对项/ })
     );
+    await user.click(screen.getByRole('option', { name: '日本' }));
     expect(submit).toBeEnabled();
     await user.click(submit);
 

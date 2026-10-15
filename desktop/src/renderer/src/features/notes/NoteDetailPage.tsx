@@ -51,7 +51,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { Input } from '../../components/Input';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
-import { Select } from '../../components/Select';
+import { SelectMenu } from '../../components/SelectMenu';
 import { TextArea } from '../../components/TextArea';
 import { UnsavedChangesGuard } from '../../components/UnsavedChangesGuard';
 import {
@@ -301,18 +301,18 @@ function NoteEditor({
           onChange={(event) => patch({ content: event.target.value })}
         />
 
-        <Select
+        <SelectMenu
           label="正文格式"
           hint="服务端只接受这两个值，其它值会被 400 拒绝；保存时一定会带上此字段，否则 Markdown 会被改回纯文本。"
           value={draft.contentFormat}
-          onChange={(event) => patch({ contentFormat: event.target.value })}
-        >
-          {NOTE_CONTENT_FORMATS.map((format) => (
-            <option key={format} value={format}>
-              {format}（{contentFormatLabel(format)}）
-            </option>
-          ))}
-        </Select>
+          onValueChange={(value) => patch({ contentFormat: value })}
+          options={NOTE_CONTENT_FORMATS.map((format) => ({
+            // Same accept-set as the create form: `normalizeFormat()` 400s
+            // anything else, and the label keeps the wire value visible.
+            value: format,
+            label: `${format}（${contentFormatLabel(format)}）`,
+          }))}
+        />
 
         <fieldset className="field">
           <legend className="field__label">关联来源内容</legend>
@@ -648,19 +648,21 @@ function KnowledgePointLinks({
             add.mutate(knowledgePointId);
           }}
         >
-          <Select
+          <SelectMenu
             label="选择要关联的知识点"
             hint="列表来自本空间的知识点：服务端对陌生 ID 只返回 201 而不写入任何关联，所以这里不接受手填 ID。"
             value={selected}
-            onChange={(event) => setSelected(event.target.value)}
-          >
-            <option value="">请选择…</option>
-            {candidates.map((point) => (
-              <option key={point.id} value={String(point.id)}>
-                {point.title}（#{point.id}）
-              </option>
-            ))}
-          </Select>
+            onValueChange={setSelected}
+            options={[
+              // The placeholder is the only non-id value; submit stays disabled
+              // until a real candidate is chosen.
+              { value: '', label: '请选择…' },
+              ...candidates.map((point) => ({
+                value: String(point.id),
+                label: `${point.title}（#${point.id}）`,
+              })),
+            ]}
+          />
           {add.isError && (
             <p className="form__error" role="alert">
               {normalizeApiError(add.error).message}
@@ -861,22 +863,24 @@ function SourceBlockLinks({
             add.mutate(contentBlockId);
           }}
         >
-          <Select
+          <SelectMenu
             label="选择学习来源"
             hint="片段的 ID 由服务端校验归属；陌生 ID 只会返回 201 而不写入，所以这里逐级选择而不是手填。"
             value={sourceValue}
-            onChange={(event) => {
-              setSourceValue(event.target.value);
+            onValueChange={(value) => {
+              setSourceValue(value);
+              // A different source invalidates the block chosen from the old
+              // one, and the block list is fetched per source.
               setBlockValue('');
             }}
-          >
-            <option value="">请选择…</option>
-            {sourceOptions.map((source) => (
-              <option key={source.id} value={String(source.id)}>
-                {source.title}（#{source.id}）
-              </option>
-            ))}
-          </Select>
+            options={[
+              { value: '', label: '请选择…' },
+              ...sourceOptions.map((source) => ({
+                value: String(source.id),
+                label: `${source.title}（#${source.id}）`,
+              })),
+            ]}
+          />
 
           {sourceId !== undefined && blocksQuery.isPending && (
             <p className="muted">加载正文片段…</p>
@@ -897,18 +901,18 @@ function SourceBlockLinks({
               <p className="muted">这个来源没有可关联的正文片段（尚未抽取或都已关联）。</p>
             )}
           {sourceId !== undefined && candidates.length > 0 && (
-            <Select
+            <SelectMenu
               label="选择要关联的正文片段"
               value={blockValue}
-              onChange={(event) => setBlockValue(event.target.value)}
-            >
-              <option value="">请选择…</option>
-              {candidates.map((block) => (
-                <option key={block.id} value={String(block.id)}>
-                  {block.label}
-                </option>
-              ))}
-            </Select>
+              onValueChange={setBlockValue}
+              options={[
+                { value: '', label: '请选择…' },
+                ...candidates.map((block) => ({
+                  value: String(block.id),
+                  label: block.label,
+                })),
+              ]}
+            />
           )}
 
           {add.isError && (

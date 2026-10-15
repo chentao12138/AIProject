@@ -58,6 +58,7 @@ import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
+import { SelectMenu } from '../../components/SelectMenu';
 import { StatusBadge } from '../../components/StatusBadge';
 import {
   UPDATE_QUESTION_FIELD_LIMITS,
@@ -273,21 +274,18 @@ export function QuestionEditPage() {
           </p>
         </div>
 
-        <div className="form__field">
-          <label htmlFor="edit-difficulty" className="form__label">难度</label>
-          <select
-            id="edit-difficulty"
-            className="select"
-            value={draft.difficulty}
-            onChange={(e) => setDifficulty(e.target.value)}
-            disabled={busy || !editable}
-          >
-            <option value="">—</option>
-            <option value="EASY">简单</option>
-            <option value="MEDIUM">中等</option>
-            <option value="HARD">困难</option>
-          </select>
-        </div>
+        <SelectMenu
+          label="难度"
+          value={draft.difficulty}
+          onValueChange={setDifficulty}
+          disabled={busy || !editable}
+          options={[
+            { value: '', label: '—' },
+            { value: 'EASY', label: '简单' },
+            { value: 'MEDIUM', label: '中等' },
+            { value: 'HARD', label: '困难' },
+          ]}
+        />
 
         <div className="form__field" data-testid="locked-fields">
           <span className="form__label">不可修改的部分</span>

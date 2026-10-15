@@ -47,12 +47,13 @@ describe('PracticePage', () => {
       routePath: '/spaces/:spaceId/practice',
     });
 
-    // The selector can only hold the id once the server's knowledge-point list
-    // has arrived, so wait for the option before asserting the selection.
-    await screen.findByRole('option', { name: '动能定理' });
+    // A SelectMenu only renders its options once opened, and the URL id can only
+    // resolve to a title after the server's knowledge-point list has arrived, so
+    // wait for the trigger to name the choice rather than for an option to exist.
     // Arriving from a question or knowledge point must not require typing the
     // id again: the URL selects the option the server list offers.
-    expect(screen.getByLabelText('限定知识点（可选）')).toHaveValue('9');
+    const kp = await screen.findByRole('button', { name: /限定知识点/ });
+    await waitFor(() => expect(kp).toHaveTextContent('动能定理'));
   });
 
   it('rejects a count outside the contract range instead of sending it', async () => {

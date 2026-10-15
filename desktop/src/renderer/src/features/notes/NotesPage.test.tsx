@@ -70,6 +70,18 @@ const createdNote = {
 };
 
 /**
+ * The option rows of the SelectMenu that is currently open, as the user reads
+ * them. The listbox only exists while the trigger is expanded, and the current
+ * value's row also carries an `aria-hidden` ✓ that `textContent` still reports —
+ * stripped here so the comparison is about the labels.
+ */
+function openOptionLabels(): string[] {
+  return screen
+    .getAllByRole('option')
+    .map((option) => option.textContent?.replace('✓', '').trim() ?? '');
+}
+
+/**
  * Two real routes: arriving at `/notes` and being navigated to `/notes/:noteId`
  * is the deliverable, so the harness registers both and the test asserts the
  * landing page rendered rather than reading a spy.
@@ -297,15 +309,31 @@ describe('NotesPage content format gate', () => {
   it('offers exactly the formats the server accepts, and nothing else', async () => {
     renderNotes({ api: mockApiClient({ listNotes: noNotes() }) });
 
-    const select = await screen.findByLabelText('正文格式');
+    const user = userEvent.setup();
+    // The trigger's accessible name is its caption plus the current value, so
+    // only the caption is matched — and the option rows only exist once it is
+    // open.
+    await user.click(await screen.findByRole('button', { name: /正文格式/ }));
+    // Each row shows the wire id next to its display name, so the id before the
+    // bracket is what gets posted. Stripping the display name gives back the
+    // same accept-set assertion the native <select> allowed: exactly
+    // NOTE_CONTENT_FORMATS, in that order, nothing else
+    // (`NoteService.normalizeFormat()` 400s any other value).
+    expect(openOptionLabels().map((label) => label.split('（')[0])).toEqual([
+      ...NOTE_CONTENT_FORMATS,
+    ]);
     expect(
-      within(select)
-        .getAllByRole('option')
-        .map((option) => option.getAttribute('value'))
-    ).toEqual([...NOTE_CONTENT_FORMATS]);
-    expect(
-      within(select).queryByRole('option', { name: /HTML/i })
+      screen.queryByRole('option', { name: /HTML/i })
     ).not.toBeInTheDocument();
+
+    // Committing a row selects the id it displays — the same field the body
+    // sends (asserted in the tests below).
+    await user.click(
+      screen.getByRole('option', { name: 'MARKDOWN（Markdown）' })
+    );
+    expect(
+      screen.getByRole('button', { name: /正文格式/ })
+    ).toHaveTextContent('MARKDOWN');
   });
 
   it('never submits a format that is not PLAIN_TEXT or MARKDOWN', async () => {
@@ -319,7 +347,9 @@ describe('NotesPage content format gate', () => {
 
     const rejected = await screen.findByTestId('note-prefill-rejected');
     expect(rejected.textContent).toContain('contentFormat');
-    expect(screen.getByLabelText('正文格式')).toHaveValue(
+    // The trigger displays the wire id, so its text is the value that would be
+    // posted: the contract default, not the rejected HTML.
+    expect(screen.getByRole('button', { name: /正文格式/ })).toHaveTextContent(
       NOTE_FORM_LIMITS.defaultContentFormat
     );
 

@@ -25,6 +25,7 @@ import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import { PageHeader } from '../../components/PageHeader';
+import { SelectMenu } from '../../components/SelectMenu';
 import { StatusBadge } from '../../components/StatusBadge';
 
 export function PracticePage() {
@@ -119,20 +120,18 @@ export function PracticePage() {
               </p>
             )}
           </div>
-          <div className="form__field">
-            <label htmlFor="p-kp" className="form__label">限定知识点（可选）</label>
-            <select
-              id="p-kp"
-              className="select"
-              value={knowledgePointId}
-              onChange={(e) => setKnowledgePointId(e.target.value)}
-            >
-              <option value="">全部</option>
-              {(kpQuery.data ?? []).map((kp) => (
-                <option key={kp.id} value={String(kp.id)}>{kp.title ?? `#${kp.id}`}</option>
-              ))}
-            </select>
-          </div>
+          <SelectMenu
+            label="限定知识点（可选）"
+            value={knowledgePointId}
+            onValueChange={setKnowledgePointId}
+            options={[
+              { value: '', label: '全部' },
+              ...(kpQuery.data ?? []).map((kp) => ({
+                value: String(kp.id),
+                label: kp.title ?? `#${kp.id}`,
+              })),
+            ]}
+          />
           {start.isError && (
             <p className="form__error" role="alert">
               {normalizeApiError(start.error as Error).message}

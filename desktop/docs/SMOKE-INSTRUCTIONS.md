@@ -514,3 +514,32 @@ different claim from "walked in the packaged GUI" and is recorded as such.
 **Still not run for R05:** duplicate-submit and keyboard-only traversal, and the
 401-race / subject-switch cases (the second account `learner` + space 30 has since
 been issued, so these are now unblocked rather than blocked).
+
+## R03 subject switch, R05 duplicates, and one dropdown for the whole app (2026-10-16)
+
+**`scripts/r03-subject-switch.mjs`** — dev → reads space 29 (1 note row) → logout →
+learner. Measured on the installed build: the vault fingerprint changes per session
+(`129b:dbd974f9…` → `129b:ddee7197…`), logout deletes it, and **learner deep-linked
+into dev's space sees `空间不存在或无权访问` with zero of dev's rows leaked** — the
+renderer's cached rows for subject A do not survive into subject B. After a process
+restart learner restores its own session and still cannot read space 29.
+
+That run also exposed a real dead end: landing on another subject's space left the
+user on an error screen with **no way back** (retry can never succeed, and the URL is
+not theirs to fix). `SpaceScopeGuard` now renders 返回学习空间列表 on the inaccessible
+state, asserted in `SpaceScopeGuard.test.tsx`.
+
+**R05 additions to the journey** (24/25, 2 skipped): keyboard-only traversal passes —
+Tab reaches the nav with a visible focus ring (`:focus-visible` true) and Enter opens
+the module. Duplicate-submit passes on the outcome: two clicks 150 ms apart on 创建笔记
+produce exactly **+1** row; the button's own disabled state is reported but not asserted,
+because its label swaps to 创建中… mid-flight.
+
+**One dropdown implementation.** All 15 native `<select>` call sites are gone
+(AI 设置 2, 题库筛选 3, QuestionForm 4, QuestionEditPage 1, QuestionRenderer 1,
+PracticePage 1, and the 7 behind the old `Select` wrapper in knowledge/notes), and
+`components/Select.tsx` is deleted with no remaining imports. `SelectMenu.test.tsx`
+pins the keyboard contract; the migrated page tests now prove the same facts
+(label→id binding on the wire, disabled-while-pending, URL replay of a picked value)
+against the new control. 1099 tests / typecheck / lint green; R02 and the R03 pair
+re-run on the rebuilt artifact (111,476,215 bytes).

@@ -831,11 +831,17 @@ describe('ExamAttemptPage', () => {
     );
     expect(screen.getByRole('button', { name: '已保存' })).toBeInTheDocument();
 
-    // MATCHING: the serialized {left,right} pairs land in the pair editor.
+    // MATCHING: the serialized {left,right} pairs land in the pair editor. The
+    // control is a SelectMenu now, so the proof is the restored option's LABEL
+    // (A→D 戊值, B→C 丁值) rendered in the trigger, not a raw optionKey.
     await user.click(within(sidebar).getByRole('button', { name: '第 3 题（已作答）' }));
     expect(await screen.findByText('配一对')).toBeInTheDocument();
-    expect(screen.getByLabelText('为「甲项」选择配对项')).toHaveValue('D');
-    expect(screen.getByLabelText('为「乙项」选择配对项')).toHaveValue('C');
+    expect(
+      await screen.findByRole('button', { name: /为「甲项」选择配对项/ })
+    ).toHaveTextContent('戊值');
+    expect(
+      await screen.findByRole('button', { name: /为「乙项」选择配对项/ })
+    ).toHaveTextContent('丁值');
 
     // TRUE_FALSE keeps the learner's judgement — an unjudged slot would be a
     // fabricated `false`, which is why `booleanAnswer` is a tri-state.

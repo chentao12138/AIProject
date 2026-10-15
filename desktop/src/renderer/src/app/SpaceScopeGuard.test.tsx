@@ -41,6 +41,13 @@ describe('SpaceScopeGuard', () => {
     expect(
       await screen.findByText('资源不存在或当前不可访问。')
     ).toBeInTheDocument();
+    // The way out has to be on the screen itself: this is what a learner sees
+    // after signing in as someone else in the same window, where retry can
+    // never succeed and the URL is not theirs to fix.
+    expect(screen.getByRole('link', { name: '返回学习空间列表' })).toHaveAttribute(
+      'href',
+      '/spaces'
+    );
     expect(screen.queryByText('GUARD_CHILD_VISIBLE')).not.toBeInTheDocument();
     expect(apiClient.listSources).not.toHaveBeenCalled();
     expect(apiClient.listKnowledgePoints).not.toHaveBeenCalled();

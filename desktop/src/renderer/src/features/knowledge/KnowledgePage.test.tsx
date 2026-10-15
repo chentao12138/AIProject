@@ -38,6 +38,20 @@ function renderKnowledge(apiClient: ReturnType<typeof mockApiClient>) {
   });
 }
 
+/**
+ * The option rows of the SelectMenu that is currently open.
+ *
+ * SelectMenu only renders its listbox while the trigger is expanded, so a test
+ * has to open it first. `textContent` also carries the `✓` that marks the
+ * current value (it is `aria-hidden`, so it is not part of the accessible name)
+ * — stripped here to keep the comparison about the labels themselves.
+ */
+function openOptionLabels(): string[] {
+  return screen
+    .getAllByRole('option')
+    .map((option) => option.textContent?.replace('✓', '').trim() ?? '');
+}
+
 describe('KnowledgePage — list rendering', () => {
   it('renders DRAFT and PUBLISHED status badges (K1.8)', async () => {
     const apiClient = mockApiClient({
@@ -247,20 +261,47 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
 
   it('offers only current-space categories plus a root option (PHASE 13)', async () => {
     const user = userEvent.setup();
-    renderKnowledge(baseApi({}));
+    const createKnowledgeCategory = vi.fn(async () => ({
+      data: { id: 30, name: 'Child of Geometry' },
+      response: { status: 201 },
+    }));
+    renderKnowledge(baseApi({ createKnowledgeCategory }));
 
     await user.click(
       await screen.findByRole('button', { name: '创建分类' })
     );
 
-    const select = screen.getByLabelText('父分类（可选）');
-    const options = Array.from(select.querySelectorAll('option')).map(
-      (option) => ({ value: option.value, text: option.textContent })
+    // The trigger's accessible name is `label + current value`, so match the
+    // label only; the listbox exists only after the click below.
+    await user.click(
+      await screen.findByRole('button', { name: /父分类（可选）/ })
     );
-    expect(options[0]).toEqual({ value: '', text: '(none — root category)' });
-    expect(options.map((o) => o.value)).toEqual(['', '10', '11']);
-    // never an "undefined" option value
-    expect(options.some((o) => o.value === 'undefined')).toBe(false);
+    expect(openOptionLabels()).toEqual([
+      '(none — root category)',
+      'Algebra',
+      'Geometry',
+    ]);
+    // never an "undefined" entry in the list
+    expect(openOptionLabels().join()).not.toContain('undefined');
+
+    // SelectMenu does not put its option values in the DOM, so the id behind a
+    // label is proven on the wire: Geometry is category 11.
+    await user.click(screen.getByRole('option', { name: 'Geometry' }));
+    expect(
+      screen.getByRole('button', { name: /父分类（可选）/ })
+    ).toHaveTextContent('Geometry');
+
+    await user.type(screen.getByLabelText('名称'), 'Child of Geometry');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    await waitFor(() => {
+      expect(createKnowledgeCategory).toHaveBeenCalledWith(7, {
+        name: 'Child of Geometry',
+        description: undefined,
+        parentId: 11,
+        sortOrder: undefined,
+      });
+    });
   });
 
   it('excludes malformed category ids from the parent selector (FIX-01)', async () => {
@@ -285,14 +326,15 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     await user.click(
       await screen.findByRole('button', { name: '创建分类' })
     );
-    const select = screen.getByLabelText('父分类（可选）');
-    const optionTexts = Array.from(select.querySelectorAll('option')).map(
-      (option) => option.textContent
+    await user.click(
+      await screen.findByRole('button', { name: /父分类（可选）/ })
     );
-    expect(optionTexts).toEqual(['(none — root category)', 'Algebra']);
-    expect(optionTexts.join()).not.toContain('Zero id');
-    expect(optionTexts.join()).not.toContain('Ghost');
-    expect(optionTexts.join()).not.toContain('Negative');
+    expect(openOptionLabels()).toEqual(['(none — root category)', 'Algebra']);
+    // The rows still render in the tree, so the exclusion is asserted against
+    // the option list itself, not against the document.
+    expect(screen.queryByRole('option', { name: 'Zero id' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Ghost' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Negative' })).not.toBeInTheDocument();
   });
 
   it('excludes malformed category ids from the point category selector (FIX-01)', async () => {
@@ -315,12 +357,11 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     await user.click(
       (await screen.findAllByRole('button', { name: '创建知识点' }))[0]
     );
-    const select = screen.getByLabelText('分类（可选）');
-    const optionTexts = Array.from(select.querySelectorAll('option')).map(
-      (option) => option.textContent
+    await user.click(
+      await screen.findByRole('button', { name: /^分类（可选）/ })
     );
-    expect(optionTexts).toEqual(['(none)', 'Algebra']);
-    expect(optionTexts.join()).not.toContain('Zero id');
+    expect(openOptionLabels()).toEqual(['(none)', 'Algebra']);
+    expect(screen.queryByRole('option', { name: 'Zero id' })).not.toBeInTheDocument();
   });
 
   it('submits a strict payload with parsed optional integers (PHASE 13)', async () => {
@@ -336,10 +377,11 @@ describe('KnowledgePage — category create (PHASE 13)', () => {
     );
 
     await user.type(screen.getByLabelText('名称'), '  Trigonometry  ');
-    await user.selectOptions(
-      screen.getByLabelText('父分类（可选）'),
-      '10'
+    await user.click(
+      await screen.findByRole('button', { name: /父分类（可选）/ })
     );
+    // Algebra is category 10: the click below is what puts that id on the wire.
+    await user.click(screen.getByRole('option', { name: 'Algebra' }));
     // hex-looking input must NOT coerce to 16; whitespace must NOT become 0
     // (fireEvent bypasses user-event's number-input char filtering so the
     // strict parser is what decides)
@@ -478,10 +520,11 @@ describe('KnowledgePage — point create (PHASE 15)', () => {
       screen.getByLabelText('正文'),
       '  line one{enter}{enter}line two  '
     );
-    await user.selectOptions(
-      screen.getByLabelText('分类（可选）'),
-      '11'
+    await user.click(
+      await screen.findByRole('button', { name: /^分类（可选）/ })
     );
+    // Geometry is category 11 — the option click is what puts the id on the wire.
+    await user.click(screen.getByRole('option', { name: 'Geometry' }));
     await user.type(
       screen.getByLabelText('难度（可选，自由填写）'),
       '  intermediate  '

@@ -19,7 +19,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QuestionForm } from './QuestionForm';
 import { mockApiClient, renderWithProviders } from '../../test/test-utils';
-import { QUESTION_FIELD_LIMITS } from '../../lib/format';
+import { QUESTION_FIELD_LIMITS, questionTypeLabel } from '../../lib/format';
 
 const ROUTE = '/spaces/:spaceId/questions/new';
 
@@ -64,7 +64,12 @@ async function pickType(
   user: ReturnType<typeof userEvent.setup>,
   type: string
 ) {
-  await user.selectOptions(screen.getByLabelText('题型'), type);
+  // `SelectMenu` renders its options only while open, and the trigger's
+  // accessible name is `题型 + current value`, so it is matched on the label.
+  await user.click(screen.getByRole('button', { name: /题型/ }));
+  await user.click(
+    await screen.findByRole('option', { name: questionTypeLabel(type) })
+  );
 }
 
 async function fillOptions(
@@ -81,31 +86,59 @@ async function submit(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('QuestionForm — type list follows the contract (G02)', () => {
-  /** The select's own option table: value + disabled flag, in render order. */
-  function typeOptions(): Array<{ value: string; disabled: boolean }> {
-    const select = screen.getByLabelText<HTMLSelectElement>('题型');
-    return Array.from(select.options).map((option) => ({
-      value: option.value,
-      disabled: option.disabled,
-    }));
+  /**
+   * The dropdown's option table in render order, as the author reads it. A
+   * row's first span is its label; the ✓ marker of the selected row is
+   * `aria-hidden`, so `name:` queries still see the label alone.
+   *
+   * The raw wire value is no longer in the DOM (it used to be
+   * `<option value="ORDERING">`): it is proved by what the POST body carries in
+   * the per-type tests below, and the label itself by the branch each type
+   * reveals.
+   */
+  function typeOptionLabels(): string[] {
+    return screen.getAllByRole('option').map(
+      (option) => option.querySelector('span')?.textContent?.trim() ?? ''
+    );
   }
 
-  it('offers all seven types, because the contract now carries all seven answers', () => {
+  it('offers all seven types, because the contract now carries all seven answers', async () => {
+    const user = userEvent.setup();
     renderForm();
+
+    expect(screen.getByRole('button', { name: /题型/ })).toHaveTextContent('单选');
+    await user.click(screen.getByRole('button', { name: /题型/ }));
+
     // ORDERING / MATCHING became authorable when CreateQuestionRequest grew
-    // correctOrder / matches — nothing is disabled any more, so a disabled
-    // option here would mean the form is hiding a field the server accepts.
-    expect(typeOptions()).toEqual([
-      { value: 'SINGLE_CHOICE', disabled: false },
-      { value: 'MULTIPLE_CHOICE', disabled: false },
-      { value: 'TRUE_FALSE', disabled: false },
-      { value: 'SHORT_ANSWER', disabled: false },
-      { value: 'FILL_BLANK', disabled: false },
-      { value: 'ORDERING', disabled: false },
-      { value: 'MATCHING', disabled: false },
+    // correctOrder / matches — nothing is refused any more, so an option
+    // carrying the 暂不可创建 marker here would mean the form is hiding a field
+    // the server accepts.
+    expect(typeOptionLabels()).toEqual([
+      '单选',
+      '多选',
+      '判断',
+      '简答',
+      '填空',
+      '排序',
+      '配对',
     ]);
-    expect(screen.getByLabelText('题型')).toHaveValue('SINGLE_CHOICE');
-    expect(screen.queryByTestId('authoring-gap-notes')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('option', { name: /暂不可创建/ })
+    ).not.toBeInTheDocument();
+    // The current value is the one marked selected.
+    expect(screen.getByRole('option', { name: '单选' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    // Choosing 判断 really means choosing TRUE_FALSE: its radio group is the
+    // only branch that renders for it.
+    await user.click(screen.getByRole('option', { name: '判断' }));
+    expect(screen.getByRole('button', { name: /题型/ })).toHaveTextContent('判断');
+    expect(await screen.findByRole('radio', { name: '正确' })).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('authoring-gap-notes')
+    ).not.toBeInTheDocument();
   });
 
   it('reveals the ordering editor when 排序 is picked and the pair editor for 配对', async () => {
@@ -262,13 +295,23 @@ describe('QuestionForm — MATCHING authoring (G02)', () => {
     await user.type(screen.getByTestId('match-right-1'), '法国');
   }
 
-  function pairRow(leftIndex: number) {
-    return screen.getByTestId(`match-pair-${leftIndex}`);
+  /** Opens one pairing dropdown and chooses the right-hand row by its key. */
+  async function pairWith(
+    user: ReturnType<typeof userEvent.setup>,
+    leftIndex: number,
+    rightKey: string
+  ) {
+    await user.click(screen.getByTestId(`match-pair-${leftIndex}`));
+    await user.click(
+      await screen.findByRole('option', {
+        name: new RegExp(`^${rightKey}:`),
+      })
+    );
   }
 
   async function pairAll(user: ReturnType<typeof userEvent.setup>) {
-    await user.selectOptions(pairRow(0), '0');
-    await user.selectOptions(pairRow(1), '1');
+    await pairWith(user, 0, 'R1');
+    await pairWith(user, 1, 'R2');
   }
 
   it('sends the columns as options and the standard pairs as key references', async () => {
@@ -462,7 +505,12 @@ describe('QuestionForm — option keys (W09)', () => {
     const api = renderForm();
     await fillStem(user, '中国的首都是？');
     await fillOptions(user, ['北京', '上海']);
-    await user.selectOptions(screen.getByLabelText('正确答案'), 'A');
+    await user.click(screen.getByRole('button', { name: /正确答案/ }));
+    await user.click(await screen.findByRole('option', { name: /^A:/ }));
+    // The choice really landed on option key A, not on its display text.
+    expect(screen.getByRole('button', { name: /正确答案/ })).toHaveTextContent(
+      'A: 北京'
+    );
     await user.clear(screen.getByTestId('option-key-0'));
     await user.type(screen.getByTestId('option-key-0'), 'X');
 
@@ -633,7 +681,13 @@ describe('QuestionForm — one POST at a time (W09)', () => {
     expect(submitButton).toBeDisabled();
     expect(submitButton).toHaveTextContent('创建中…');
     expect(screen.getByLabelText('题干')).toBeDisabled();
-    expect(screen.getByLabelText('题型')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /题型/ })).toBeDisabled();
+    // Same fact on the custom dropdown: while the POST is in flight the
+    // difficulty cannot be reopened, so no second value can be committed.
+    const difficulty = screen.getByRole('button', { name: /难度/ });
+    expect(difficulty).toBeDisabled();
+    await user.click(difficulty).catch(() => undefined);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
 
     await user.click(submitButton);
     await user.click(submitButton);

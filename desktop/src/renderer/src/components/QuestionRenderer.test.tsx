@@ -452,16 +452,18 @@ describe('QuestionRenderer — MATCHING (G02 / C09)', () => {
       />
     );
 
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: '为「巴黎」选择配对项' }),
-      '1'
+    // A SelectMenu only lists its options once the trigger is open; picking the
+    // option labelled with a right item's content emits that item's optionKey.
+    await user.click(
+      await screen.findByRole('button', { name: /为「巴黎」选择配对项/ })
     );
+    await user.click(screen.getByRole('option', { name: '法国' }));
     expect(emitted.at(-1)).toBe(JSON.stringify([{ left: 'A', right: '1' }]));
 
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: '为「东京」选择配对项' }),
-      '2'
+    await user.click(
+      await screen.findByRole('button', { name: /为「东京」选择配对项/ })
     );
+    await user.click(screen.getByRole('option', { name: '日本' }));
     const wire = emitted.at(-1);
     expect(wire).toBe(
       JSON.stringify([
@@ -488,17 +490,17 @@ describe('QuestionRenderer — MATCHING (G02 / C09)', () => {
     await user.click(submit);
     expect(onSubmit).not.toHaveBeenCalled();
 
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: '为「巴黎」选择配对项' }),
-      '1'
+    await user.click(
+      await screen.findByRole('button', { name: /为「巴黎」选择配对项/ })
     );
+    await user.click(screen.getByRole('option', { name: '法国' }));
     expect(submit).toBeDisabled();
     expect(screen.getByText('请为每个左侧项目选择一个配对项。')).toBeInTheDocument();
 
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: '为「东京」选择配对项' }),
-      '2'
+    await user.click(
+      await screen.findByRole('button', { name: /为「东京」选择配对项/ })
     );
+    await user.click(screen.getByRole('option', { name: '日本' }));
     expect(submit).toBeEnabled();
     await user.click(submit);
     expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -519,13 +521,15 @@ describe('QuestionRenderer — MATCHING (G02 / C09)', () => {
     );
 
     // Order in the string is irrelevant (the grader compares sets), and both
-    // rows come back filled, so the answer is submittable as it stands.
+    // rows come back filled, so the answer is submittable as it stands. The
+    // trigger shows the paired option's label — what the learner would pick —
+    // not the raw optionKey the wire carries.
     expect(
-      screen.getByRole('combobox', { name: '为「巴黎」选择配对项' })
-    ).toHaveValue('1');
+      screen.getByRole('button', { name: /为「巴黎」选择配对项/ })
+    ).toHaveTextContent('法国');
     expect(
-      screen.getByRole('combobox', { name: '为「东京」选择配对项' })
-    ).toHaveValue('2');
+      screen.getByRole('button', { name: /为「东京」选择配对项/ })
+    ).toHaveTextContent('日本');
     expect(screen.getByRole('button', { name: '提交' })).toBeEnabled();
   });
 
@@ -574,7 +578,13 @@ describe('QuestionRenderer — MATCHING (G02 / C09)', () => {
       '巴黎 ↔ 法国',
       '东京 ↔ 日本',
     ]);
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    // The pair editor is entirely gone in review. Its controls are now SelectMenu
+    // triggers (role=button, no combobox role), so assert the editor itself —
+    // not a combobox that would never appear regardless — is absent.
+    expect(screen.queryByTestId('matching-editor')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /选择配对项/ })
+    ).not.toBeInTheDocument();
     expect(screen.queryByTestId('contract-gap-notice')).not.toBeInTheDocument();
   });
 
@@ -590,7 +600,13 @@ describe('QuestionRenderer — MATCHING (G02 / C09)', () => {
     expect(columns).toHaveLength(2);
     expect(columns[0]).toHaveTextContent('巴黎');
     expect(columns[1]).toHaveTextContent('日本');
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    // No editable rows when the page cannot hold pairs: the read-only columns
+    // are the whole surface, so the pair editor (and its SelectMenu triggers)
+    // must be absent, not merely lacking a combobox role.
+    expect(screen.queryByTestId('matching-editor')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /选择配对项/ })
+    ).not.toBeInTheDocument();
   });
 });
 
