@@ -407,3 +407,17 @@ Window granted by the backend (no IT, no restart); `:8081` readiness 200,
 Still not run: the packaged app (A10 / R03–R05) — the artifact on `dist/` predates every
 commit in this session, so R02's old pass does not cover it and the login flow has never
 been observed in an installed build.
+
+## R02 re-run on the current artifact — PASS, with the check now scripted
+
+`npm run dist:win` at `311b33f` produced `AIStudy Setup 0.1.0.exe` (111,473,964 bytes)
+and `scripts/r02-installed-app.ps1` ran the whole cycle against it: silent install exit 0,
+installed `productVersion 0.1.0.0`, launch showed 4 processes and a window titled
+`AIStudy`, silent uninstall removed the install directory and the HKCU entry, and
+`%APPDATA%\AIStudy` survived as the policy says it should.
+
+**R03–R05 remain not run, and this does not change that.** The script stops at "a window
+with a title appeared": logging in needs credentials typed into that window, and the
+packaged build has DevTools off (ADR-037), so there is nothing observable to assert about
+the session, the vault restore, or CSP/network without a human at the keyboard. The row
+stays `not run` rather than being upgraded from a launched process.

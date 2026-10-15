@@ -89,7 +89,7 @@ Real command output at this commit, not a historical claim:
 | Unit | `npm run test:run` | 73 files / 1078 tests passed |
 | Coverage | `npm run test:coverage` | statements 92.22%, branches 87.26%, functions 84.09% |
 | Build | `npm run build` | main 13.95 kB + preload 1.65 kB, renderer **924.53 kB** (+ CSS 30.31 kB) |
-| Package | `npm run dist:win` (with the two mirror variables) | `dist/AIStudy Setup 0.1.0.exe`, **111,472,382 bytes, built 2026-10-14 02:53 at this commit**. NOT yet installed: R02 (silent install → launch → shortcuts → uninstall) was run against the 01:55 artifact (111,468,074 bytes), whose renderer differs from this one by the three lanes committed since. The build log's `signing with signtool.exe` lines do **not** mean it is signed (see the signing note below). |
+| Package | `npm run dist:win`, then `scripts/r02-installed-app.ps1` | **111,473,964 bytes, rebuilt at this HEAD (commit `311b33f`), and R02 re-run against it: PASS.** Silent per-user install exit 0; installed `AIStudy.exe` `productVersion 0.1.0.0`; launching it produced 4 processes and a window titled `AIStudy`; the silent uninstall removed the install directory and the HKCU `Uninstall` entry while keeping `%APPDATA%AIStudy` (the `deleteAppDataOnUninstall: false` policy). The script waits for the directory to disappear because the NSIS uninstaller returns before it has finished. |
 | Package | `npm run dist:win` | see "what this does not prove" — the artifact is produced, and installing it is a separate gate |
 
 The previous table (2026-10-13: 65 files / 777 tests, renderer 775.91 kB) is kept
