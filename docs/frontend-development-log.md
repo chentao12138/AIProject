@@ -929,3 +929,25 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
   已请求在 result 上加 `gradingStatus`（最好带 `pendingGradeCount`）。
 - 门禁：lint 0 / `tsc` node+web 0 / **73 files 1078 tests**（未改测试数量之外的口径）；
   live harness 29/33，四个 FAIL 全部归因上面那一个后端缺陷，未当作通过。
+
+## 2026-10-14（第八轮）：把 B7/B8 两个"刚交付的字段"接进界面，并清掉一处死代码
+
+- 并行前端会话已把 `:8081` 重生成的 201-path 快照与我自己那批一起提交（`cbf7d8c`/`96f2262`/`dfc31e4`），
+  我这轮从 HEAD 继续，没有重写任何历史。新交接文档 `BACKEND-DELIVERY-CHECKLIST.md` 里
+  B1（考试 ORDERING 丢 payload → 无法交卷）就是我上一轮报的那个阻塞项。
+- **B7 `AttemptSummaryView.deadlineAt` 接上**：历史行的"进行中"现在会因服务端自己的截止时间变成
+  `已超过截止时间`，并且**不再给"继续作答"**。三点细节：
+  (1) 判过期只走 `useExamCountdown.deadlineTime()` 这一个解释器，列表与答题页倒计时不可能对不上；
+  (2) `deadlineAt` 缺失/为 null/解析不了 = **没有**过期，不是"当作过期"——否则不限时的卷子会被前端
+  把入口删掉（那正是服务端没做的事）；(3) 我没有把过期时间显示成倒计时（列表里 N 行各开一个 timer
+  不值当），只显示状态。
+- **B8 `ExamResultView.gradingStatus`/`pendingGradeCount` 接上**：成绩页之前把 `6 / 20` 无条件显示成
+  "得分"，而这份分数可能只是客观题部分分——现在只要服务端说 `PARTIALLY_GRADED` 或
+  `pendingGradeCount > 0`，页面写"当前为**部分成绩**：N 题仍待人工评分"并把那行标签改成"目前得分"；
+  `GRADED` 回到"得分"。客户端不预测什么时候判完。
+- 顺手删了 `canResumeAttempt()`：它没有任何生产调用方（行上的动作由 `ATTEMPT_PROGRESS_ACTIONS[progress]`
+  决定），留着就是"看起来有规则的死的判断"。它的不变量现在由过期用例直接钉住（过期 → 查看作答，不是继续作答）。
+- 门禁：lint 0 / `tsc` node+web 0 / **73 files 1085 tests 全绿**（考试 lane 114 → 121）。
+- **联调端口现在两个都是 000**（`:8081`、`:8080` 都不通），所以 B7/B8 这两处**只有单测证据**，
+  线上验证（含 B1 修好后重跑 `scripts/live-journey.mjs`、打包版 R03–R05）要等后端把服务起回来。
+  已按分工去喊后端启动。

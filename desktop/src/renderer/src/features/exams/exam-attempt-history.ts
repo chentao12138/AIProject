@@ -24,6 +24,7 @@ import {
   EXAM_ATTEMPT_STATUSES,
   EXAM_GRADING_STATUSES,
 } from '../../lib/format';
+import { deadlineTime } from './useExamCountdown';
 
 /** The fields of `AttemptSummaryView` this module reads. */
 export interface AttemptRowState {
@@ -31,6 +32,8 @@ export interface AttemptRowState {
   gradingStatus?: string | null;
   score?: number | null;
   maxScore?: number | null;
+  /** `startedAt + exam timeLimitMinutes`, null before the attempt has started. */
+  deadlineAt?: string | null;
 }
 
 /**
@@ -41,6 +44,7 @@ export interface AttemptRowState {
 export type AttemptProgress =
   | 'not-started'
   | 'in-progress'
+  | 'expired'
   | 'awaiting-grade'
   | 'partially-graded'
   | 'graded'
@@ -50,6 +54,9 @@ export type AttemptProgress =
 export const ATTEMPT_PROGRESS_NOTES: Record<AttemptProgress, string> = {
   'not-started': '尚未开始作答',
   'in-progress': '作答进行中',
+  // Only reachable from the server's own `deadlineAt`; the client never decides
+  // that an attempt is over by counting minutes itself.
+  expired: '已超过截止时间',
   'awaiting-grade': '已交卷，等待评分',
   'partially-graded': '客观题已判分，主观题仍待人工评分',
   graded: '已评分',
@@ -59,12 +66,13 @@ export const ATTEMPT_PROGRESS_NOTES: Record<AttemptProgress, string> = {
 /**
  * The row's link text. Resuming is offered ONLY where the server says the
  * attempt is still the learner's to continue (`NOT_STARTED` / `IN_PROGRESS`);
- * a `SUBMITTED` attempt opens its read-only result view, and an unrecognised
- * status is not promised anything at all.
+ * a `SUBMITTED` attempt opens its read-only result view, an expired row opens
+ * what it has, and an unrecognised status is not promised anything at all.
  */
 export const ATTEMPT_PROGRESS_ACTIONS: Record<AttemptProgress, string> = {
   'not-started': '开始作答',
   'in-progress': '继续作答',
+  expired: '查看作答',
   'awaiting-grade': '查看作答',
   'partially-graded': '查看成绩',
   graded: '查看成绩',
@@ -81,10 +89,31 @@ const SCORED: readonly string[] = [
   EXAM_GRADING_STATUSES.PARTIALLY_GRADED,
 ];
 
-export function attemptProgressOf(row: AttemptRowState): AttemptProgress {
+/**
+ * Whether a deadline string has passed. Reuses the exam page's ONE interpretation
+ * of `deadlineAt` (`useExamCountdown.deadlineTime`), so the row in the list and
+ * the countdown on the answering page can never disagree about when an attempt
+ * ended. Absent or unparsable is NOT expired: an unreadable timestamp is no
+ * statement from the server, and guessing would remove an affordance.
+ */
+function isPast(deadlineAt?: string | null, nowMs = Date.now()): boolean {
+  const at = deadlineTime(deadlineAt);
+  return at !== null && at <= nowMs;
+}
+
+export function attemptProgressOf(
+  row: AttemptRowState,
+  nowMs = Date.now()
+): AttemptProgress {
   const status = normalizeCode(row.status);
-  if (status === EXAM_ATTEMPT_STATUSES.NOT_STARTED) return 'not-started';
-  if (status === EXAM_ATTEMPT_STATUSES.IN_PROGRESS) return 'in-progress';
+  if (status === EXAM_ATTEMPT_STATUSES.NOT_STARTED) {
+    // A not-started row has no deadline by definition (the server sends null),
+    // but a row that carries one and is past it is not offered as "开始作答".
+    return isPast(row.deadlineAt, nowMs) ? 'expired' : 'not-started';
+  }
+  if (status === EXAM_ATTEMPT_STATUSES.IN_PROGRESS) {
+    return isPast(row.deadlineAt, nowMs) ? 'expired' : 'in-progress';
+  }
   if (status !== EXAM_ATTEMPT_STATUSES.SUBMITTED) return 'unknown';
 
   const grading = normalizeCode(row.gradingStatus);
@@ -95,14 +124,19 @@ export function attemptProgressOf(row: AttemptRowState): AttemptProgress {
 }
 
 /**
- * Whether this attempt may be offered as resumable. Only the server's own
- * IN_PROGRESS / NOT_STARTED qualify; a submitted (or finalised-by-the-server)
- * attempt is closed, and an expired one is no longer the client's to judge —
- * the attempt page reads the server's `deadlineAt` and ends it there.
+ * Whether a result score is final. `PARTIALLY_GRADED` says so directly, and
+ * `pendingGradeCount > 0` says the same thing numerically — the contract's own
+ * description ties the two together ("More than zero means score is provisional;
+ * gradingStatus is PARTIALLY_GRADED"), so either is enough and neither is guessed.
  */
-export function canResumeAttempt(status?: string | null): boolean {
-  const progress = attemptProgressOf({ status });
-  return progress === 'not-started' || progress === 'in-progress';
+export function isProvisionalResult(
+  gradingStatus?: string | null,
+  pendingGradeCount?: number | null
+): boolean {
+  if (normalizeCode(gradingStatus) === EXAM_GRADING_STATUSES.PARTIALLY_GRADED) {
+    return true;
+  }
+  return typeof pendingGradeCount === 'number' && pendingGradeCount > 0;
 }
 
 /**

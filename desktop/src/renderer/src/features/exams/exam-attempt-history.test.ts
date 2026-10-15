@@ -20,7 +20,7 @@ import {
   ATTEMPT_PROGRESS_NOTES,
   attemptProgressOf,
   attemptScoreText,
-  canResumeAttempt,
+  isProvisionalResult,
 } from './exam-attempt-history';
 
 describe('attemptProgressOf (the server\'s own two fields)', () => {
@@ -127,14 +127,35 @@ describe('score rendering: null is never 0 and never a verdict', () => {
   });
 });
 
-describe('the resume affordance follows the server, never the other way round', () => {
-  it('offers resume only for an attempt still open on the server', () => {
-    expect(canResumeAttempt('IN_PROGRESS')).toBe(true);
-    expect(canResumeAttempt('NOT_STARTED')).toBe(true);
-    // Submitted / finalised attempts are closed: no 继续作答 for them.
-    expect(canResumeAttempt('SUBMITTED')).toBe(false);
-    expect(canResumeAttempt('EXPIRED')).toBe(false);
-    expect(canResumeAttempt(undefined)).toBe(false);
+describe('expiry comes from the server deadline, never from a local clock guess', () => {
+  const NOW = Date.parse('2026-10-14T10:00:00');
+
+  it('reads a past deadline as expired and closes the row', () => {
+    const row = {
+      status: 'IN_PROGRESS',
+      deadlineAt: '2026-10-14T09:59:00',
+    };
+    expect(attemptProgressOf(row, NOW)).toBe('expired');
+    // An expired row is not offered as 继续作答: resuming is the server's call,
+    // and it already refuses answers on an expired attempt.
+    expect(ATTEMPT_PROGRESS_ACTIONS[attemptProgressOf(row, NOW)]).toBe('查看作答');
+    expect(ATTEMPT_PROGRESS_NOTES.expired).toContain('超过截止时间');
+  });
+
+  it('keeps a future deadline as in-progress', () => {
+    expect(
+      attemptProgressOf({ status: 'IN_PROGRESS', deadlineAt: '2026-10-14T10:01:00' }, NOW)
+    ).toBe('in-progress');
+  });
+
+  it('treats no deadline as no expiry, not as an expired row', () => {
+    // An exam without `timeLimitMinutes` has a NULL deadlineAt; reading that as
+    // "expired" would delete the affordance from every untimed paper.
+    for (const deadlineAt of [null, undefined, '', 'not-a-date']) {
+      expect(attemptProgressOf({ status: 'IN_PROGRESS', deadlineAt }, NOW)).toBe(
+        'in-progress'
+      );
+    }
   });
 
   it('labels a closed attempt as the read-only result it opens', () => {
@@ -146,6 +167,26 @@ describe('the resume affordance follows the server, never the other way round', 
     expect(ATTEMPT_PROGRESS_ACTIONS['awaiting-grade']).toBe('查看作答');
     // An unrecognised status promises no action beyond opening the row.
     expect(ATTEMPT_PROGRESS_ACTIONS.unknown).toBe('查看作答');
+  });
+});
+
+describe('isProvisionalResult (B8: the score says whether it is final)', () => {
+  it('calls a partial result provisional by either field', () => {
+    expect(isProvisionalResult('PARTIALLY_GRADED', 0)).toBe(true);
+    expect(isProvisionalResult('GRADED', 2)).toBe(true);
+  });
+
+  it('calls a finished result final', () => {
+    expect(isProvisionalResult('GRADED', 0)).toBe(false);
+    expect(isProvisionalResult('GRADED', null)).toBe(false);
+    // UNGRADED is not "provisional but scoreable" — it has no score to hedge, and
+    // `attemptScoreText` already renders it as —, so the note stays off.
+    expect(isProvisionalResult('UNGRADED', 0)).toBe(false);
+  });
+
+  it('ignores a pending count that is not a number', () => {
+    expect(isProvisionalResult(null, undefined)).toBe(false);
+    expect(isProvisionalResult(null, 0)).toBe(false);
   });
 });
 

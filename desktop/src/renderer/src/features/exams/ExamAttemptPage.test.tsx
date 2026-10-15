@@ -945,3 +945,53 @@ describe('ExamAttemptPage', () => {
     expect(screen.getByRole('button', { name: '已保存' })).toBeInTheDocument();
   });
 });
+
+describe('ExamAttemptPage — a partial score says so (B8)', () => {
+  const submittedResult = (gradingStatus: string, pendingGradeCount: number) => ({
+    getExamAttempt: vi.fn(async () =>
+      ok({
+        id: 5,
+        examId: 21,
+        examPaperId: 31,
+        status: 'SUBMITTED',
+        submittedAt: '2026-10-13T11:00:00',
+        questions: [],
+      })
+    ),
+    getExamResult: vi.fn(async () =>
+      ok({
+        attemptId: 5,
+        status: 'SUBMITTED',
+        gradingStatus,
+        pendingGradeCount,
+        score: 6,
+        maxScore: 20,
+        correctCount: 2,
+        wrongCount: 0,
+        unansweredCount: 0,
+        items: [],
+      })
+    ),
+  });
+
+  // Before this field existed, `6 / 20` on a paper with ungraded subjective
+  // answers was indistinguishable from a final grade.
+  it('labels a partially graded result as provisional', async () => {
+    renderAttempt(submittedResult('PARTIALLY_GRADED', 2));
+
+    const note = await screen.findByTestId('result-provisional');
+    expect(note).toHaveTextContent('部分成绩');
+    expect(note).toHaveTextContent('2 题');
+    expect(screen.getByTestId('result-score-line')).toHaveTextContent(
+      '目前得分：6 / 20'
+    );
+  });
+
+  it('stops hedging once the server has graded everything', async () => {
+    renderAttempt(submittedResult('GRADED', 0));
+
+    await screen.findByTestId('result-score-line');
+    expect(screen.queryByTestId('result-provisional')).not.toBeInTheDocument();
+    expect(screen.getByTestId('result-score-line')).toHaveTextContent('得分：6 / 20');
+  });
+});

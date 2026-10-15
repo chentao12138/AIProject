@@ -50,6 +50,7 @@ import {
   type ExamAnswerPayload,
   type ExamQuestionSlot,
 } from './exam-attempt-state';
+import { isProvisionalResult } from './exam-attempt-history';
 import { examActionError, type ExamActionError } from './exam-error';
 import { useExamCountdown } from './useExamCountdown';
 
@@ -610,14 +611,31 @@ function ExamResult({
    */
   const result = resultQuery.data;
   const items = result?.items ?? [];
+  // B8: the result read now states whether its own score is final. Without this
+  // a partially graded paper read as a completed one — a provisional number was
+  // indistinguishable from a final one except by an item's null `isCorrect`.
+  const provisional = isProvisionalResult(
+    result?.gradingStatus,
+    result?.pendingGradeCount
+  );
 
   return (
     <div className="page">
       <PageHeader title={`考试作答 #${attemptId} — 成绩`} />
       <p className="page__note">本次考试已交卷，以下为只读成绩。</p>
+      {provisional && (
+        <p className="page__note" role="note" data-testid="result-provisional">
+          当前为<strong>部分成绩</strong>：
+          {typeof result?.pendingGradeCount === 'number'
+            ? ` ${result.pendingGradeCount} 题`
+            : ' 若干题'}
+          仍待人工评分。最终分数以服务端判完为准，本页不预测。
+        </p>
+      )}
       <div className="practice-result">
-        <p>
-          得分：{result?.score ?? '—'} / {result?.maxScore ?? '—'}
+        <p data-testid="result-score-line">
+          {provisional ? '目前得分' : '得分'}：{result?.score ?? '—'} /{' '}
+          {result?.maxScore ?? '—'}
         </p>
         <p>
           答对 {result?.correctCount ?? '—'} · 答错 {result?.wrongCount ?? '—'} ·
