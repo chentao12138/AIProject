@@ -33,7 +33,7 @@ import { isPermissionGranted } from './permissions';
 import { buildWebPreferences } from './window-options';
 import { registerAuthVaultIpc } from './auth-vault';
 import { DEFAULT_API_BASE_URL } from '../shared/api-config';
-import { resolveRuntimeApiBaseUrl } from './runtime-config';
+import { APP_USER_DATA_NAME, resolveRuntimeApiBaseUrl } from './runtime-config';
 import { registerAppConfigIpc } from './config-ipc';
 import {
   APP_ORIGIN,
@@ -52,6 +52,13 @@ const DEV_SERVER_URL = process.env['ELECTRON_RENDERER_URL'];
 // the very same value over a read-only IPC channel, so policy and traffic can
 // never disagree — and the target is no longer welded into the binary.
 let apiBaseUrl = DEFAULT_API_BASE_URL;
+
+// Before anything that resolves a path — including the single-instance lock
+// below, which lives in userData. Without this, a packaged build reads its
+// config from `%APPDATA%\aistudy-desktop` while the installer, the Start-Menu
+// entry and ADR-051 all say `AIStudy`, so an operator's config.json is silently
+// never found and the CSP follows the stale default.
+app.setName(APP_USER_DATA_NAME);
 
 // One process must own the refresh-token vault: the vault is a single file
 // slot and the backend rotates on every exchange, so a second instance

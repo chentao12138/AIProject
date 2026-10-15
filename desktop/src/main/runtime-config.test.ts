@@ -2,6 +2,7 @@
  * Runtime API base URL resolution (ADR-051).
  */
 
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_API_BASE_URL } from '../shared/api-config';
@@ -9,7 +10,7 @@ import {
   API_BASE_URL_ENV_VAR,
   RUNTIME_CONFIG_FILE_NAME,
 } from '../shared/runtime-config';
-import { resolveRuntimeApiBaseUrl } from './runtime-config';
+import { APP_USER_DATA_NAME, resolveRuntimeApiBaseUrl } from './runtime-config';
 
 function resolve(options: {
   env?: string;
@@ -119,5 +120,25 @@ describe('resolveRuntimeApiBaseUrl', () => {
     expect(readFile).toHaveBeenCalledWith(
       join('C:/UserData/AIStudy', RUNTIME_CONFIG_FILE_NAME)
     );
+  });
+});
+
+/**
+ * The two names must agree, or the packaged app reads its config from a directory
+ * nothing else calls `AIStudy` — the exact failure measured on the installed build
+ * before `app.setName` existed (`getApiBaseUrl()` answered the build default while
+ * `%APPDATA%\AIStudy\config.json` was sitting right there).
+ */
+describe('APP_USER_DATA_NAME vs the packaged identity', () => {
+  it('equals the electron-builder productName that names the install dir', () => {
+    const pkg = JSON.parse(
+      // Vitest runs with the project root as cwd; `import.meta.url` is not a
+      // file URL here, so relative paths have to go through cwd.
+      readFileSync(join(process.cwd(), 'package.json'), 'utf8')
+    ) as { build?: { productName?: string }; name?: string };
+    expect(pkg.build?.productName).toBeTruthy();
+    expect(APP_USER_DATA_NAME).toBe(pkg.build?.productName);
+    // And it is NOT the package name, which is the bug being fixed.
+    expect(APP_USER_DATA_NAME).not.toBe(pkg.name);
   });
 });

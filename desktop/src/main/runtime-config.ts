@@ -42,6 +42,26 @@ export interface RuntimeApiBaseUrlDeps {
 }
 
 /**
+ * The directory name user data lives under, and the app name Electron derives
+ * that path from.
+ *
+ * `app.getPath('userData')` is built from `app.getName()`, which without an
+ * explicit `setName` comes from package.json `name` — here `aistudy-desktop`.
+ * Everything a user actually sees says `AIStudy` instead (electron-builder's
+ * `productName`: the installer, the Start-Menu entry, the uninstall registry
+ * key), and ADR-051 documented the runtime override as
+ * `%APPDATA%\AIStudy\config.json`. In a packaged build that file was therefore
+ * never read: measured on the installed app, with the file present and valid,
+ * `aistudyConfig.getApiBaseUrl()` still answered `http://localhost:8080` and the
+ * CSP — correctly derived from that value — blocked the origin the operator had
+ * just configured, so login failed with no visible reason.
+ *
+ * `runtime-config.test.ts` pins this string to `build.productName`, because the
+ * two drifting apart re-creates exactly that bug.
+ */
+export const APP_USER_DATA_NAME = 'AIStudy';
+
+/**
  * A missing or unreadable config file is the normal case (users never
  * create one); a malformed one is ignored rather than fatal, because
  * falling back to a valid default is strictly safer than refusing to start.
