@@ -182,3 +182,8 @@ AIStudyData/
 *.tmp
 *.temp
 local/
+# never checkpoint a login response or a fetched contract document
+login.json
+spec-live.json
+desktop/login.json
+desktop/spec-live.json

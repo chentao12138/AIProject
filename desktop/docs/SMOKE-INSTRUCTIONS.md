@@ -388,3 +388,22 @@ must be green. The `durationMinutes` incident is exactly what that gate now
 catches — a snapshot, its types and its manifest can all agree with each other
 while disagreeing with the server.
 
+
+## Live journey re-run on `backend-2026-10-14-e04e07-b1` (`dbf4c28`) — 34/34
+
+Window granted by the backend (no IT, no restart); `:8081` readiness 200,
+`/v3/api-docs` 201 paths, `dev` re-seeded with ACTIVE space 29. Every assertion in
+`scripts/live-journey.mjs` passed, including the four that failed on the previous build:
+
+| Step | Server's own answer |
+|------|---------------------|
+| Exam ORDERING answer round-trips | `POST …/answers` with `orderingAnswer:[1,2,3]` echoes `orderingAnswer:[1,2,3]` (was all-null) |
+| Mixed paper submits | `submit` → 200, history row `gradingStatus:"PARTIALLY_GRADED"`, `score:3 / 8` — the objective part only |
+| Grading call is reachable | `PUT …/answers/{id}/grade` → 200 (it 404'd for every answer before), returning `referenceAnswer`, `previousScore`, `gradedBy` on the same row, and the row flips to `GRADED` at `8 / 8` |
+| Re-grading is idempotent | second call → 200, score `7`. The second INSERT of `exam_diagnosis` no longer 500s |
+| Provisional vs final label | the two states the result page now reads are exactly `PARTIALLY_GRADED + pendingGradeCount>0` and `GRADED + 0`, both observed live |
+| Practice result, deadline, notes archived/restore | unchanged passes: 409 `PRACTICE_SESSION_NOT_SUBMITTED` → 200 with score; `deadlineAt` present; `?archived=true` shows the row with `archivedAt`; `POST /notes/{id}/restore` → 204 |
+
+Still not run: the packaged app (A10 / R03–R05) — the artifact on `dist/` predates every
+commit in this session, so R02's old pass does not cover it and the login flow has never
+been observed in an installed build.

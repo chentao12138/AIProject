@@ -38,7 +38,7 @@ wired, the gates pass and the live journey has been run.
 
 | Feature | Routes | Blocker |
 |---------|--------|---------|
-| Answering an ORDERING item inside an exam — live closure only | `/spaces/:spaceId/exams/:examId/attempts/:attemptId` | The code is wired and unit-tested, but the backend loses the payload: `POST …/exam-attempts/{id}/answers` with `orderingAnswer:[1,2,3]` answers 200 while echoing all-null, the attempt read then says `answered:true` beside an empty answer, and `submit` returns 400 `VALIDATION_ERROR` with an unlocatable detail. Reported with a reproduction in `BACKEND-CONTRACT-REQUESTS.md`. Until it is fixed, A6.2/A6.3 for ORDERING are implemented-and-mock-verified, **not** end-to-end verified, and the admin chain behind a partially graded paper cannot be measured either. |
+| *(no backend blocker left)* | | The exam ORDERING blocker (B1) is **fixed and measured live** in `dbf4c28` / tag `backend-2026-10-14-e04e07-b1`: the answer now echoes `orderingAnswer:[1,2,3]`, the mixed paper submits and lands `PARTIALLY_GRADED` with the objective-only `3 / 8`, the grade call answers 200 (it used to 404 for every answer) moving the row to `GRADED 8 / 8`, and re-grading answers 200 again at `7` instead of 500. Root cause as the backend reported it: the exam path used a 3-arg `buildAnswerPayloadJson` overload that had no slot for `orderingAnswer` / `matchingAnswer`, so the write dropped them while practice (5-arg) worked — which is exactly the asymmetry the two comparison runs showed. What remains is ours: note entry points for source / block / question, and running the packaged app inside this window. |
 
 ### Newly unblocked by this delivery (wiring, not a backend gap)
 
@@ -151,6 +151,31 @@ What this does **not** prove, and remains open A-class work:
   They cannot detect a contract that does not exist, so no E2E PASS is claimed
   from this table (see `docs/SMOKE-INSTRUCTIONS.md`).
 
+## Session credential committed to git history (2026-10-14, found after the backend delivery)
+
+Commit `917a14f` (a Qoder `[Checkout-checkpoint]` snapshot) contains `login.json` with a
+real `accessToken` (264 chars) and `refreshToken` for the ADMIN+USER `dev` subject, plus
+`spec-live.json`. It is reachable from `main` and `batch-c-frontend-handoff`, **and both are
+already pushed to origin** — so the token must be treated as leaked, not merely misplaced.
+`feat/fe-001` does not contain it (verified with `merge-base --is-ancestor`), and the backend
+tag `backend-2026-10-14-e04e07-b1` sits on a commit that does.
+
+Order of operations, and why the first one is not optional: (1) invalidate the sessions —
+delete that subject's `auth_refresh_session` rows or rotate `AUTH_JWT_SECRET`, which
+invalidates every issued token; deleting the file without this leaves a valid 43-char refresh
+token in a public-adjacent history. (2) Then, and only then, rewrite `main` / the batch
+branch and re-create the tag. History rewriting on shared refs and the forced push are
+deliberately NOT done from this session: they are destructive to everyone else's clones,
+and the backend session explicitly left that cleanup to the user. (3) `login.json` and
+`spec-live.json` are now in `.gitignore` at the repo root, because the mechanism was an
+automatic checkpoint of an untracked file rather than a deliberate `git add` — ignoring the
+name is what stops the next one.
+
+Nothing in this repository writes credentials to disk any more: `scripts/live-journey.mjs`
+reads `AISTUDY_USER` / `AISTUDY_PASS` from the environment and keeps the bearer token in
+memory only.
+
+---
 ## Production security review (R07 / A11.4), 2026-10-13
 
 Checked against the **built** renderer (`npm run build` at this branch), not only

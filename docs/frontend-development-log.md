@@ -951,3 +951,29 @@ Scenario A 确认：api-client 有完整 AI Settings + Tutor/Chat 方法。
 - **联调端口现在两个都是 000**（`:8081`、`:8080` 都不通），所以 B7/B8 这两处**只有单测证据**，
   线上验证（含 B1 修好后重跑 `scripts/live-journey.mjs`、打包版 R03–R05）要等后端把服务起回来。
   已按分工去喊后端启动。
+
+## 2026-10-14（第九轮）：B1 修好了，live 34/34；顺手发现会话凭据已经进了 origin/main
+
+- 后端用 tag `backend-2026-10-14-e04e07-b1`（`dbf4c28`，B1 在 `da70281`）重启 `:8081`，给了不跑 IT、不重启的窗口，
+  `dev` 重建、名下 ACTIVE 空间 29。我 `scripts/live-journey.mjs` **34/34 全通过**，上一轮 4 个 FAIL 全部转绿：
+  `orderingAnswer:[1,2,3]` 现在原样回显；混合卷交卷 200 → 历史行 `PARTIALLY_GRADED`、`score 3/8`（只有客观分）；
+  `PUT …/answers/{id}/grade` 从"任何答案都 404"变成 200 并带 `referenceAnswer`/`previousScore`/`gradedBy`，
+  行变 `GRADED 8/8`；**同一 answer 再改一次** 200 → `7`（第二次写诊断不再 DuplicateKey 500）。
+  B7/B8 两个新接的面正好各拿到一份真实数据：`PARTIALLY_GRADED + pending>0` 与 `GRADED + 0`。
+- 根因值得记下来（它解释了为什么"两条路径看起来一样却只有一条对"）：exam 侧用了没有
+  `orderingAnswer`/`matchingAnswer` 槽位的三参数 `buildAnswerPayloadJson` 重载，practice 用五参数版本。
+  新出现的 `400 code: EXAM_ANSWER_PAYLOAD_INVALID` 带 `examQuestionId` + `sortOrder`，可定位——
+  这正是上一轮我要的那个"别只给 VALIDATION_ERROR"。
+- `api:live` 对当前 `:8081` 重新绿过一遍：committed snapshot（201 paths）equals 服务实发文档。
+- **安全事项（要用户处理，我不代改历史）**：`917a14f`（一次 Qoder `[Checkout-checkpoint]` 自动快照）里带着
+  `login.json` ——**真实 accessToken(264) + refreshToken(43)**，ADMIN+USER 主体。它同时在本地
+  `main`、`batch-c-frontend-handoff` 与 **`origin/main`、`origin/batch-c-frontend-handoff`** 上，
+  也就是说凭据已经推出去了；`feat/fe-001` 不含它（`merge-base --is-ancestor` 验否）。
+  顺序必须是：**先作废会话**（删该主体 `auth_refresh_session` 或轮换 `AUTH_JWT_SECRET`），
+  再谈改写分支历史与重建 tag——删文件本身不撤销一个还能换票的 refresh token。
+  filter-repo + 强推会影响别人的克隆，属于我必须交回用户决定的破坏性操作，我没有执行。
+  我把这次泄漏的机制也堵了：仓库根 `.gitignore` 加上 `login.json` / `spec-live.json` 等名字
+  （成因是"未跟踪文件被自动 checkpoint"而不是有人 `git add`，所以 ignore 名字才是对症的防护）；
+  顺带修好我追加时踩的坑——原文件末行没有换行，我的 append 把 `local/` 和 `login.json`
+  粘成了一条规则，已还原 `local/` 并把新规则按 CRLF 单独成行。
+  我这侧的脚本不再往磁盘写凭据：`live-journey.mjs` 只从环境变量读、token 只在内存里。
