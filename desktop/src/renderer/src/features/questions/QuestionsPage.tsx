@@ -15,6 +15,7 @@
  * a missing UI we papered over.
  */
 
+import { useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useApiClient } from '../../lib/api-context';
@@ -93,6 +94,20 @@ export function QuestionsPage() {
   const items = pageView?.items ?? [];
   const totalItems = pageView?.totalItems ?? 0;
   const totalPages = pageView?.totalPages ?? 0;
+
+  // The URL is the pager's only state, so `?page=99` of a 2-page list would
+  // otherwise render 第 100 / 2 页 over an empty table: the server answers that
+  // page with no items, and nothing in the page corrects the address. Once the
+  // real page count is known, rewrite the address to the last page that exists
+  // (replace, so a self-inflicted URL does not become a history entry).
+  useEffect(() => {
+    if (totalPages === 0 || page < totalPages) {
+      return;
+    }
+    const next = new URLSearchParams(searchParams);
+    next.set('page', String(totalPages - 1));
+    setSearchParams(next, { replace: true });
+  }, [totalPages, page, searchParams, setSearchParams]);
 
   function setFilter(key: string, value: string | null) {
     const next = new URLSearchParams(searchParams);

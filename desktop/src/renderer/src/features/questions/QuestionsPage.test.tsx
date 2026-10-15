@@ -417,3 +417,54 @@ describe('QuestionsPage — archived questions are reachable, not vanished (G09)
     );
   });
 });
+
+describe('QuestionsPage — a page the server cannot supply (R05)', () => {
+  // Measured on the installed build: `?page=99` of a 2-page list rendered
+  // 第 100 / 2 页 over an empty table, because the server answers that page with
+  // no items and nothing corrected the address. The URL is the pager's only
+  // state, so the page has to heal it once the real page count is known.
+  function twoPages() {
+    return vi.fn(async () => ({
+      data: {
+        items: [
+          { id: 21, questionType: 'SHORT_ANSWER', stem: '第二十二题', status: 'DRAFT', difficulty: 'EASY' },
+        ],
+        page: 1,
+        pageSize: QUESTIONS_PAGE_SIZE,
+        totalItems: 21,
+        totalPages: 2,
+      },
+      response: { status: 200 },
+    }));
+  }
+
+  it('rewrites an out-of-range page to the last page that exists', async () => {
+    const listQuestions = twoPages();
+    renderWithUrl(mockApiClient({ listQuestions }), ['/spaces/7/questions?page=99']);
+
+    // The impossible page really was requested first — the correction is
+    // reactive to the server's own totalPages, not a refusal to ask.
+    await waitFor(() =>
+      expect(listQuestions).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ page: 99, size: QUESTIONS_PAGE_SIZE })
+      )
+    );
+    await waitFor(() => expect(urlParams()).toMatchObject({ page: '1' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('questions-total').textContent).toContain('第 2 / 2 页')
+    );
+    expect(await screen.findByText('第二十二题')).toBeInTheDocument();
+  });
+
+  it('leaves an in-range page exactly where it is', async () => {
+    const listQuestions = twoPages();
+    renderWithUrl(mockApiClient({ listQuestions }), ['/spaces/7/questions?page=1']);
+
+    expect(await screen.findByText('第二十二题')).toBeInTheDocument();
+    expect(urlParams()).toMatchObject({ page: '1' });
+    await waitFor(() =>
+      expect(screen.getByTestId('questions-total').textContent).toContain('第 2 / 2 页')
+    );
+  });
+});
