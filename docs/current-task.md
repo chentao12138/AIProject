@@ -335,5 +335,12 @@ Decisions taken with the frontend: no pagination on the grading queue (paper com
 no batch AI suggestion endpoint — a batch would multiply provider calls per attempt and the cost/bound design is not
 worth it while grading is a per-row human act.
 
+## 联调窗口（开放中，2026-10-15）
+前端正在 :8081 上跑 live 验收（`scripts/live-journey.mjs` 33 条 + B7/B8 + 重判链 + 打包版 R03–R05）。
+**窗口期间：不跑 IT、不重启后端。** IT 会清 `aistudy_flyway_test`（含 dev 账号与 space 29），重启会断他们的会话。
+当前稳定提交：tag `backend-2026-10-14-e04e07-b1` → `dbf4c28`（含 `da70281` 的 B1 修复），full suite 1077/0/0/2。
+联调账号：`dev` / `devpassword123`（ADMIN+USER），ACTIVE 空间 id=29（`integration-space`）。
+前端已确认：本轮不再需要改分队列分页、不要 AI 建议 batch（逐题按钮即可）；需要 referenceAnswer/explanation 留在 ADMIN 面（已交付）。
+
 ## Git
 User owns all git writes.

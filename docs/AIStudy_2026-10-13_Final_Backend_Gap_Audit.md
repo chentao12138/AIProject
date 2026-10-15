@@ -153,10 +153,10 @@
 | G-09 部署手册 | [P,V] | 需 Linux/Nginx/HTTPS 真实 smoke（T-21）。 |
 | C-01~C-04 api-client | [P,V] | client 已 regenerate 至 198 paths、typecheck 绿；C09 类型化 ORDERING/MATCHING 对（前端尚未请求）仍待前端确认。 |
 
-**真实仍开放的代码级小项（current-task.md "Not done yet"）**
+**代码级小项复核（原 current-task.md "Not done yet"，含已解决与待处理项）**
 - `MATCHING` 配对在线上仍是 JSON 字符串（authoring 校验、grading 同解析器解析）；类型化结构已向前端提出但尚未被请求。后端可在前端确认后类型化。
-- `ModuleBoundaryTest.crossModuleMapperImportsMustNotGrow`：实测 **91 vs 上限 85**。其中 5 个来自 Notes 特性（`e829e76`）、1 个来自本轮合并的 ingestion gateway seam。**非本轮引入**（f685ef8 前已 90），修复方向是把这些读/写改走属主 service；**不要把上限抬到 91**。
-- `login.json` / `spec-live.json` 仍作为某人探测产物未跟踪留在仓库根；任何包含仓库根的提交前需检查。
+- `ModuleBoundaryTest.crossModuleMapperImportsMustNotGrow`：**已 PASS（2026-10-14 复核）**。实测跨模块 Mapper import 数 **81 / 上限 85**——以独立脚本（复刻测试正则扫描逻辑）复算 + `./mvnw -o -Dtest=ModuleBoundaryTest test` 退出码 0 双重确认。原"91 vs 85"为过时测量：Notes 特性重构（`NoteService` 已不再跨模块 import mapper）与 ingestion gateway seam 收口后计数降至 81，自然落在 cap 内，**无需抬高上限、也无需改代码**。若日后再次越界，仍按原方向把读/写改走属主 service。
+- `login.json` / `spec-live.json`：**已纳入版本控制，非 untracked（2026-10-14 复核更正）**。二者由提交 `917a14f` "[Checkout-checkpoint] from main to batch-c-frontend-handoff" 落到仓库根（`login.json` 407 B、`spec-live.json` ~165 KB），疑似登录会话 / 实时 OpenAPI 探测产物。⚠️ **安全风险**：已进入仓库与历史，推送 `main`（T-22）前务必先处理——建议从工作树删除并就 `917a14f` 做历史清理（`git filter-repo` / BFG），避免凭据或内部 spec 随稳定分支扩散。此属用户 Git 动作，代理不代为执行。
 
 ---
 
