@@ -149,7 +149,7 @@ export function QuestionsPage() {
 
       <section className="workbench-section" aria-label="筛选">
         <h2 className="section-title">筛选</h2>
-        <div className="form">
+        <div className="form form--inline">
           <div className="form__field">
             <label htmlFor="q-status" className="form__label">状态</label>
             <select
@@ -217,6 +217,7 @@ export function QuestionsPage() {
             </Button>
           )}
         </div>
+        <div className="pager">
         <p className="page__note" data-testid="questions-total">
           第 {page + 1} / {Math.max(totalPages, 1)} 页 · 共 {totalItems} 条 ·
           每页 {QUESTIONS_PAGE_SIZE} 条
@@ -251,6 +252,7 @@ export function QuestionsPage() {
             </Button>
           </div>
         )}
+        </div>
       </section>
 
       {listQuery.isPending && <LoadingState text="加载题目…" />}
@@ -288,6 +290,7 @@ export function QuestionsPage() {
                   <td><StatusBadge status={q.status} /></td>
                   <td>{difficultyLabel(q.difficulty)}</td>
                   <td>
+                    <div className="row-actions">
                     <Button
                       type="button"
                       onClick={() => spaceId !== null && navigate(`/spaces/${spaceId}/questions/${q.id}`)}
@@ -318,6 +321,7 @@ export function QuestionsPage() {
                         恢复请到详情页
                       </span>
                     )}
+                    </div>
                   </td>
                 </tr>
               );
