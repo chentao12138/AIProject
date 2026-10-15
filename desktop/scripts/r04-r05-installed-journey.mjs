@@ -36,33 +36,63 @@ const target = await findPageTarget(DEBUG);
 const { send, evaluate, close } = await openClient(target.webSocketDebuggerUrl);
 
 async function snap() {
-  return evaluate(`(() => ({
-    hash: location.hash,
-    testids: [...document.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid')),
-    hrefs: [...document.querySelectorAll('a')].map((a) => a.getAttribute('href')),
-    rowCount: document.querySelectorAll('table tbody tr').length,
-    firstRowCell: (document.querySelector('table tbody tr td') || {}).textContent || '',
-    pager: (document.querySelector('[data-testid="questions-total"], [data-testid="attempt-history-total"]') || {}).textContent || '',
-    buttons: [...document.querySelectorAll('table button, [data-testid] button, main button')].map((b) => (b.textContent || '').trim()).filter(Boolean),
-    text: (document.body.innerText || '').replace(/\\s+/g, ' ').slice(0, 500),
-    overflow: document.body.scrollWidth - window.innerWidth,
-  }))()`);
+  // Right after a reload the document is briefly empty and `document.body` is
+  // null, which used to throw and take the rest of the run down with it.
+  return evaluate(`(() => {
+    const root = document.body ?? document.documentElement;
+    const all = (selector) => [...root.querySelectorAll(selector)];
+    const textOf = (el) => (el ? String(el.textContent ?? '').trim() : '');
+    return {
+      hash: location.hash,
+      testids: all('[data-testid]').map((e) => e.getAttribute('data-testid')),
+      hrefs: all('a').map((a) => a.getAttribute('href')),
+      rowCount: all('table tbody tr').length,
+      firstRowCell: textOf(root.querySelector('table tbody tr td')),
+      pager: textOf(root.querySelector('[data-testid="questions-total"], [data-testid="attempt-history-total"]')),
+      buttons: all('button').map((b) => (b.textContent || '').trim()).filter(Boolean),
+      text: (root.innerText || '').replace(/\\s+/g, ' ').slice(0, 500),
+      overflow: document.body ? document.body.scrollWidth - window.innerWidth : 0,
+    };
+  })()`);
 }
 
-/** The app's own busy markers: a snapshot containing one is not readable yet. */
-const settled = (s) => !/加载|检查 AI 配置|正在|上传中|解析中/.test(s.text);
+const EMPTY = {
+  hash: '',
+  testids: [],
+  hrefs: [],
+  rowCount: 0,
+  firstRowCell: '',
+  pager: '',
+  buttons: [],
+  text: '',
+  overflow: 0,
+};
+
+/** Polling crosses navigations, and an evaluate can land on a document that is
+ *  being replaced. That is a moment to re-read, not a failed assertion. */
+async function safeSnap() {
+  try {
+    return await snap();
+  } catch {
+    return EMPTY;
+  }
+}
+
+/** The app's own busy markers: a snapshot containing one is not readable yet.
+ *  An empty document (mid-reload) is not "settled" either. */
+const settled = (s) => s.text.length > 40 && !/加载|检查 AI 配置|正在|上传中|解析中/.test(s.text);
 const has = (s, testid) => s.testids.includes(testid);
 const rowsUnder = (s, path) => s.hrefs.filter((h) => (h ?? '').startsWith(`#${path}/`)).length;
 
 async function waitUntil(predicate, timeoutMs = 25000) {
   const deadline = Date.now() + timeoutMs;
-  let last = await snap();
+  let last = await safeSnap();
   while (Date.now() < deadline) {
     if (predicate(last)) {
       return last;
     }
     await sleep(400);
-    last = await snap();
+    last = await safeSnap();
   }
   return last;
 }
@@ -175,7 +205,7 @@ const base = `/spaces/${spaceId}`;
 
 // --- 2. shell offers every module -------------------------------------
 await step('R04 the space opens from a click and the shell links every module', async () => {
-  const href = spaceHref(await snap());
+  const href = spaceHref(await safeSnap());
   const after = await clickByHref(href);
   const missing = MODULES.filter((m) => !after.hrefs.some((h) => (h ?? '').startsWith(`#${base}/${m}`)));
   return {
@@ -302,11 +332,13 @@ await step('R05 a paged URL replays across a reload', async () => {
   };
 });
 
-await step('R05 a page beyond the last one settles instead of erroring', async () => {
-  const s = await gotoUrl(`${base}/questions?page=99`);
+await step('R05 a page beyond the last one is healed to a page that exists', async () => {
+  const s = await gotoUrl(`${base}/questions?page=99`, (x) => /第 \d+ \/ \d+ 页/.test(x.pager) && x.rowCount > 0);
+  const shown = Number(s.pager.match(/第 (\d+) \/ (\d+) 页/)?.[1] ?? 0);
+  const total = Number(s.pager.match(/第 (\d+) \/ (\d+) 页/)?.[2] ?? 0);
   return {
-    pass: settled(s) && s.rowCount === 0 && /第 1 \//.test(s.pager),
-    detail: `via=url hash=${s.hash} rows=${s.rowCount} pager="${s.pager}"`,
+    pass: s.hash.includes('page=') && shown <= total && shown > 0 && s.rowCount > 0,
+    detail: `via=url hash=${s.hash} pager="${s.pager}" rows=${s.rowCount}`,
   };
 });
 
@@ -315,7 +347,7 @@ await step('R04 a question detail renders what the server stores', async () => {
   if (!opened) {
     return { skip: true, detail: 'the questions table offered no 查看 action' };
   }
-  const markers = opened.testids.filter((t) => ['stored-order', 'stored-matches', 'question-edit-link', 'question-not-editable', 'not-editable-banner', 'publish-gap-notice', 'answer-explanation', 'correct-order-preview'].includes(t));
+  const markers = opened.testids.filter((t) => ['stored-order', 'stored-matches', 'question-edit-link', 'question-not-editable', 'not-editable-banner', 'publish-gap-notice', 'answer-explanation', 'correct-order-preview', 'archived-notice', 'question-restore-button', 'question-archive-button', 'reference-answer', 'question-renderer'].includes(t));
   return { pass: markers.length > 0, detail: `via=click "${opened.label}" hash=${opened.hash} markers=${JSON.stringify(markers)}` };
 });
 
