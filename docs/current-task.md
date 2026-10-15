@@ -298,5 +298,42 @@ showed the chain was not merely unverified but unreachable, and fixing it expose
 - `login.json` / `spec-live.json` still sit untracked in the repo root from someone's probe — not this round's files,
   left in place; check them before any commit that includes the repo root.
 
+## Round 2026-10-14 (sixth) — B1: the exam ORDERING answer was being thrown away
+Full suite on real MySQL: **1077 tests / 0 failures / 0 errors / 2 skipped**. Reported by the frontend from a live
+attempt, reproduced in code, and confirmed by reverse-running the new tests.
+
+`ExamAttemptService.answer` built the stored payload with the **three-field** `buildAnswerPayloadJson` overload, which
+has no `orderingAnswer`/`matchingAnswer` slots. So on the exam path an ORDERING answer was:
+- accepted with **200** while the response echoed `answer.orderingAnswer = null` (and every later read too, with
+  `answered: true`) — the server claimed an answer it had thrown away;
+- **fatal at submit**: the evaluator threw `IllegalArgumentException("ORDERING requires orderingAnswer")`, the global
+  handler rendered it as `400 VALIDATION_ERROR / 请求包含无法处理的参数`, and the attempt stayed IN_PROGRESS with no way
+  to find out which question was at fault. The practice path was unaffected because it uses the five-field builder.
+
+Fixes:
+- The exam answer write keeps all five payload fields (`orderingAnswer`, `matchingAnswer` included).
+- A grading failure at submit now answers **400 `code: EXAM_ANSWER_PAYLOAD_INVALID`** with a detail that identifies the
+  row unambiguously (`examQuestionId=…, sortOrder=…, type=ORDERING cannot be graded from the stored answer: …`) —
+  `sortOrder` is exposed as stored, so the message names the id too instead of guessing the client's numbering base.
+  The attempt still stays IN_PROGRESS, which is now actionable: re-post that one answer.
+- `ExamResultView` carries **`gradingStatus` + `pendingGradeCount`** (frontend ask: a partially graded paper previously
+  showed only `score`/`maxScore`, so a provisional number read as the verdict). The status is read back after the lazy
+  auto-submit guard, not from the attempt loaded before it.
+- `ExamAnswerView.submitted` is documented in the contract: it labels the **attempt's** state (stored answer is
+  read-only or still editable), not whether the answer was saved.
+- E-04 Q2: the ADMIN grading queue view gained `referenceAnswer`, `explanation`, `previousScore`, `previousFeedback`
+  — a human grading without the rubric was "blind correction" with extra steps. These are on the ROLE_ADMIN surface
+  only; the learner's result view is built elsewhere and keeps its own reveal rules.
+
+Guards: `ExamOrderingAnswerIntegrationTest` (4 cases on real MySQL) covers the round trip (post → read back → submit →
+graded), the wrong-permutation zero, the locatable code for a row the old build already wrote, and the mixed paper's
+PARTIALLY_GRADED → ADMIN grade → GRADED transition. **Reverse-verified**: with the one-line fix reverted, 3 of the 4
+fail with exactly the reported symptoms (null echo, submit 400). `ExamOpenApiContractTest` now publishes
+`EXAM_ANSWER_PAYLOAD_INVALID`.
+
+Decisions taken with the frontend: no pagination on the grading queue (paper composition is capped at 100 slots), and
+no batch AI suggestion endpoint — a batch would multiply provider calls per attempt and the cost/bound design is not
+worth it while grading is a per-row human act.
+
 ## Git
 User owns all git writes.

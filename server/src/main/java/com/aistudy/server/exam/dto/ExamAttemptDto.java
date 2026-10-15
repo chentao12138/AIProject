@@ -140,6 +140,11 @@ public final class ExamAttemptDto {
             String gradingStatus,
             LocalDateTime startedAt,
             LocalDateTime submittedAt,
+            @io.swagger.v3.oas.annotations.media.Schema(
+                    description = "When this attempt's time limit expires (startedAt + exam "
+                            + "timeLimitMinutes). Null before the attempt has started. A history row "
+                            + "uses this to display expiry, which it could not before this field.")
+            LocalDateTime deadlineAt,
             Integer score,
             Integer maxScore
     ) {
@@ -147,7 +152,7 @@ public final class ExamAttemptDto {
             return new AttemptSummaryView(
                     attempt.getId(), attempt.getExamId(), attempt.getStatus(),
                     attempt.getGradingStatus(),
-                    attempt.getStartedAt(), attempt.getSubmittedAt(),
+                    attempt.getStartedAt(), attempt.getSubmittedAt(), attempt.getDeadlineAt(),
                     result == null ? null : result.getScore(),
                     result == null ? null : result.getMaxScore());
         }
