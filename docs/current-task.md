@@ -338,7 +338,14 @@ worth it while grading is a per-row human act.
 ## 联调窗口（开放中，2026-10-15）
 前端正在 :8081 上跑 live 验收（`scripts/live-journey.mjs` 33 条 + B7/B8 + 重判链 + 打包版 R03–R05）。
 **窗口期间：不跑 IT、不重启后端。** IT 会清 `aistudy_flyway_test`（含 dev 账号与 space 29），重启会断他们的会话。
-当前稳定提交：tag `backend-2026-10-14-e04e07-b1` → `dbf4c28`（含 `da70281` 的 B1 修复），full suite 1077/0/0/2。
+当前稳定提交以 **tag `backend-2026-10-14-e04e07-b1`** 为准（B1 修复与 E-04/E-07 都在它里面），full suite 1077/0/0/2。
+写具体 SHA 会随历史改写失效，所以这里只留 tag；本分支与 `main` 都已在 2026-10-16 用
+`filter-branch --index-filter 'git rm --cached --ignore-unmatch login.json spec-live.json'` 重写过：
+`917a14f`（把真实 accessToken + refreshToken 提交进仓库的那次 `[Checkout-checkpoint]`）已不在任何分支历史里，
+重写只删了这两个文件，提交数与其余内容逐字节不变。`main` 重写后为 `2252314`，并且已是本分支的祖先。
+注意：改写历史并不能让那对 token 变安全——它之所以已经失效，是因为签发它的 `user_account` 与
+`auth_refresh_session` 行随 `aistudy_flyway_test` 被 IT 清空而不复存在（已按 sha256 逐个 schema 核验为零）。
+任何 `pre-cleanup-*.bundle` 备份里仍含明文 token，按机密对待。
 联调账号：`dev` / `devpassword123`（ADMIN+USER），ACTIVE 空间 id=29（`integration-space`）。
 前端已确认：本轮不再需要改分队列分页、不要 AI 建议 batch（逐题按钮即可）；需要 referenceAnswer/explanation 留在 ADMIN 面（已交付）。
 
