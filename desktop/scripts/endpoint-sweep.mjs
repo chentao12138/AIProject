@@ -24,6 +24,7 @@
  *             SSE stream, admin-only under a learner token)
  */
 
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -200,14 +201,14 @@ const BODY_OVERRIDES = {
       { optionKey: 'A', content: '甲' },
       { optionKey: 'B', content: '乙' },
     ],
-    correctOptionKeys: ['A'],
+    correctOptionKey: 'A',
   }),
   'POST /api/v1/spaces/{spaceId}/exams/{examId}/paper/questions': (ids) => ({
     questionId: ids.questionId,
     score: 4,
   }),
   'POST /api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/answers': (ids) => ({
-    questionId: ids.questionId,
+    practiceSessionQuestionId: ids.psQuestionId,
     answer: { textAnswer: '扫描器答案' },
   }),
 };
@@ -418,6 +419,16 @@ async function main() {
         ids.examQuestionId = (paper?.questions ?? [])[0]?.examQuestionId ?? null;
       }
       ids.wrongQuestionId = await readIds(`${s2}/wrong-questions`, (b) => (b.items ?? b ?? [])[0]?.id ?? (b.items ?? b ?? [])[0]?.questionId);
+      if (ids.sessionId) {
+        const session = await fetch(`${API}${s2}/practice-sessions/${ids.sessionId}`, { headers: { Authorization: `Bearer ${token}` } })
+          .then((r) => r.json().catch(() => null))
+          .catch(() => null);
+        const slot = (session?.questions ?? session?.items ?? [])[0];
+        ids.psQuestionId = slot?.id ?? slot?.practiceSessionQuestionId ?? null;
+      }
+      // duplicate-check wants a real digest, not a placeholder string.
+      ids.sha256 = createHash('sha256').update('sweep-asset-body').digest('hex');
+
       console.log('seeded ids:', JSON.stringify(ids));
     }
   }
@@ -470,6 +481,9 @@ async function main() {
         continue;
       }
       const query = {};
+      for (const p of params.filter((q) => q.in === 'query' && q.name === 'sha256')) {
+        query[p.name] = ids.sha256;
+      }
       for (const p of params.filter((p) => p.in === 'query' && p.required)) {
         query[p.name] = exampleFor(p.schema ?? {}, p.name);
       }
