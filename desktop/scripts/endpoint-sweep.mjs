@@ -154,6 +154,37 @@ function classify(result) {
   return 'CLIENT';
 }
 
+/**
+ * Endpoints whose schema-legal placeholder is rejected for a reason the contract
+ * does not say. `CreateSourceRequest.sourceType` is a bare `string` while the
+ * server only accepts four values that exist as Java constants
+ * (SourceService.SOURCE_TYPE_*), and `CreatePracticeSessionRequest` has no
+ * required list at all yet rejects "questionIds XOR filter-based". Each entry
+ * documents the fact the contract is silent about, so the sweep exercises the
+ * endpoint instead of reporting a self-inflicted 400.
+ */
+const BODY_OVERRIDES = {
+  'POST /api/v1/spaces/{spaceId}/sources': () => ({
+    sourceType: 'DESKTOP_UPLOAD',
+    title: '扫描器来源',
+  }),
+  'POST /api/v1/spaces/{spaceId}/knowledge-points': () => ({
+    title: '扫描器知识点',
+    content: '扫描器正文',
+    summary: '扫描器摘要',
+  }),
+  'POST /api/v1/spaces/{spaceId}/practice-sessions': (ids) => ({
+    questionIds: [ids.questionId].filter((id) => id != null),
+  }),
+  'POST /api/v1/spaces/{spaceId}/review-tasks': (ids) => ({
+    targetType: 'QUESTION',
+    targetId: ids.questionId,
+  }),
+  'POST /api/v1/spaces/{spaceId}/ai/generation-jobs': () => ({
+    jobType: 'knowledge-extraction',
+  }),
+};
+
 async function main() {
   if (!USER || !PASS) {
     console.log('AISTUDY_USER / AISTUDY_PASS are required');
@@ -184,18 +215,91 @@ async function main() {
     const body = await res.json().catch(() => null);
     return pick(body);
   };
-  ids.spaceId = await readIds('/api/v1/spaces', (b) => (b?.items ?? b ?? [])[0]?.id);
+  ids.spaceId = (await readIds('/api/v1/spaces', (b) => (b?.items ?? b ?? [])[0]?.id)) ?? ids.spaceId;
   if (!ids.spaceId) {
     console.log('no space available to sweep against');
     process.exit(1);
   }
+  // --- write mode runs in a space it created itself -----------------------
+  // Without this, 143 mutating operations would fire at the seeded space the
+  // R03/R04 evidence depends on. It also discovers ids the live seed does not
+  // currently contain (sources, knowledge points, exams, attempts), so the
+  // sweep's own coverage does not wait on someone else seeding data.
+  if (MODE === 'all') {
+    const stamp = Date.now();
+    const created = await call('POST', '/api/v1/spaces', {
+      token,
+      body: { name: `endpoint-sweep-${stamp}`, description: 'sweep fixture space' },
+    });
+    console.log('sweep space:', created.status, JSON.stringify(created).slice(0, 120));
+    const spaceBody = await (
+      await fetch(`${API}/api/v1/spaces`, { headers: { Authorization: `Bearer ${token}` } })
+    ).json();
+    const mine = (spaceBody.items ?? spaceBody ?? []).find((s) => s.name === `endpoint-sweep-${stamp}`);
+    if (mine?.id) {
+      ids.spaceId = mine.id;
+      const s2 = `/api/v1/spaces/${mine.id}`;
+      const post = async (path, body) => {
+        const res = await fetch(`${API}${path}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(20000),
+        });
+        return { status: res.status, data: await res.json().catch(() => null) };
+      };
+      const q = await post(`${s2}/questions`, {
+        questionType: 'SHORT_ANSWER',
+        stem: '扫描器题目',
+        referenceAnswer: '答案',
+        difficulty: 'EASY',
+      });
+      ids.questionId = q.data?.id ?? null;
+      if (ids.questionId) {
+        await post(`${s2}/questions/${ids.questionId}/publish`, {});
+      }
+      ids.noteId = (await post(`${s2}/notes`, { content: '扫描器笔记' })).data?.id ?? null;
+      ids.sourceId = (
+        await post(`${s2}/sources`, BODY_OVERRIDES['POST /api/v1/spaces/{spaceId}/sources']())
+      ).data?.id ?? null;
+      ids.knowledgePointId = (
+        await post(
+          `${s2}/knowledge-points`,
+          BODY_OVERRIDES['POST /api/v1/spaces/{spaceId}/knowledge-points']()
+        )
+      ).data?.id ?? null;
+      ids.examId = (
+        await post(`${s2}/exams`, {
+          title: '扫描器试卷',
+          timeLimitMinutes: 30,
+          questions: [{ questionId: ids.questionId, score: 4 }],
+        })
+      ).data?.id ?? null;
+      const session = await post(`${s2}/practice-sessions`, { questionIds: [ids.questionId] });
+      ids.sessionId = session.data?.id ?? null;
+      if (ids.examId) {
+        // An exam is created in DRAFT and attempts require it to be available,
+        // so publish first and ignore a failure — the attempt simply stays null
+        // and the sweep reports it as SKIPPED rather than masking the reason.
+        await post(`${s2}/exams/${ids.examId}/publish`, {});
+        const attempt = await post(`${s2}/exam-attempts`, { examId: ids.examId });
+        ids.attemptId = attempt.data?.id ?? null;
+        if (ids.attemptId) {
+          await post(`${s2}/exam-attempts/${ids.attemptId}/start`, {});
+        }
+      }
+      const conversation = await post(`${s2}/ai/conversations`, { title: '扫描器会话' });
+      ids.conversationId = conversation.data?.id ?? null;
+      console.log('seeded ids:', JSON.stringify(ids));
+    }
+  }
   const s = `/api/v1/spaces/${ids.spaceId}`;
-  ids.questionId = await readIds(`${s}/questions`, (b) => (b.items ?? [])[0]?.id);
-  ids.noteId = await readIds(`${s}/notes`, (b) => (b.items ?? [])[0]?.id);
-  ids.examId = await readIds(`${s}/exams`, (b) => (b.items ?? [])[0]?.id);
-  ids.knowledgePointId = await readIds(`${s}/knowledge-points`, (b) => (b.items ?? [])[0]?.id);
-  ids.sourceId = await readIds(`${s}/sources`, (b) => (b.items ?? [])[0]?.id);
-  ids.conversationId = await readIds(`${s}/conversations`, (b) => (b.items ?? [])[0]?.id);
+  ids.questionId = (await readIds(`${s}/questions`, (b) => (b.items ?? [])[0]?.id)) ?? ids.questionId;
+  ids.noteId = (await readIds(`${s}/notes`, (b) => (b.items ?? [])[0]?.id)) ?? ids.noteId;
+  ids.examId = (await readIds(`${s}/exams`, (b) => (b.items ?? [])[0]?.id)) ?? ids.examId;
+  ids.knowledgePointId = (await readIds(`${s}/knowledge-points`, (b) => (b.items ?? [])[0]?.id)) ?? ids.knowledgePointId;
+  ids.sourceId = (await readIds(`${s}/sources`, (b) => (b.items ?? [])[0]?.id)) ?? ids.sourceId;
+  ids.conversationId = (await readIds(`${s}/conversations`, (b) => (b.items ?? [])[0]?.id)) ?? ids.conversationId;
   console.log('discovered ids:', JSON.stringify(ids));
 
   // --- walk every operation ----------------------------------------------
@@ -242,6 +346,10 @@ async function main() {
         if (media) {
           body = exampleFor(media.schema ?? {}, 'body');
         }
+      }
+      const key = `${method.toUpperCase()} ${template}`;
+      if (body !== undefined && BODY_OVERRIDES[key]) {
+        body = BODY_OVERRIDES[key](ids);
       }
       const result = await call(method, path, { token, body, query });
       results.push({
