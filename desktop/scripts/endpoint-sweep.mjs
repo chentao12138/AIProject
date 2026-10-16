@@ -146,6 +146,12 @@ async function call(method, path, { body, token = null, query = {} } = {}) {
 
 function classify(result) {
   if (result.status === 0 || result.status >= 500) {
+    // A 503 that says "not configured" is a missing provider key, not a broken
+    // endpoint. The backend made these distinguishable from 502 on purpose, so
+    // the sweep must not fold them into the bug column.
+    if (/not configured|未配置/i.test(result.detail)) {
+      return 'CONFIG';
+    }
     return 'SERVER';
   }
   if (result.status >= 200 && result.status < 300) {
@@ -303,6 +309,70 @@ async function main() {
         );
         ids.messageId = message.data?.id ?? null;
       }
+
+      // A source with real content is what unlocks the asset / page / block /
+      // ingestion-job families: without an upload those paths can never be
+      // reached, and "SKIPPED because we did not try" hides 5xx the same as any
+      // other untested endpoint.
+      if (ids.sourceId) {
+        const form = new FormData();
+        form.set('file', new Blob(['扫描器来源正文。\n\n第二段内容。'], { type: 'text/plain' }), 'sweep.txt');
+        const uploaded = await fetch(`${API}${s2}/sources/${ids.sourceId}/assets`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+          signal: AbortSignal.timeout(30000),
+        }).catch(() => null);
+        if (uploaded?.status === 200 || uploaded?.status === 201) {
+          const asset = await uploaded.json().catch(() => null);
+          ids.assetId = asset?.id ?? null;
+        } else {
+          console.log('asset upload:', uploaded?.status ?? 'transport error');
+        }
+        for (let attempt = 0; attempt < 20; attempt += 1) {
+          const pages = await fetch(`${API}${s2}/sources/${ids.sourceId}/pages`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).then((r) => r.json().catch(() => null)).catch(() => null);
+          const list = Array.isArray(pages) ? pages : (pages?.items ?? []);
+          if (list.length > 0) {
+            ids.pageId = list[0].id ?? null;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        if (ids.pageId) {
+          const blocks = await fetch(
+            `${API}${s2}/sources/${ids.sourceId}/content-blocks?pageId=${ids.pageId}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          )
+            .then((r) => r.json().catch(() => null))
+            .catch(() => null);
+          const blockList = Array.isArray(blocks) ? blocks : (blocks?.items ?? []);
+          ids.contentBlockId = blockList[0]?.id ?? null;
+        }
+        const jobs = await fetch(`${API}${s2}/sources/${ids.sourceId}/ingestion-jobs`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then((r) => r.json().catch(() => null))
+          .catch(() => null);
+        ids.jobId = (Array.isArray(jobs) ? jobs : (jobs?.items ?? []))[0]?.id ?? null;
+      }
+      // Whatever the create calls did not hand back, a list will: the admin
+      // user subject, a blueprint whose POST returned no body, and the page /
+      // block / job ids that only exist once ingestion has run.
+      ids.subject = await readIds('/api/v1/admin/users', (b) => {
+        const first = (b?.items ?? b ?? [])[0] ?? {};
+        return first.subject ?? first.id ?? null;
+      });
+      ids.blueprintId = (await readIds(`${s2}/exam-blueprints`, (b) => (b.items ?? b ?? [])[0]?.id)) ?? ids.blueprintId;
+      ids.pageId = await readIds(`${s2}/sources/${ids.sourceId}/pages`, (b) => (b.items ?? b ?? [])[0]?.id);
+      if (ids.pageId) {
+        ids.contentBlockId = await readIds(
+          `${s2}/sources/${ids.sourceId}/pages/${ids.pageId}/blocks`,
+          (b) => (b.items ?? b ?? [])[0]?.id
+        );
+      }
+      ids.jobId = (await readIds(`${s2}/sources/${ids.sourceId}/ingestion-jobs`, (b) => (b.items ?? b ?? [])[0]?.id)) ?? ids.jobId;
       console.log('seeded ids:', JSON.stringify(ids));
     }
   }
@@ -407,7 +477,7 @@ async function main() {
   }
 
   const by = (bucket) => results.filter((r) => r.bucket === bucket);
-  for (const bucket of ['SERVER', 'CLIENT']) {
+  for (const bucket of ['SERVER', 'CLIENT', 'CONFIG']) {
     for (const r of by(bucket)) {
       console.log(`${bucket} | ${r.op} | ${r.detail}`);
     }
@@ -416,7 +486,7 @@ async function main() {
     console.log(`SKIPPED | ${r.op} | ${r.detail}`);
   }
   console.log(
-    `\nSUMMARY ${MODE}: OK ${by('OK').length} / CLIENT ${by('CLIENT').length} / SERVER ${by('SERVER').length} / SKIPPED ${by('SKIPPED').length} of ${results.length} operations`
+    `\nSUMMARY ${MODE}: OK ${by('OK').length} / CLIENT ${by('CLIENT').length} / SERVER ${by('SERVER').length} / CONFIG ${by('CONFIG').length} / SKIPPED ${by('SKIPPED').length} of ${results.length} operations`
   );
 }
 

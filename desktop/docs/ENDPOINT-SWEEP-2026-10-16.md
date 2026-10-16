@@ -71,3 +71,36 @@ POST /api/v1/practice-sessions/{s}/questions/{q}/variant             502 AI vari
 ## 一致的好消息
 
 learner token 打全部 **63 个 `/admin/` 路径**，直方图恒为 `{"403": 63}` —— 一致、无例外，桌面端可以按 403 分支。
+
+## 第二轮（同一天，后端边修边测）
+
+扫描器补了三件事：按端点的真形状、multipart 上传（`assetId` 拿到了）、以及从列表接口回捞
+create 没返回的 id（`subject` 拿到了）。分类也改了：**503 "not configured" 记为 CONFIG，不进 bug 列**。
+
+| 轮次 | OK | 4xx | 5xx | CONFIG | SKIPPED |
+|------|----|-----|-----|--------|---------|
+| `--mode=all`（占位 body） | 82 | 32 | 13 | — | 113 |
+| `--mode=all`（真形状） | 109 | 40 | 14 | — | 77 |
+| `--mode=all`（+上传/列表回捞/CONFIG 分桶） | **125** | 43 | **5** | 4 | 63 |
+
+**已被后端修掉、我这轮确认消失的 5xx（共 13 个）**：`statistics/*` 四个、`admin/spaces` 两个 GET、
+`admin/spaces/{id}/archive` 与 `…/restore`、以及三个原先报 502 的 AI 端点——它们现在返回
+**503 SERVICE_UNAVAILABLE "AI tutor is not configured"**，正是我要的可区分信号（`POST …/variant`
+仍把 503 包成 502，但 detail 里带着 not configured，扫描器已按 CONFIG 处理）。
+
+**仍在的 5 个 500**：
+
+```
+PUT  /api/v1/spaces/{spaceId}/exams/{examId}/paper/questions/reorder  → 500 INTERNAL_ERROR (33ms)
+POST /api/v1/spaces/{spaceId}/review-tasks                            → 500 INTERNAL_ERROR (27ms)  body={"targetType":"QUESTION","targetId":58}
+POST /api/v1/admin/mastery/calibration                                → 500 INTERNAL_ERROR (25ms)
+POST /api/v1/admin/knowledge/categories/{categoryId}/delete           → 500 INTERNAL_ERROR (12ms)  categoryId 是刚建好的
+GET  /api/v1/admin/knowledge/categories/{categoryId}                  → 500 INTERNAL_ERROR (10ms)
+```
+
+后两个是**新暴露的**：上一轮我没有 categoryId，所以它们一直是 SKIPPED。这轮反复验证的一件事是
+——SKIPPED 不是安全，SKIPPED 里藏着 5xx。
+
+**还堵着 63 个 SKIPPED 的，是三个我拿不到、也猜不出的输入**：`attemptId`（考卷怎么从 DRAFT 变可作答，
+合同里读不出来）、`blueprintId`（`POST /exam-blueprints` 不返回 id，列表里也没有）、`pageId`/`contentBlockId`/
+`jobId`（上传返回了 asset，但 pages/ingestion-jobs 都还是空）。这三个都需要后端给结论，不是我能绕的。
