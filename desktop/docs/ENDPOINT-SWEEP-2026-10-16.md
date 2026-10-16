@@ -104,3 +104,31 @@ GET  /api/v1/admin/knowledge/categories/{categoryId}                  → 500 IN
 **还堵着 63 个 SKIPPED 的，是三个我拿不到、也猜不出的输入**：`attemptId`（考卷怎么从 DRAFT 变可作答，
 合同里读不出来）、`blueprintId`（`POST /exam-blueprints` 不返回 id，列表里也没有）、`pageId`/`contentBlockId`/
 `jobId`（上传返回了 asset，但 pages/ingestion-jobs 都还是空）。这三个都需要后端给结论，不是我能绕的。
+
+## 第三轮（服务重启后，扫描器再进一层）
+
+`--mode=all`：**OK 128 / 4xx 48 / 5xx 3 / CONFIG 4 / SKIPPED 57**（上一轮 127/49/3/4/57 的 5xx 从 5 降到 3）。
+
+**后端本轮已修**：`review-tasks`、`paper/questions/reorder`、`admin/mastery/calibration`、
+`admin/knowledge/categories/{id}` GET 与 `/delete` —— 5 个 500 全部消失。AI 那组从 502 改成
+**`503 AI_NOT_CONFIGURED`**，有码可分支，扫描器据此把它们归入 CONFIG。
+
+**新暴露 3 个 500**（因为我把 `{kpId}` 当成 `knowledgePointId` 的别名，它们第一次被真正调到）：
+
+```
+GET  /api/v1/admin/knowledge/points/{kpId}          → 500
+POST /api/v1/admin/knowledge/points/{kpId}/publish  → 500
+POST /api/v1/admin/knowledge/points/{kpId}/archive  → 500
+```
+
+**仍未修、且优先级最高的**：`POST /spaces/{n}/notes → 201 id=X` 之后，该 note 的 **7 个子资源端点全部
+`404 NOTE_NOT_FOUND`**（本轮 note 31 / space 58，已连续三轮必现）。同类：`PUT /spaces/58/knowledge-points/42`
+返 `KnowledgePoint not found`，而同一 id 在列表里能查到。
+
+**扫描器自身的三轮演进**（目的都是：剩下的 4xx 必须是服务器的答案，不是我的噪声）：
+按端点真形状 → 别名与列表回捞 id → `correctOptionKey` / `practiceSessionQuestionId` / 真 sha256。
+`SKIPPED` 现在按**缺失输入**分组打印，并落盘 `dist/endpoint-sweep.json` 供两轮逐行 diff。
+
+**57 个 SKIPPED 全部卡在"怎么把它创建出来"**，已把清单发给后端：`attemptId`(11，考卷如何从 DRAFT 变可作答)、
+`taskId`/`planId`(10，学习项如何产生)、`jobId`/`blockId`/`pageId`/`nodeId`/`issueId`(15，multipart 上传成功但
+解析作业未入队)、`snapshotId`(6)、`blueprintId`(2)、`key`(2)、其余 3 个分别依赖上面三项。
