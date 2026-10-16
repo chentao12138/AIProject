@@ -211,6 +211,36 @@ const BODY_OVERRIDES = {
     practiceSessionQuestionId: ids.psQuestionId,
     answer: { textAnswer: '扫描器答案' },
   }),
+  // Bodies that carry a foreign key the server validates against the path. A
+  // placeholder here answers 404 "not found", which reads like a server bug and
+  // is really us pointing at a row that never existed.
+  'PUT /api/v1/spaces/{spaceId}/knowledge-points/{knowledgePointId}': (ids) => ({
+    spaceId: ids.spaceId,
+    title: '扫描器知识点（改）',
+    content: '扫描器正文（改）',
+    summary: '扫描器摘要',
+  }),
+  'POST /api/v1/spaces/{spaceId}/exams': (ids) => ({
+    title: '扫描器试卷二',
+    timeLimitMinutes: 30,
+    questions: [{ questionId: ids.questionId, score: 4 }],
+  }),
+  'POST /api/v1/spaces/{spaceId}/knowledge-points/{kpId}/relations': (ids) => ({
+    relatedKpId: ids.knowledgePointId,
+    relationType: 'PREREQUISITE',
+  }),
+  'POST /api/v1/spaces/{spaceId}/knowledge-categories/{categoryId}/reparent': (ids) => ({
+    parentId: ids.childCategoryId ?? ids.categoryId,
+  }),
+  'POST /api/v1/admin/sources/manual': (ids) => ({
+    spaceId: ids.spaceId,
+    title: '扫描器手工来源',
+    content: '第一段\n\n第二段',
+    format: 'TEXT',
+  }),
+  'POST /api/v1/spaces/{spaceId}/notes/{noteId}/source-blocks': (ids) => ({ contentBlockId: ids.contentBlockId ?? 1 }),
+  'POST /api/v1/spaces/{spaceId}/notes/{noteId}/knowledge-points': (ids) => ({ knowledgePointId: ids.knowledgePointId }),
+  'POST /api/v1/spaces/{spaceId}/questions/{questionId}/source-blocks': (ids) => ({ contentBlockId: ids.contentBlockId ?? 1 }),
 };
 
 /**
@@ -340,6 +370,10 @@ async function main() {
       ).data?.id ?? null;
       ids.blueprintId = (
         await post(`${s2}/exam-blueprints`, { name: '扫描器蓝图', totalScore: 10, questionCount: 1 })
+      ).data?.id ?? null;
+      // reparent needs a second real category; one is not a parent.
+      ids.childCategoryId = (
+        await post(`${s2}/knowledge-categories`, { name: '扫描器子分类', parentId: ids.categoryId })
       ).data?.id ?? null;
       if (ids.conversationId) {
         const message = await post(
@@ -485,11 +519,15 @@ async function main() {
         continue;
       }
       const query = {};
-      for (const p of params.filter((q) => q.in === 'query' && q.name === 'sha256')) {
-        query[p.name] = ids.sha256;
-      }
       for (const p of params.filter((p) => p.in === 'query' && p.required)) {
         query[p.name] = exampleFor(p.schema ?? {}, p.name);
+      }
+      // After the generic pass, or a placeholder digest would fail the server's
+      // own format check and the 400 would be about us, not about the endpoint.
+      if (ids.sha256) {
+        for (const p of params.filter((q) => q.in === 'query' && q.name === 'sha256')) {
+          query[p.name] = ids.sha256;
+        }
       }
       let body;
       if (op.requestBody) {
