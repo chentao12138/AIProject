@@ -270,7 +270,7 @@ async function main() {
     } else {
       const token2 = (await login2.json()).accessToken;
       const seen = {};
-      for (const [template, item] of Object.entries(spec.paths)) {
+      for (const template of Object.keys(spec.paths)) {
         if (!template.includes('/admin/')) {
           continue;
         }
