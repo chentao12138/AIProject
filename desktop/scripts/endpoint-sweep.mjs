@@ -25,7 +25,8 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 const API = (process.env.AISTUDY_API ?? 'http://localhost:8081').replace(/\/$/, '');
 const USER = process.env.AISTUDY_USER ?? '';
@@ -485,6 +486,44 @@ async function main() {
   for (const r of by('SKIPPED')) {
     console.log(`SKIPPED | ${r.op} | ${r.detail}`);
   }
+
+  // Group the skips by the input that is missing, not by endpoint: "63 skipped"
+  // is not actionable, "34 need a pageId, which needs ingestion to have run" is.
+  const missingBy = {};
+  for (const r of by('SKIPPED')) {
+    const key = r.detail.startsWith('no id for') ? r.detail : r.detail.split(' ')[0];
+    missingBy[key] = (missingBy[key] ?? 0) + 1;
+  }
+  console.log('\nSKIPPED grouped by missing input:');
+  for (const [reason, count] of Object.entries(missingBy).sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${String(count).padStart(3)} × ${reason}`);
+  }
+
+  const out = process.env.AISTUDY_SWEEP_OUT ?? join(process.cwd(), 'dist', 'endpoint-sweep.json');
+  await mkdir(dirname(out), { recursive: true });
+  await writeFile(
+    out,
+    JSON.stringify(
+      {
+        at: new Date().toISOString(),
+        api: API,
+        mode: MODE,
+        ids,
+        counts: {
+          OK: by('OK').length,
+          CLIENT: by('CLIENT').length,
+          SERVER: by('SERVER').length,
+          CONFIG: by('CONFIG').length,
+          SKIPPED: by('SKIPPED').length,
+          total: results.length,
+        },
+        results,
+      },
+      null,
+      2
+    )
+  );
+  console.log(`\nreport written: ${out}`);
   console.log(
     `\nSUMMARY ${MODE}: OK ${by('OK').length} / CLIENT ${by('CLIENT').length} / SERVER ${by('SERVER').length} / CONFIG ${by('CONFIG').length} / SKIPPED ${by('SKIPPED').length} of ${results.length} operations`
   );
