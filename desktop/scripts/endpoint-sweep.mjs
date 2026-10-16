@@ -290,6 +290,19 @@ async function main() {
       }
       const conversation = await post(`${s2}/ai/conversations`, { title: '扫描器会话' });
       ids.conversationId = conversation.data?.id ?? null;
+      ids.categoryId = (
+        await post(`${s2}/knowledge-categories`, { name: '扫描器分类' })
+      ).data?.id ?? null;
+      ids.blueprintId = (
+        await post(`${s2}/exam-blueprints`, { name: '扫描器蓝图', totalScore: 10, questionCount: 1 })
+      ).data?.id ?? null;
+      if (ids.conversationId) {
+        const message = await post(
+          `${s2}/ai/conversations/${ids.conversationId}/messages`,
+          { content: '扫描器消息' }
+        );
+        ids.messageId = message.data?.id ?? null;
+      }
       console.log('seeded ids:', JSON.stringify(ids));
     }
   }
