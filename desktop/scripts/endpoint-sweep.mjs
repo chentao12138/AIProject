@@ -441,8 +441,12 @@ async function main() {
   ids.conversationId = (await readIds(`${s}/conversations`, (b) => (b.items ?? [])[0]?.id)) ?? ids.conversationId;
   console.log('discovered ids:', JSON.stringify(ids));
 
-  // --- walk every operation ----------------------------------------------
+// --- walk every operation ----------------------------------------------
+  // Deletes run in a second pass. Interleaved with the rest, a DELETE at position 9
+  // makes every later probe of that id a legitimate 404 — which is precisely how a
+  // previous run filed a false bug report against the note sub-resources.
   const results = [];
+  const deferred = [];
   for (const [template, item] of Object.entries(spec.paths)) {
     for (const method of ['get', 'post', 'put', 'patch', 'delete']) {
       const op = item[method];
@@ -497,6 +501,10 @@ async function main() {
       if (body !== undefined && BODY_OVERRIDES[key]) {
         body = BODY_OVERRIDES[key](ids);
       }
+      if (method === 'delete') {
+        deferred.push({ method, path, body, query, template });
+        continue;
+      }
       const result = await call(method, path, { token, body, query });
       results.push({
         bucket: classify(result),
@@ -504,6 +512,15 @@ async function main() {
         detail: `${result.status}${result.code ? ` ${result.code}` : ''} ${result.detail} (${result.ms}ms)`,
       });
     }
+  }
+
+  for (const item of deferred) {
+    const result = await call(item.method, item.path, { token, body: item.body, query: item.query });
+    results.push({
+      bucket: classify(result),
+      op: `DELETE ${item.template}`,
+      detail: `${result.status}${result.code ? ` ${result.code}` : ''} ${result.detail} (${result.ms}ms)`,
+    });
   }
 
   // --- second token: what does a learner get on the admin surface? --------
