@@ -190,7 +190,44 @@ const BODY_OVERRIDES = {
   'POST /api/v1/spaces/{spaceId}/ai/generation-jobs': () => ({
     jobType: 'knowledge-extraction',
   }),
+  // A generated SINGLE_CHOICE body with one option is rejected for a reason the
+  // schema does not state; these shapes are what the server actually accepts.
+  'POST /api/v1/spaces/{spaceId}/questions': () => ({
+    questionType: 'SINGLE_CHOICE',
+    stem: '扫描器单选题',
+    difficulty: 'EASY',
+    options: [
+      { optionKey: 'A', content: '甲' },
+      { optionKey: 'B', content: '乙' },
+    ],
+    correctOptionKeys: ['A'],
+  }),
+  'POST /api/v1/spaces/{spaceId}/exams/{examId}/paper/questions': (ids) => ({
+    questionId: ids.questionId,
+    score: 4,
+  }),
+  'POST /api/v1/spaces/{spaceId}/practice-sessions/{sessionId}/answers': (ids) => ({
+    questionId: ids.questionId,
+    answer: { textAnswer: '扫描器答案' },
+  }),
 };
+
+/**
+ * Public endpoints a sweep cannot exercise meaningfully: a placeholder credential
+ * is not a request worth classifying, and 401 here is the correct answer.
+ */
+const NOT_SWEEPABLE = new Set([
+  'POST /api/v1/auth/login',
+  'POST /api/v1/auth/refresh',
+  'POST /api/v1/auth/logout',
+]);
+
+/**
+ * The same resource under two names: knowledge points are `{knowledgePointId}` on the
+ * collection routes and `{kpId}` on the relation / mastery / admin routes, and a
+ * sweep that treats those as different inputs silently skips seven endpoints.
+ */
+const ID_ALIASES = { kpId: 'knowledgePointId' };
 
 async function main() {
   if (!USER || !PASS) {
@@ -374,6 +411,13 @@ async function main() {
         );
       }
       ids.jobId = (await readIds(`${s2}/sources/${ids.sourceId}/ingestion-jobs`, (b) => (b.items ?? b ?? [])[0]?.id)) ?? ids.jobId;
+      if (ids.examId) {
+        const paper = await fetch(`${API}${s2}/exams/${ids.examId}`, { headers: { Authorization: `Bearer ${token}` } })
+          .then((r) => r.json().catch(() => null))
+          .catch(() => null);
+        ids.examQuestionId = (paper?.questions ?? [])[0]?.examQuestionId ?? null;
+      }
+      ids.wrongQuestionId = await readIds(`${s2}/wrong-questions`, (b) => (b.items ?? b ?? [])[0]?.id ?? (b.items ?? b ?? [])[0]?.questionId);
       console.log('seeded ids:', JSON.stringify(ids));
     }
   }
@@ -394,6 +438,11 @@ async function main() {
       if (!op) {
         continue;
       }
+      const key = `${method.toUpperCase()} ${template}`;
+      if (NOT_SWEEPABLE.has(key)) {
+        results.push({ bucket: 'SKIPPED', op: key, detail: 'public auth endpoint: placeholder credentials are not a test' });
+        continue;
+      }
       if (MODE === 'read' && method !== 'get') {
         continue;
       }
@@ -401,7 +450,7 @@ async function main() {
       let path = template;
       const unresolved = [];
       for (const p of params.filter((p) => p.in === 'path')) {
-        const known = ids[p.name];
+        const known = ids[p.name] ?? ids[ID_ALIASES[p.name] ?? p.name];
         if (known === undefined || known === null) {
           unresolved.push(p.name);
           continue;
@@ -431,7 +480,6 @@ async function main() {
           body = exampleFor(media.schema ?? {}, 'body');
         }
       }
-      const key = `${method.toUpperCase()} ${template}`;
       if (body !== undefined && BODY_OVERRIDES[key]) {
         body = BODY_OVERRIDES[key](ids);
       }
