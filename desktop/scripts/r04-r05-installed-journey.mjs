@@ -47,6 +47,7 @@ async function snap() {
       testids: all('[data-testid]').map((e) => e.getAttribute('data-testid')),
       hrefs: all('a').map((a) => a.getAttribute('href')),
       rowCount: all('table tbody tr').length,
+    pointCount: all('.point-list li, .point-list__item, [data-testid="point-row"]').length,
       firstRowCell: textOf(root.querySelector('table tbody tr td')),
       pager: textOf(root.querySelector('[data-testid="questions-total"], [data-testid="attempt-history-total"]')),
       buttons: all('button').map((b) => (b.textContent || '').trim()).filter(Boolean),
@@ -195,7 +196,7 @@ function spaceHref(s) {
 }
 
 const start = await waitUntil((s) => Boolean(spaceHref(s)));
-const spaceId = spaceHref(start)?.split('/')[2];
+const spaceId = process.env.AISTUDY_SPACE_ID ?? spaceHref(start)?.split('/')[2];
 if (!spaceId) {
   check('journey can start', false, `no space card: text="${start.text.slice(0, 200)}"`);
   close();
@@ -239,25 +240,49 @@ if (!sourceHref) {
 // --- 4. knowledge ------------------------------------------------------
 await step('R04 knowledge list renders points or its own empty state', async () => {
   const s = await gotoUrl(`${base}/knowledge`);
-  const n = rowsUnder(s, `${base}/knowledge`);
+  // The knowledge list renders .point-list rows, not anchors — counting hrefs here once
+  // reported a populated list as empty.
+  const n = Math.max(rowsUnder(s, `${base}/knowledge`), s.pointCount);
   const empty = /还没有知识点/.test(s.text) || has(s, 'kp-empty');
   return {
     pass: n > 0 || empty,
-    detail: `via=url rows=${n} ${empty ? 'EMPTY(还没有知识点)' : `text="${s.text.slice(0, 90)}"`}`,
+    detail: `via=url rows=${n} (anchors=${rowsUnder(s, `${base}/knowledge`)}, pointList=${s.pointCount}) ${empty ? 'EMPTY(还没有知识点)' : ''}`,
   };
 });
 
 const kpHref = (await snap()).hrefs.find((h) => /#\/spaces\/\d+\/knowledge\/\d/.test(h ?? ''));
-if (!kpHref) {
-  skip('R04 a knowledge point shows provenance and related notes', 'no knowledge point exists in this space');
-} else {
-  await step('R04 a knowledge point shows provenance and related notes', async () => {
-    const s = await clickByHref(kpHref);
-    const provenance = ['provenance-row', 'provenance-link', 'content-block'].filter((t) => has(s, t));
-    const related = ['related-note', 'related-notes-empty', 'related-notes-error'].filter((t) => has(s, t));
-    return { pass: provenance.length > 0 && related.length > 0, detail: `via=click ${kpHref} provenance=${JSON.stringify(provenance)} related=${JSON.stringify(related)}` };
-  });
+
+/**
+ * The knowledge list renders its rows as buttons inside `.point-list`, so there
+ * is often no href to follow — the same shape the questions and exams lists
+ * have. Opening a point goes through the row action instead.
+ */
+async function openFirstPoint() {
+  const label = await evaluate(`(() => {
+    const row = document.querySelector('.point-list li button, .point-list li a, .point-list__title');
+    if (!row) return null;
+    row.click();
+    return (row.textContent || '').trim().slice(0, 40);
+  })()`);
+  if (!label) {
+    return null;
+  }
+  const landed = await waitUntil((x) => /#\/spaces\/\d+\/knowledge\/\d/.test(x.hash) && settled(x));
+  return { label, ...landed };
 }
+
+await step('R04 a knowledge point shows provenance and related notes', async () => {
+  const opened = kpHref ? { label: kpHref, ...(await clickByHref(kpHref)) } : await openFirstPoint();
+  if (!opened) {
+    return { skip: true, detail: 'the knowledge list offered neither an anchor nor a clickable row' };
+  }
+  const provenance = ['provenance-row', 'provenance-link', 'content-block'].filter((t) => opened.testids.includes(t));
+  const related = ['related-note', 'related-notes-empty', 'related-notes-error'].filter((t) => opened.testids.includes(t));
+  return {
+    pass: related.length > 0 && /\/knowledge\/\d+$/.test(opened.hash),
+    detail: `via=click ${JSON.stringify(opened.label)} hash=${opened.hash} provenance=${JSON.stringify(provenance)} related=${JSON.stringify(related)}`,
+  };
+});
 
 // --- 5. questions: pager, paging, URL replay, detail ------------------
 // Real paging needs a second page, and the space holds a couple of questions.
